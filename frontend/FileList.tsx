@@ -4,7 +4,7 @@ import type { _SERVICE } from '../src/declarations/backend/backend.did';
 import { FileMetadata } from './types';
 
 
-const network = import.meta.env.VITE_DFX_NETWORK || (import.meta.env.MODE === 'production' ? 'ic' : 'local');
+const network = 'local'; // Default to local for development
 
 async function loadConfig(): Promise<{
     backend_host: string;
@@ -67,7 +67,7 @@ export const useFileList = () => {
 
         const rawBackendUrl =
             network === 'local'
-                ? `http://${backendCanisterId}.raw.localhost:8081/`
+                ? `http://${backendCanisterId}.raw.localhost:4943/`
                 : `https://${backendCanisterId}.raw.icp0.io/`;
 
         return `${rawBackendUrl}${sanitizedPath}`;
