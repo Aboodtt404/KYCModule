@@ -1,0 +1,23 @@
+{
+  "name": "hello_world",
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "prebuild": "npm run prebuild --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present"
+  },
+  "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
+  "dependencies": {
+    "@tanstack/react-query": "^5.83.0",
+    "lucide-react": "^0.525.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11"
+  }
+}
