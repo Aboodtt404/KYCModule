@@ -54,4 +54,42 @@ persistent actor {
         FileStorage.upload(storage, path, mimeType, chunk, complete);
         docId;
     };
+
+    public shared query func transform(input : Outcalls.TransformationInput) : async Outcalls.TransformationOutput {
+        let response = input.response;
+        {
+            response with headers = [];
+        };
+    };
+
+    public func getOcrResults(path : Text) : async Text {
+        let ocrServiceUrl = "http://192.168.1.114:5000/ocr";
+
+        let asset = switch(FileStorage.getAsset(storage, path)) {
+            case null { Debug.trap("Asset not found"); };
+            case (?asset) { asset };
+        };
+
+        let requestBody = asset.chunks[0];
+        
+        let request : IC.http_request_args = {
+            url = ocrServiceUrl;
+            max_response_bytes = null;
+            headers = [];
+            body = ?requestBody;
+            method = #post;
+            transform = ?{
+                function = transform;
+                context = Blob.fromArray([]);
+            };
+            is_replicated = null;
+        };
+
+        let httpResponse = await (with cycles = 25_000_000_000) IC.http_request(request);
+
+        switch (Text.decodeUtf8(httpResponse.body)) {
+            case (null) { Debug.trap("empty HTTP response") };
+            case (?decodedResponse) { decodedResponse };
+        };
+    };
 };

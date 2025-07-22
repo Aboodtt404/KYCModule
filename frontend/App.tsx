@@ -4,9 +4,10 @@ import { DocumentList } from './DocumentList';
 import { ImageProcessor } from './ImageProcessor';
 import { OCRRating } from './OCRRATING'; // Changed to match the correct casing
 import { ExternalDownload } from './ExternalDownload'; // Ensure this path is correct
-import { FileText, Upload, Image, Star, Download, Heart } from 'lucide-react';
+import { OCRProcessor } from './OCRProcessor';
+import { FileText, Upload, Image, Star, Download, Heart, ScanText } from 'lucide-react';
 
-type ActiveTab = 'upload' | 'documents' | 'processor' | 'rating' | 'external';
+type ActiveTab = 'upload' | 'documents' | 'processor' | 'rating' | 'external' | 'ocr';
 
 // BEGIN: Fix imports
 // Ensure the paths are correct or the components exist
@@ -20,6 +21,7 @@ function App() {
     { id: 'upload' as const, label: 'Upload', icon: Upload },
     { id: 'processor' as const, label: 'Image Processor', icon: Image },
     { id: 'rating' as const, label: 'OCR Rating', icon: Star },
+    { id: 'ocr' as const, label: 'OCR Processor', icon: ScanText },
     { id: 'external' as const, label: 'External Download', icon: Download },
   ];
 
@@ -33,6 +35,8 @@ function App() {
         return <ImageProcessor />;
       case 'rating':
         return <OCRRating />;
+      case 'ocr':
+        return <OCRProcessor />;
       case 'external':
         return <ExternalDownload />;
       default:

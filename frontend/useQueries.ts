@@ -73,3 +73,14 @@ export function useDeleteDocument() {
     },
   });
 }
+
+export function useOCR() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (path: string) => {
+      if (!actor) throw new Error('Backend not available');
+      return await actor.getOcrResults(path);
+    },
+  });
+}
