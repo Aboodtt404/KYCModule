@@ -35,24 +35,27 @@ export function OCRProcessor() {
   };
 
   const handleRunOcr = async () => {
-    if (!selectedImage) return;
+    if (!selectedImage || !imageUrl) return;
     setError('');
-    ocrMutation.mutate(selectedImage.path, {
-      onSuccess: (data) => {
-        try {
-          // The canister returns a string, so we need to parse it as JSON
-          const parsedData = JSON.parse(data);
-          setOcrResult(parsedData);
-        } catch (e) {
-          setError('Failed to parse OCR results.');
-          console.error(e);
-        }
-      },
-      onError: (err) => {
-        setError('Failed to get OCR results from canister.');
-        console.error(err);
-      },
-    });
+    
+    try {
+      // Fetch the image data
+      const response = await fetch(imageUrl);
+      const imageBlob = await response.blob();
+      
+      ocrMutation.mutate(imageBlob, {
+        onSuccess: (data) => {
+          setOcrResult(data);
+        },
+        onError: (err) => {
+          setError('Failed to process image with OCR.');
+          console.error(err);
+        },
+      });
+    } catch (err) {
+      setError('Failed to fetch image data.');
+      console.error(err);
+    }
   };
 
   return (

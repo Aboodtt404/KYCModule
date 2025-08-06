@@ -75,12 +75,34 @@ export function useDeleteDocument() {
 }
 
 export function useOCR() {
-  const { actor } = useActor();
-
   return useMutation({
-    mutationFn: async (path: string) => {
-      if (!actor) throw new Error('Backend not available');
-      return await actor.getOcrResults(path);
+    mutationFn: async (imageData: Blob) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+      try {
+        const response = await fetch('http://194.31.150.154:5000/ocr-high-confidence', {
+          method: 'POST',
+          body: imageData,
+          headers: {
+            'Content-Type': 'application/octet-stream'
+          },
+          signal: controller.signal
+        });
+      
+      if (!response.ok) {
+        throw new Error(`OCR processing failed: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json();
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error('OCR request timed out after 30 seconds');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     },
   });
 }

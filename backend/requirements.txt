@@ -1,6 +1,8 @@
 Flask
 Flask-Cors
-easyocr
+pytesseract
+Pillow
 requests
 numpy
-opencv-python-headless 
+opencv-python-headless
+imutils 

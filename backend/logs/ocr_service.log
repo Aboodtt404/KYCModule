@@ -1,0 +1,81 @@
+2025-08-06 15:51:26,418 ERROR: Error initializing PaddleOCR: Unknown argument: use_mp [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:67]
+2025-08-06 15:51:26,420 ERROR: Full error: Traceback (most recent call last):
+  File "C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py", line 43, in <module>
+    ocr = PaddleOCR(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\ocr.py", line 161, in __init__
+    super().__init__(**base_params)
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\base.py", line 62, in __init__
+    self._common_args = parse_common_args(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_common_args.py", line 43, in parse_common_args
+    raise ValueError(f"Unknown argument: {name}")
+ValueError: Unknown argument: use_mp
+ [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:68]
+2025-08-06 15:51:26,421 INFO: Starting Advanced Document OCR Server (Passport/ID Optimized) [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:456]
+2025-08-06 15:51:26,421 WARNING: PaddleOCR not available. Install with: pip install paddlepaddle paddleocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:458]
+2025-08-06 15:51:26,421 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:459]
+2025-08-06 15:51:26,422 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:460]
+2025-08-06 15:52:07,750 ERROR: Error initializing PaddleOCR: Unknown argument: use_space_char [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:63]
+2025-08-06 15:52:07,751 ERROR: Full error: Traceback (most recent call last):
+  File "C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py", line 43, in <module>
+    ocr = PaddleOCR(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\ocr.py", line 161, in __init__
+    super().__init__(**base_params)
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\base.py", line 62, in __init__
+    self._common_args = parse_common_args(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_common_args.py", line 43, in parse_common_args
+    raise ValueError(f"Unknown argument: {name}")
+ValueError: Unknown argument: use_space_char
+ [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:64]
+2025-08-06 15:52:07,752 INFO: Starting Advanced Document OCR Server (Passport/ID Optimized) [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:452]
+2025-08-06 15:52:07,752 WARNING: PaddleOCR not available. Install with: pip install paddlepaddle paddleocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:454]
+2025-08-06 15:52:07,752 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:455]
+2025-08-06 15:52:07,753 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:456]
+2025-08-06 15:52:49,232 ERROR: Error initializing PaddleOCR: Unknown argument: use_gpu [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:56]
+2025-08-06 15:52:49,233 ERROR: Full error: Traceback (most recent call last):
+  File "C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py", line 43, in <module>
+    ocr = PaddleOCR(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\ocr.py", line 161, in __init__
+    super().__init__(**base_params)
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\base.py", line 62, in __init__
+    self._common_args = parse_common_args(
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_common_args.py", line 43, in parse_common_args
+    raise ValueError(f"Unknown argument: {name}")
+ValueError: Unknown argument: use_gpu
+ [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:57]
+2025-08-06 15:52:49,234 INFO: Starting Advanced Document OCR Server (Passport/ID Optimized) [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:445]
+2025-08-06 15:52:49,235 WARNING: PaddleOCR not available. Install with: pip install paddlepaddle paddleocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:447]
+2025-08-06 15:52:49,235 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:448]
+2025-08-06 15:52:49,236 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:449]
+2025-08-06 16:04:38,857 ERROR: Error initializing PaddleOCR: No models are available for the language ['en', 'ar'] and OCR version None. [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:51]
+2025-08-06 16:04:38,858 ERROR: Full error: Traceback (most recent call last):
+  File "C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py", line 43, in <module>
+    ocr = PaddleOCR(lang=['en', 'ar'])  # Support both English and Arabic
+  File "C:\Users\tbtw0\AppData\Local\Programs\Python\Python310\lib\site-packages\paddleocr\_pipelines\ocr.py", line 106, in __init__
+    raise ValueError(
+ValueError: No models are available for the language ['en', 'ar'] and OCR version None.
+ [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:52]
+2025-08-06 16:04:38,859 INFO: Starting Advanced Document OCR Server (Passport/ID Optimized) [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:470]
+2025-08-06 16:04:38,859 WARNING: PaddleOCR not available. Install with: pip install paddlepaddle paddleocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:472]
+2025-08-06 16:04:38,859 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:473]
+2025-08-06 16:04:38,860 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:474]
+2025-08-06 16:18:33,952 ERROR: Tesseract not available: tesseract is not installed or it's not in your PATH. See README file for more information. [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:62]
+2025-08-06 16:18:33,953 INFO: Install with: sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:63]
+2025-08-06 16:18:33,953 INFO: Python package: pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:64]
+2025-08-06 16:18:33,957 WARNING:    sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:698]
+2025-08-06 16:18:33,958 WARNING:    pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:699]
+2025-08-06 16:18:33,958 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:700]
+2025-08-06 16:18:33,958 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:701]
+2025-08-06 16:18:52,496 ERROR: Tesseract not available: tesseract is not installed or it's not in your PATH. See README file for more information. [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:62]
+2025-08-06 16:18:52,497 INFO: Install with: sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:63]
+2025-08-06 16:18:52,497 INFO: Python package: pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:64]
+2025-08-06 16:18:52,500 WARNING:    sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:698]
+2025-08-06 16:18:52,501 WARNING:    pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:699]
+2025-08-06 16:18:52,501 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:700]
+2025-08-06 16:18:52,501 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:701]
+2025-08-06 16:42:31,804 ERROR: Tesseract not available: tesseract is not installed or it's not in your PATH. See README file for more information. [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:62]
+2025-08-06 16:42:31,805 INFO: Install with: sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:63]
+2025-08-06 16:42:31,805 INFO: Python package: pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:64]
+2025-08-06 16:42:31,809 WARNING:    sudo apt-get install tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:889]
+2025-08-06 16:42:31,809 WARNING:    pip install pytesseract [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:890]
+2025-08-06 16:42:31,809 INFO: Ready for document processing at http://0.0.0.0:5000/ocr [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:891]
+2025-08-06 16:42:31,810 INFO: Health check available at http://0.0.0.0:5000/health [in C:\Users\tbtw0\Desktop\KYCModule\backend\run_ocr.py:892]

@@ -63,7 +63,7 @@ persistent actor {
     };
 
     public func getOcrResults(path : Text) : async Text {
-        let ocrServiceUrl = "http://192.168.1.114:5000/ocr";
+        let ocrServiceUrl = "http://192.168.1.9:5000/ocr";
 
         let asset = switch(FileStorage.getAsset(storage, path)) {
             case null { Debug.trap("Asset not found"); };
