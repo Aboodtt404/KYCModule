@@ -29,3 +29,7 @@ frontend/dist
 # OS
 .DS_Store
 Thumbs.db 
+
+
+# Dataset to train the model
+/dataset
