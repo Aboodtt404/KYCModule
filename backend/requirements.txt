@@ -1,8 +1,6 @@
-Flask
-Flask-Cors
-pytesseract
-Pillow
-requests
+pillow
+opencv-python
 numpy
-opencv-python-headless
-imutils 
+pytesseract
+ultralytics
+easyocr

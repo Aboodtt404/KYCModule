@@ -66,10 +66,22 @@ export function useDeleteDocument() {
   return useMutation({
     mutationFn: async (path: string) => {
       if (!actor) throw new Error('Backend not available');
-      return await actor.delete(path); // Changed 'delete_' to 'delete'
+      console.log('Attempting to delete file:', path);
+      try {
+        const result = await actor.delete(path); // Use 'delete' as shown in the generated interface
+        console.log('Delete result:', result);
+        return result;
+      } catch (error) {
+        console.error('Delete error:', error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (data, path) => {
+      console.log('Delete successful for:', path);
       queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+    onError: (error, path) => {
+      console.error('Delete failed for:', path, error);
     },
   });
 }
@@ -81,7 +93,7 @@ export function useOCR() {
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       try {
-        const response = await fetch('http://194.31.150.154:5000/ocr-high-confidence', {
+        const response = await fetch('http://localhost:5000/ocr', {
           method: 'POST',
           body: imageData,
           headers: {
@@ -89,15 +101,48 @@ export function useOCR() {
           },
           signal: controller.signal
         });
-      
-      if (!response.ok) {
-        throw new Error(`OCR processing failed: ${response.status} ${response.statusText}`);
-      }
-      
-      return await response.json();
+
+        if (!response.ok) {
+          throw new Error(`OCR processing failed: ${response.status} ${response.statusText}`);
+        }
+
+        return await response.json();
       } catch (error) {
         if (error.name === 'AbortError') {
           throw new Error('OCR request timed out after 30 seconds');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+  });
+}
+
+export function useEgyptianIDOCR() {
+  return useMutation({
+    mutationFn: async (imageData: Blob) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for Egyptian ID
+
+      try {
+        const response = await fetch('http://localhost:5000/egyptian-id', {
+          method: 'POST',
+          body: imageData,
+          headers: {
+            'Content-Type': 'application/octet-stream'
+          },
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`Egyptian ID OCR processing failed: ${response.status} ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error('Egyptian ID OCR request timed out after 60 seconds');
         }
         throw error;
       } finally {

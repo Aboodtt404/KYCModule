@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FileUpload } from './FileUpload'; // Ensure this path is correct
 import { DocumentList } from './DocumentList';
 import { ImageProcessor } from './ImageProcessor';
-import { OCRRating } from './OCRRATING'; // Changed to match the correct casing
+import { OCRRating } from './OCRRating'; // Fixed casing to match actual filename
 import { ExternalDownload } from './ExternalDownload'; // Ensure this path is correct
 import { OCRProcessor } from './OCRProcessor';
 import { FileText, Upload, Image, Star, Download, Heart, ScanText } from 'lucide-react';
