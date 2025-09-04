@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useDocuments, useOCR, useEgyptianIDOCR } from './useQueries';
+import { useDocuments, useOCR, useEgyptianIDOCR, usePassportOCR, useEgyptianIdResults, usePassportResults } from './useQueries';
 import { useFileList } from './FileList';
-import { Image, Loader2, ScanText, AlertCircle, Flag } from 'lucide-react';
+import { Image, Loader2, ScanText, AlertCircle, Flag, Database, Clock } from 'lucide-react';
 import { FileMetadata } from './types';
 
 interface OcrResult {
@@ -49,6 +49,9 @@ export function OCRProcessor() {
   const { getFileUrl } = useFileList();
   const ocrMutation = useOCR();
   const egyptianIDMutation = useEgyptianIDOCR();
+  const passportMutation = usePassportOCR();
+  const { data: egyptianIdResults } = useEgyptianIdResults();
+  const { data: passportResults } = usePassportResults();
 
   const [selectedImage, setSelectedImage] = useState<FileMetadata | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -119,33 +122,27 @@ export function OCRProcessor() {
           },
         });
       } else if (ocrType === 'passport') {
-        try {
-          const response = await fetch('http://localhost:5000/passport', {
-            method: 'POST',
-            body: imageBlob,
-            headers: {
-              'Content-Type': 'image/jpeg',
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(`Passport OCR failed: ${response.status} ${response.statusText}`);
-          }
-
-          const data = await response.json();
-
-          if (data.success && data.data) {
-            setPassportResult(data.data);
-            setDebugInfo(data.debug_info || null);
-            setEgyptianIDResult(null);
-            setOcrResult(null);
-          } else {
-            setError('Passport OCR processing failed: ' + (data.error || 'Unknown error'));
-          }
-        } catch (err) {
-          setError('Failed to process passport OCR: ' + (err as Error).message);
-          console.error(err);
-        }
+        passportMutation.mutate(imageBlob, {
+          onSuccess: (data) => {
+            try {
+              if (data.success && data.data) {
+                setPassportResult(data.data);
+                setDebugInfo(data.debug_info || null);
+                setEgyptianIDResult(null);
+                setOcrResult(null);
+              } else {
+                setError('Passport OCR processing failed: ' + (data.error || 'Unknown error'));
+              }
+            } catch (e) {
+              setError('Failed to parse Passport OCR results.');
+              console.error(e);
+            }
+          },
+          onError: (err) => {
+            setError('Failed to process Passport OCR: ' + err.message);
+            console.error(err);
+          },
+        });
       }
     } catch (err) {
       setError('Failed to fetch image data.');
@@ -487,6 +484,109 @@ export function OCRProcessor() {
 
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Stored OCR Results Section */}
+      <div className="mt-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center">
+            <Database className="w-6 h-6 mr-2 text-blue-600" />
+            Stored OCR Results
+          </h2>
+          <p className="text-gray-600">Previously processed documents stored in the canister</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Egyptian ID Results */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <Flag className="w-5 h-5 mr-2 text-green-600" />
+              Egyptian ID Results ({egyptianIdResults?.length || 0})
+            </h3>
+            {!egyptianIdResults || egyptianIdResults.length === 0 ? (
+              <div className="text-center py-8">
+                <Flag className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-gray-600">No Egyptian ID results stored</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {egyptianIdResults.map(([path, data], index) => {
+                  try {
+                    const parsedData = JSON.parse(data);
+                    const extractedData = parsedData.extracted_data;
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 truncate">{path}</span>
+                          <span className="text-xs text-gray-500 flex items-center">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {parsedData.processing_time}s
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <p><span className="font-medium">Name:</span> {extractedData?.full_name || 'N/A'}</p>
+                          <p><span className="font-medium">ID:</span> {extractedData?.national_id || 'N/A'}</p>
+                          <p><span className="font-medium">Governorate:</span> {extractedData?.governorate || 'N/A'}</p>
+                        </div>
+                      </div>
+                    );
+                  } catch (e) {
+                    return (
+                      <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
+                        <p className="text-sm text-red-600">Error parsing result for {path}</p>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Passport Results */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <ScanText className="w-5 h-5 mr-2 text-blue-600" />
+              Passport Results ({passportResults?.length || 0})
+            </h3>
+            {!passportResults || passportResults.length === 0 ? (
+              <div className="text-center py-8">
+                <ScanText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-gray-600">No passport results stored</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {passportResults.map(([path, data], index) => {
+                  try {
+                    const parsedData = JSON.parse(data);
+                    const extractedData = parsedData.data;
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700 truncate">{path}</span>
+                          <span className="text-xs text-gray-500 flex items-center">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {parsedData.processing_time}s
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <p><span className="font-medium">Name:</span> {extractedData?.surname} {extractedData?.name}</p>
+                          <p><span className="font-medium">Passport:</span> {extractedData?.passport_number || 'N/A'}</p>
+                          <p><span className="font-medium">Nationality:</span> {extractedData?.nationality || 'N/A'}</p>
+                        </div>
+                      </div>
+                    );
+                  } catch (e) {
+                    return (
+                      <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
+                        <p className="text-sm text-red-600">Error parsing result for {path}</p>
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
