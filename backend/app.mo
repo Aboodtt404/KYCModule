@@ -24,7 +24,7 @@ persistent actor {
         FileStorage.upload(storage, path, mimeType, chunk, complete);
     };
 
-    public func delete_(path : Text) : async () {
+    public shared func delete(path : Text) : async () {
         FileStorage.delete(storage, path);
     };
 
@@ -63,7 +63,7 @@ persistent actor {
     };
 
     public func getOcrResults(path : Text) : async Text {
-        let ocrServiceUrl = "http://192.168.1.9:5000/ocr";
+        let ocrServiceUrl = "http://127.0.0.1:5000/ocr";
 
         let asset = switch(FileStorage.getAsset(storage, path)) {
             case null { Debug.trap("Asset not found"); };
