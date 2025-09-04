@@ -20,6 +20,18 @@ interface EgyptianIDResult {
   gender: string;
 }
 
+interface PassportResult {
+  surname: string;
+  name: string;
+  sex: string;
+  date_of_birth: string;
+  nationality: string;
+  passport_type: string;
+  passport_number: string;
+  issuing_country: string;
+  expiration_date: string;
+}
+
 interface DebugInfo {
   detected_fields: Array<{
     class: string;
@@ -29,6 +41,7 @@ interface DebugInfo {
   debug_image_path: string;
   cropped_image_path: string;
   yolo_output_path: string;
+  preprocessed_image_path: string;
 }
 
 export function OCRProcessor() {
@@ -41,6 +54,7 @@ export function OCRProcessor() {
   const [imageUrl, setImageUrl] = useState<string>('');
   const [ocrResult, setOcrResult] = useState<OcrResult[] | null>(null);
   const [egyptianIDResult, setEgyptianIDResult] = useState<EgyptianIDResult | null>(null);
+  const [passportResult, setPassportResult] = useState<PassportResult | null>(null);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [ocrType, setOcrType] = useState<'egyptian' | 'passport'>('egyptian');
   const [error, setError] = useState<string>('');
@@ -54,6 +68,7 @@ export function OCRProcessor() {
       setSelectedImage(file);
       setOcrResult(null);
       setEgyptianIDResult(null);
+      setPassportResult(null);
       setDebugInfo(null);
       setError('');
     } catch (err) {
@@ -106,11 +121,34 @@ export function OCRProcessor() {
           },
         });
       } else if (ocrType === 'passport') {
-        // Passport OCR placeholder - show coming soon message
-        setError('Passport OCR is coming soon! This feature will be available in a future update.');
-        setEgyptianIDResult(null);
-        setOcrResult(null);
-        setDebugInfo(null);
+        // Use Passport OCR
+        try {
+          const response = await fetch('http://localhost:5000/passport', {
+            method: 'POST',
+            body: imageBlob,
+            headers: {
+              'Content-Type': 'image/jpeg',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Passport OCR failed: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+
+          if (data.success && data.data) {
+            setPassportResult(data.data);
+            setDebugInfo(data.debug_info || null);
+            setEgyptianIDResult(null); // Clear Egyptian ID results
+            setOcrResult(null); // Clear basic OCR results
+          } else {
+            setError('Passport OCR processing failed: ' + (data.error || 'Unknown error'));
+          }
+        } catch (err) {
+          setError('Failed to process passport OCR: ' + (err as Error).message);
+          console.error(err);
+        }
       }
     } catch (err) {
       setError('Failed to fetch image data.');
@@ -151,7 +189,7 @@ export function OCRProcessor() {
             />
             <span className="text-sm font-medium text-gray-700 flex items-center">
               <ScanText className="w-4 h-4 mr-1" />
-              Passport OCR (Coming Soon)
+              Passport OCR (MRZ-Based)
             </span>
           </label>
         </div>
@@ -291,6 +329,15 @@ export function OCRProcessor() {
                             <label className="text-sm font-medium text-gray-600">Debug Images</label>
                             <div className="mt-2 space-y-2">
                               <a
+                                href={`http://localhost:5000/debug-image/${debugInfo.preprocessed_image_path}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-sm block"
+                              >
+                                🔧 Preprocessed Image (Auto-rotated, Enhanced, Denoised)
+                              </a>
+                              <br />
+                              <a
                                 href={`http://localhost:5000/debug-image/${debugInfo.debug_image_path}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -318,6 +365,134 @@ export function OCRProcessor() {
                               </a>
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Passport Results */}
+              {passportResult && (
+                <div className="mt-6 space-y-6">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <ScanText className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-xl font-semibold text-gray-900">Passport Information</h4>
+                        <p className="text-sm text-gray-500">Extracted from Machine Readable Zone</p>
+                      </div>
+                    </div>
+                    <div className="px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                      ✓ Verified
+                    </div>
+                  </div>
+
+                  {/* Main Information Card */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm">
+                    <div className="p-6">
+                      {/* Personal Information Section */}
+                      <div className="mb-6">
+                        <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                          Personal Information
+                        </h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Surname</label>
+                            <p className="text-lg font-semibold text-gray-900">{passportResult.surname}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Given Name</label>
+                            <p className="text-lg font-semibold text-gray-900">{passportResult.name}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date of Birth</label>
+                            <p className="text-lg font-medium text-gray-900">{passportResult.date_of_birth}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Sex</label>
+                            <p className="text-lg font-medium text-gray-900">{passportResult.sex}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Passport Details Section */}
+                      <div className="mb-6">
+                        <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></div>
+                          Passport Details
+                        </h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Passport Number</label>
+                            <p className="text-lg font-mono font-semibold text-gray-900 bg-white px-3 py-2 rounded-lg border">{passportResult.passport_number}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Passport Type</label>
+                            <p className="text-lg font-medium text-gray-900">{passportResult.passport_type}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Expiration Date</label>
+                            <p className="text-lg font-medium text-gray-900">{passportResult.expiration_date}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Issuing Country</label>
+                            <p className="text-lg font-medium text-gray-900">{passportResult.issuing_country}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Nationality Section */}
+                      <div>
+                        <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                          Citizenship
+                        </h5>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Nationality</label>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-6 h-4 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm shadow-sm"></div>
+                            <p className="text-lg font-semibold text-gray-900">{passportResult.nationality}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Debug Information */}
+                  {debugInfo && debugInfo.mrz_detected && (
+                    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="text-sm font-semibold text-gray-700 flex items-center">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
+                          Technical Details
+                        </h5>
+                        <span className="text-xs text-green-600 font-medium bg-green-100 px-2 py-1 rounded-full">
+                          MRZ Detected
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Processing Method</p>
+                          <p className="text-sm font-medium text-gray-700">Machine Readable Zone (MRZ) Extraction</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Debug Images</p>
+                          {debugInfo.mrz_roi_path && (
+                            <a
+                              href={`http://localhost:5000/debug-image/${debugInfo.mrz_roi_path}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              <ScanText className="w-4 h-4 mr-1" />
+                              View MRZ Region
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>
