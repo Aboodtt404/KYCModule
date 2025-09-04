@@ -82,7 +82,6 @@ export function OCRProcessor() {
     setError('');
 
     try {
-      // Fetch the actual image data from the URL
       console.log('Fetching image from URL:', imageUrl);
       const response = await fetch(imageUrl);
 
@@ -99,14 +98,13 @@ export function OCRProcessor() {
       }
 
       if (ocrType === 'egyptian') {
-        // Use Egyptian ID OCR
         egyptianIDMutation.mutate(imageBlob, {
           onSuccess: (data) => {
             try {
               if (data.success && data.extracted_data) {
                 setEgyptianIDResult(data.extracted_data);
                 setDebugInfo(data.debug_info || null);
-                setOcrResult(null); // Clear basic OCR results
+                setOcrResult(null);
               } else {
                 setError('Egyptian ID OCR processing failed: ' + (data.error || 'Unknown error'));
               }
@@ -121,7 +119,6 @@ export function OCRProcessor() {
           },
         });
       } else if (ocrType === 'passport') {
-        // Use Passport OCR
         try {
           const response = await fetch('http://localhost:5000/passport', {
             method: 'POST',
@@ -140,8 +137,8 @@ export function OCRProcessor() {
           if (data.success && data.data) {
             setPassportResult(data.data);
             setDebugInfo(data.debug_info || null);
-            setEgyptianIDResult(null); // Clear Egyptian ID results
-            setOcrResult(null); // Clear basic OCR results
+            setEgyptianIDResult(null);
+            setOcrResult(null);
           } else {
             setError('Passport OCR processing failed: ' + (data.error || 'Unknown error'));
           }
@@ -162,7 +159,6 @@ export function OCRProcessor() {
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Run OCR on Document</h2>
         <p className="text-gray-600">Select an image to extract text using OCR</p>
 
-        {/* OCR Type Selector */}
         <div className="mt-4 flex gap-4">
           <label className="flex items-center">
             <input
@@ -196,7 +192,6 @@ export function OCRProcessor() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Image Selection */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Select Image</h3>
           {imageFiles.length === 0 ? (
@@ -225,7 +220,6 @@ export function OCRProcessor() {
           )}
         </div>
 
-        {/* OCR Processing and Results */}
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">OCR Preview and Results</h3>
           {!selectedImage ? (
@@ -272,7 +266,6 @@ export function OCRProcessor() {
                 </div>
               )}
 
-              {/* Egyptian ID Results */}
               {egyptianIDResult && (
                 <div className="mt-4 space-y-4">
                   <h4 className="text-lg font-medium text-gray-900 flex items-center">
@@ -308,7 +301,6 @@ export function OCRProcessor() {
                     </div>
                   </div>
 
-                  {/* Debug Information */}
                   {debugInfo && (
                     <div className="mt-4">
                       <h5 className="text-md font-medium text-gray-900 mb-3">🔍 Debug Information</h5>
@@ -372,10 +364,8 @@ export function OCRProcessor() {
                 </div>
               )}
 
-              {/* Passport Results */}
               {passportResult && (
                 <div className="mt-6 space-y-6">
-                  {/* Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="p-2 bg-blue-100 rounded-lg">
@@ -391,10 +381,8 @@ export function OCRProcessor() {
                     </div>
                   </div>
 
-                  {/* Main Information Card */}
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200 shadow-sm">
                     <div className="p-6">
-                      {/* Personal Information Section */}
                       <div className="mb-6">
                         <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
                           <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
@@ -420,7 +408,6 @@ export function OCRProcessor() {
                         </div>
                       </div>
 
-                      {/* Passport Details Section */}
                       <div className="mb-6">
                         <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
                           <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></div>
@@ -446,7 +433,6 @@ export function OCRProcessor() {
                         </div>
                       </div>
 
-                      {/* Nationality Section */}
                       <div>
                         <h5 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 flex items-center">
                           <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
@@ -463,7 +449,6 @@ export function OCRProcessor() {
                     </div>
                   </div>
 
-                  {/* Debug Information */}
                   {debugInfo && debugInfo.mrz_detected && (
                     <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -506,4 +491,4 @@ export function OCRProcessor() {
       </div>
     </div>
   );
-} 
+}

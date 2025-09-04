@@ -6,34 +6,24 @@ import os
 import numpy as np
 from scipy import ndimage
 
-# Initialize EasyOCR reader (this should be done once for efficiency)
 reader = easyocr.Reader(['ar'], gpu=False)
-
-# Function to preprocess the cropped image
 
 
 def preprocess_image(cropped_image):
     gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
     return gray_image
 
-# Auto-rotation: Try all four orientations and select the best one
-
 
 def auto_rotate_image(image):
-    """
-    Try all four orientations (0°, 90°, 180°, 270°) and select the best one based on text detection
-    """
     try:
         print("🔄 Testing all four orientations (0°, 90°, 180°, 270°)...")
 
-        # Define the four orientations to test
         orientations = [0, 90, 180, 270]
         best_image = image
         best_score = 0
         best_angle = 0
 
         for angle in orientations:
-            # Rotate image
             if angle == 0:
                 rotated = image.copy()
             else:
@@ -43,7 +33,6 @@ def auto_rotate_image(image):
                 rotated = cv2.warpAffine(image, rotation_matrix, (width, height),
                                          flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-            # Score this orientation based on field detection
             score, detected_fields = score_orientation(rotated)
             fields_str = ", ".join(
                 detected_fields) if detected_fields else "none"
@@ -70,18 +59,10 @@ def auto_rotate_image(image):
 
 
 def score_orientation(image):
-    """
-    Score an image orientation based on YOLO field detection results
-    Higher score = better orientation (more fields detected)
-    Returns: (score, list_of_detected_fields)
-    """
     try:
-        # Load the trained YOLO model for field detection
         model = YOLO('models/detect_odjects.pt')
-        # Use same confidence threshold as main processing
         results = model(image, conf=0.3)
 
-        # Count detected fields and their confidence scores
         field_count = 0
         total_confidence = 0
         detected_fields = []
@@ -93,7 +74,6 @@ def score_orientation(image):
                     class_name = result.names[class_id]
                     confidence = float(box.conf[0].item())
 
-                    # Show all detected fields for debugging
                     if class_name == 'firstName':
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         print(
@@ -102,16 +82,14 @@ def score_orientation(image):
                         print(
                             f"      🔍 Detected field: {class_name} (conf: {confidence:.3f})")
 
-                    # Only count fields we care about
                     if class_name in ['firstName', 'lastName', 'nid', 'address', 'serial']:
                         field_count += 1
                         total_confidence += confidence
                         detected_fields.append(class_name)
 
-        # Calculate score: number of fields + average confidence
         if field_count > 0:
             avg_confidence = total_confidence / field_count
-            score = field_count + avg_confidence  # More fields + higher confidence = better
+            score = field_count + avg_confidence
         else:
             score = 0
 
@@ -121,23 +99,15 @@ def score_orientation(image):
         print(f"⚠️ Orientation scoring failed: {e}")
         return 0, []
 
-# Contrast enhancement: Fix dark/light images
-
 
 def enhance_contrast(image):
-    """
-    Enhance contrast using CLAHE (Contrast Limited Adaptive Histogram Equalization)
-    """
     try:
-        # Convert to LAB color space
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
 
-        # Apply CLAHE to L channel
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         l = clahe.apply(l)
 
-        # Merge channels and convert back to BGR
         enhanced = cv2.merge([l, a, b])
         enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
 
@@ -148,16 +118,9 @@ def enhance_contrast(image):
         print(f"⚠️ Contrast enhancement failed: {e}")
         return image
 
-# Noise reduction: Clean up grainy images
-
 
 def reduce_noise(image):
-    """
-    Reduce noise using Non-local Means Denoising
-    """
     try:
-        # Apply Non-local Means Denoising
-        # h: filter strength, templateWindowSize: template patch size, searchWindowSize: search window size
         denoised = cv2.fastNlMeansDenoisingColored(image, None, h=10, hColor=10,
                                                    templateWindowSize=7, searchWindowSize=21)
 
@@ -168,20 +131,13 @@ def reduce_noise(image):
         print(f"⚠️ Noise reduction failed: {e}")
         return image
 
-# Combined preprocessing pipeline
-
 
 def preprocess_id_image(image):
-    """
-    Apply orientation testing only (removed contrast enhancement and noise reduction)
-    """
     print("🔧 Starting image preprocessing pipeline...")
 
-    # Step 1: Auto-rotation (orientation testing)
     print("1️⃣ Testing orientations...")
     processed = auto_rotate_image(image)
 
-    # Save preprocessed image for debugging
     debug_folder = 'debug_images'
     os.makedirs(debug_folder, exist_ok=True)
     preprocessed_path = os.path.join(debug_folder, 'preprocessed_image.jpg')
@@ -190,8 +146,6 @@ def preprocess_id_image(image):
 
     print("✅ Image preprocessing completed")
     return processed
-
-# Functions for specific fields with custom OCR configurations
 
 
 def extract_text(image, bbox, lang='ara'):
@@ -202,11 +156,8 @@ def extract_text(image, bbox, lang='ara'):
     text = ' '.join(results)
     return text.strip()
 
-# Function to detect national ID numbers in a cropped image
-
 
 def detect_national_id(cropped_image):
-    # Load the model directly in the function
     model = YOLO('models/detect_id.pt')
     results = model(cropped_image)
     detected_info = []
@@ -225,13 +176,9 @@ def detect_national_id(cropped_image):
 
     return id_number
 
-# Function to remove numbers from a string
-
 
 def remove_numbers(text):
     return re.sub(r'\d+', '', text)
-
-# Function to expand bounding box height only
 
 
 def expand_bbox_height(bbox, scale=1.2, image_shape=None):
@@ -245,26 +192,20 @@ def expand_bbox_height(bbox, scale=1.2, image_shape=None):
     new_y2 = min(center_y + new_height // 2, image_shape[0])
     return [x1, new_y1, x2, new_y2]
 
-# Function to process the cropped image
-
 
 def process_image(cropped_image):
-    # Load the trained YOLO model for objects (fields) detection
     model = YOLO('models/detect_odjects.pt')
-    # Use lower confidence threshold to catch firstName with low confidence
     results = model(cropped_image, conf=0.3)
 
-    # DEBUG: Print all detections with very low confidence to see what we're missing
     print("🔍 DEBUG: All detections with conf >= 0.1:")
     for result in results:
         for box in result.boxes:
             confidence = float(box.conf[0])
-            if confidence >= 0.1:  # Show all detections above 0.1
+            if confidence >= 0.1:
                 class_id = int(box.cls[0])
                 class_name = model.names[class_id]
                 print(f"      🔍 DEBUG: {class_name} (conf: {confidence:.3f})")
 
-    # Variables to store extracted values
     first_name = ''
     second_name = ''
     merged_name = ''
@@ -272,11 +213,9 @@ def process_image(cropped_image):
     address = ''
     serial = ''
 
-    # Debug information
     detected_fields = []
     debug_image = cropped_image.copy()
 
-    # Loop through the results
     for result in results:
         debug_folder = 'debug_images'
         os.makedirs(debug_folder, exist_ok=True)
@@ -294,7 +233,6 @@ def process_image(cropped_image):
             confidence = float(box.conf[0].item())
             bbox = [int(coord) for coord in bbox]
 
-            # Store detection info for debugging
             detected_fields.append({
                 'class': class_name,
                 'confidence': confidence,
@@ -304,17 +242,14 @@ def process_image(cropped_image):
             print(
                 f"   🎯 Detected: {class_name} (conf: {confidence:.3f}) at {bbox}")
 
-            # Special debugging for firstName
             if class_name == 'firstName':
                 print(
                     f"      🎯 FOUND firstName with confidence {confidence:.3f}!")
 
-            # Show all detected field names for debugging (only once)
             if len(detected_fields) == 1:
                 print(
                     f"      📋 Available field names: {list(result.names.values())}")
 
-            # Draw bounding box on debug image
             x1, y1, x2, y2 = bbox
             cv2.rectangle(debug_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(debug_image, f"{class_name}: {confidence:.2f}", (x1, y1-10),
@@ -335,7 +270,7 @@ def process_image(cropped_image):
             elif class_name == 'nid':
                 expanded_bbox = expand_bbox_height(
                     bbox, scale=1.5, image_shape=cropped_image.shape)
-                cropped_nid = cropped_image[expanded_bbox[1]                                            :expanded_bbox[3], expanded_bbox[0]:expanded_bbox[2]]
+                cropped_nid = cropped_image[expanded_bbox[1]:expanded_bbox[3], expanded_bbox[0]:expanded_bbox[2]]
                 nid = detect_national_id(cropped_nid)
                 print(f"   📝 National ID: '{nid}'")
 
@@ -347,7 +282,6 @@ def process_image(cropped_image):
     print(f"Address: {address}")
     print(f"Serial: {serial}")
 
-    # Debug: Show which fields were detected vs expected
     detected_field_names = [field['class'] for field in detected_fields]
     expected_fields = ['firstName', 'lastName', 'nid', 'address', 'serial']
     missing_fields = [
@@ -356,7 +290,6 @@ def process_image(cropped_image):
     print(f"   ✅ Detected: {detected_field_names}")
     print(f"   ❌ Missing: {missing_fields}")
 
-    # Save enhanced debug image with all detections in debug folder
     debug_folder = 'debug_images'
     os.makedirs(debug_folder, exist_ok=True)
     debug_output_path = os.path.join(debug_folder, 'egyptian_id_debug.jpg')
@@ -367,14 +300,8 @@ def process_image(cropped_image):
     decoded_info = decode_egyptian_id(nid)
     return (first_name, second_name, merged_name, nid, address, decoded_info["Birth Date"], decoded_info["Governorate"], decoded_info["Gender"], detected_fields, debug_output_path)
 
-# Function to decode the Egyptian ID number
-
 
 def decode_egyptian_id(id_number):
-    """
-    Decode Egyptian ID number with proper validation
-    """
-    # Validate input
     if not id_number or len(id_number) < 14:
         print(
             f"⚠️ Invalid ID number length: {len(id_number) if id_number else 0} (expected 14)")
@@ -449,55 +376,41 @@ def decode_egyptian_id(id_number):
         'Gender': gender
     }
 
-# Function to detect the ID card and pass it to the existing code
-
 
 def detect_and_process_id_card(image_path):
     print(f"🖼️ Processing image: {image_path}")
 
-    # Load the original image using OpenCV
     image = cv2.imread(image_path)
 
     if image is None:
         raise ValueError(f"Could not load image from {image_path}")
 
-    # Apply preprocessing pipeline: auto-rotation, contrast enhancement, noise reduction
     print("🔧 Applying image preprocessing...")
     preprocessed_image = preprocess_id_image(image)
 
-    # Load the ID card detection model
     id_card_model = YOLO('models/detect_id_card.pt')
 
-    # Perform inference to detect the ID card on preprocessed image
     id_card_results = id_card_model(preprocessed_image)
 
     print(f"🃏 ID Card Detection Results:")
     print(
         f"   📊 Total ID card detections: {len(id_card_results[0].boxes) if id_card_results[0].boxes is not None else 0}")
 
-    # Crop the ID card from the preprocessed image
     for result in id_card_results:
         for box in result.boxes:
-            # Get bounding box coordinates
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = float(box.conf[0].item())
             print(
                 f"   🎯 ID Card detected (conf: {confidence:.3f}) at [{x1}, {y1}, {x2}, {y2}]")
 
-            # Add padding to ensure we don't crop out important fields like firstName
-            # firstName is located at the bottom of the ID card, so we need more bottom padding
             height, width = preprocessed_image.shape[:2]
-            # 10% of height or 20px, whichever is larger
             padding_top = max(20, int((y2 - y1) * 0.1))
             padding_sides = max(10, int((x2 - x1) * 0.05)
-                                )  # 5% of width or 10px
-            # Increase bottom padding significantly to catch firstName at bottom
+                                )
             padding_bottom = max(50, int((y2 - y1) * 0.15)
-                                 )  # 15% of height or 50px, whichever is larger
+                                 )
 
-            # Apply padding with bounds checking
             x1_padded = max(0, x1 - padding_sides)
-            # Extra padding at top for firstName
             y1_padded = max(0, y1 - padding_top)
             x2_padded = min(width, x2 + padding_sides)
             y2_padded = min(height, y2 + padding_bottom)
@@ -507,14 +420,10 @@ def detect_and_process_id_card(image_path):
             cropped_image = preprocessed_image[y1_padded:y2_padded,
                                                x1_padded:x2_padded]
 
-            # Save the cropped ID card for debugging in debug folder
             debug_folder = 'debug_images'
             os.makedirs(debug_folder, exist_ok=True)
             cropped_path = os.path.join(debug_folder, 'cropped_id_card.jpg')
             cv2.imwrite(cropped_path, cropped_image)
             print(f"💾 Cropped ID card saved to: {cropped_path}")
 
-    # Pass the cropped image to the existing processing function
     return process_image(cropped_image)
-
-# print(detect_and_process_id_card("font_ID.jpg"))
