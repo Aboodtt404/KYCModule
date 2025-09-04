@@ -21,12 +21,12 @@ CORS(app, resources={
     }
 })
 
+
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({
         "status": "healthy",
         "services": {
-            "passport_mrz": True,
             "egyptian_id": True
         }
     })
@@ -44,67 +44,6 @@ def process_ocr():
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/passport-mrz', methods=['POST'])
-def process_passport_mrz():
-    try:
-        start_time = time.time()
-
-        if not request.data:
-            return jsonify({"error": "No image data provided"}), 400
-
-        logger.info(f"Passport MRZ request: {len(request.data)} bytes")
-
-        import numpy as np
-        import cv2
-
-        image_np = np.frombuffer(request.data, np.uint8)
-        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
-
-        if image is None:
-            return jsonify({"error": "Could not decode image"}), 400
-
-        result = mrz_detector.process_passport(image, lang='eng')
-
-        processing_time = time.time() - start_time
-        result["processing_time"] = round(processing_time, 2)
-
-        logger.info(f"Passport MRZ completed in {processing_time:.2f}s")
-
-        if result["success"]:
-            logger.info("📋 Comprehensive Passport Results:")
-            logger.info(
-                f"   📊 Total regions detected: {result['total_regions']}")
-            logger.info(
-                f"   🏷️ Data types found: {', '.join(result['data_types_found'])}")
-
-            organized = result.get('organized_data', {})
-            for data_type, items in organized.items():
-                logger.info(f"   📝 {data_type.replace('_', ' ').title()}:")
-                for i, item in enumerate(items[:3], 1):
-                    confidence_icon = "🟢" if item['confidence'] > 0.8 else "🟡" if item['confidence'] > 0.5 else "🔴"
-                    logger.info(
-                        f"      {i}. {confidence_icon} '{item['text'][:40]}...' (conf: {item['confidence']:.3f}) [{item['region']}]")
-
-                if len(items) > 3:
-                    logger.info(
-                        f"      ... and {len(items) - 3} more {data_type} items")
-
-            if result.get('mrz_info') and result['mrz_info'].get('type'):
-                logger.info(f"   🛂 MRZ Format: {result['mrz_info']['type']}")
-                if result['mrz_info'].get('line_data'):
-                    for i, line in enumerate(result['mrz_info']['line_data'], 1):
-                        logger.info(f"      Line {i}: {line}")
-        else:
-            logger.warning(
-                f"   ❌ Passport processing failed: {result['error']}")
-
-        return jsonify(result)
-
-    except Exception as e:
-        logger.error(f"Passport MRZ error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -165,14 +104,12 @@ def server_info():
         "version": "1.0.0",
         "services": {
             "egyptian_id": "Egyptian ID card processing with YOLO + EasyOCR",
-            "passport_mrz": "Passport MRZ detection and OCR",
             "passport": "Passport OCR using MRZ extraction and EasyOCR"
         },
         "endpoints": {
             "/health": "Health check",
             "/ocr": "Egyptian ID OCR processing",
             "/egyptian-id": "Egyptian ID card processing",
-            "/passport-mrz": "Passport MRZ detection and OCR",
             "/passport": "Passport OCR using MRZ extraction and EasyOCR",
             "/debug-image/<filename>": "Serve debug images",
             "/info": "Server information"
@@ -270,7 +207,7 @@ def get_debug_image(filename):
 def index():
     return jsonify({
         "message": "OCR Server is running",
-        "endpoints": ["/health", "/ocr", "/egyptian-id", "/passport-mrz", "/debug-image/<filename>", "/info"],
+        "endpoints": ["/health", "/ocr", "/egyptian-id", "/passport", "/debug-image/<filename>", "/info"],
         "status": "ready"
     })
 
@@ -278,13 +215,13 @@ def index():
 if __name__ == '__main__':
     print("🔤 OCR Server")
     print("=" * 40)
-    print("✅ Services: Egyptian ID OCR, Passport MRZ")
+    print("✅ Services: Egyptian ID OCR, Passport OCR")
 
     print("\n🌐 Server Endpoints:")
     print("  📊 Health: http://localhost:5000/health")
     print("  🔍 OCR: http://localhost:5000/ocr (redirects to Egyptian ID)")
     print("  🇪🇬 Egyptian ID: http://localhost:5000/egyptian-id")
-    print("  🛂 Passport MRZ: http://localhost:5000/passport-mrz")
+    print("  🛂 Passport OCR: http://localhost:5000/passport")
     print("  🖼️ Debug Images: http://localhost:5000/debug-image/<filename>")
     print("  ℹ️ Info: http://localhost:5000/info")
 
