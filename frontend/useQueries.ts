@@ -120,34 +120,106 @@ export function useOCR() {
 }
 
 export function useEgyptianIDOCR() {
+  const { actor } = useActor();
+
   return useMutation({
     mutationFn: async (imageData: Blob) => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for Egyptian ID
+      if (!actor) throw new Error('Backend not available');
 
-      try {
-        const response = await fetch('http://localhost:5000/egyptian-id', {
-          method: 'POST',
-          body: imageData,
-          headers: {
-            'Content-Type': 'application/octet-stream'
-          },
-          signal: controller.signal
-        });
+      // Convert blob to Uint8Array
+      const arrayBuffer = await imageData.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
 
-        if (!response.ok) {
-          throw new Error(`Egyptian ID OCR processing failed: ${response.status} ${response.statusText}`);
-        }
+      // First upload the image to get a path
+      const path = `egyptian-id-${Date.now()}.jpg`;
+      await actor.upload(path, 'image/jpeg', uint8Array, true);
 
-        return await response.json();
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          throw new Error('Egyptian ID OCR request timed out after 60 seconds');
-        }
-        throw error;
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      // Then call the OCR function
+      const result = await actor.getEgyptianIdOcr(path);
+
+      // Parse the JSON result
+      return JSON.parse(result);
     },
+  });
+}
+
+export function usePassportOCR() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (imageData: Blob) => {
+      if (!actor) throw new Error('Backend not available');
+
+      // Convert blob to Uint8Array
+      const arrayBuffer = await imageData.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      // First upload the image to get a path
+      const path = `passport-${Date.now()}.jpg`;
+      await actor.upload(path, 'image/jpeg', uint8Array, true);
+
+      // Then call the OCR function
+      const result = await actor.getPassportOcr(path);
+
+      // Parse the JSON result
+      return JSON.parse(result);
+    },
+  });
+}
+
+// New hooks for retrieving stored OCR results
+export function useEgyptianIdResults() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<Array<[string, string]>>({
+    queryKey: ['egyptianIdResults'],
+    queryFn: async () => {
+      if (!actor) return [];
+      const results = await actor.getAllEgyptianIdResults();
+      return results.map(([path, data]) => [path, data]);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function usePassportResults() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<Array<[string, string]>>({
+    queryKey: ['passportResults'],
+    queryFn: async () => {
+      if (!actor) return [];
+      const results = await actor.getAllPassportResults();
+      return results.map(([path, data]) => [path, data]);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useGetEgyptianIdResult(path: string) {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<string | null>({
+    queryKey: ['egyptianIdResult', path],
+    queryFn: async () => {
+      if (!actor) return null;
+      const result = await actor.getEgyptianIdResult(path);
+      return result || null;
+    },
+    enabled: !!actor && !isFetching && !!path,
+  });
+}
+
+export function useGetPassportResult(path: string) {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<string | null>({
+    queryKey: ['passportResult', path],
+    queryFn: async () => {
+      if (!actor) return null;
+      const result = await actor.getPassportResult(path);
+      return result || null;
+    },
+    enabled: !!actor && !isFetching && !!path,
   });
 }
