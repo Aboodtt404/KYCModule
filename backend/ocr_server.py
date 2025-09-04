@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from passport_mrz_detector import PassportMRZDetector
 from egyptian_ocr_id import detect_and_process_id_card
+from passport_ocr import process_passport, get_passport_debug_info
 import logging
 import time
 import tempfile
@@ -129,6 +130,62 @@ def process_passport_mrz():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/passport', methods=['POST'])
+def process_passport_ocr():
+    """Passport OCR processing using MRZ extraction and EasyOCR"""
+    try:
+        start_time = time.time()
+
+        if not request.data:
+            return jsonify({"error": "No image data provided"}), 400
+
+        logger.info(f"Passport OCR request: {len(request.data)} bytes")
+
+        # Save uploaded image to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+            tmp_file.write(request.data)
+            tmp_file_path = tmp_file.name
+
+        try:
+            # Process passport using the new OCR module
+            result = process_passport(tmp_file_path)
+
+            # Get debug information
+            debug_info = get_passport_debug_info(tmp_file_path)
+
+            processing_time = time.time() - start_time
+
+            # Prepare response
+            response = {
+                "success": result["success"],
+                "processing_time": round(processing_time, 2),
+                "data": result["data"] if result["success"] else None,
+                "error": result["error"] if not result["success"] else None,
+                "debug_info": debug_info
+            }
+
+            if result["success"]:
+                logger.info(
+                    f"Passport OCR completed in {processing_time:.2f}s")
+                logger.info("📋 Passport Data Extracted:")
+                data = result["data"]
+                for key, value in data.items():
+                    logger.info(f"   {key.replace('_', ' ').title()}: {value}")
+            else:
+                logger.warning(f"Passport OCR failed: {result['error']}")
+
+            return jsonify(response)
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(tmp_file_path):
+                os.remove(tmp_file_path)
+
+    except Exception as e:
+        logger.error(f"Passport OCR error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/info', methods=['GET'])
 def server_info():
     """Get server information"""
@@ -137,13 +194,15 @@ def server_info():
         "version": "1.0.0",
         "services": {
             "egyptian_id": "Egyptian ID card processing with YOLO + EasyOCR",
-            "passport_mrz": "Passport MRZ detection and OCR"
+            "passport_mrz": "Passport MRZ detection and OCR",
+            "passport": "Passport OCR using MRZ extraction and EasyOCR"
         },
         "endpoints": {
             "/health": "Health check",
             "/ocr": "Egyptian ID OCR processing",
             "/egyptian-id": "Egyptian ID card processing",
             "/passport-mrz": "Passport MRZ detection and OCR",
+            "/passport": "Passport OCR using MRZ extraction and EasyOCR",
             "/debug-image/<filename>": "Serve debug images",
             "/info": "Server information"
         }
@@ -198,7 +257,8 @@ def process_egyptian_id():
                     "detected_fields": detected_fields,
                     "debug_image_path": debug_image_path,
                     "cropped_image_path": "debug_images/cropped_id_card.jpg",
-                    "yolo_output_path": "debug_images/d2.jpg"
+                    "yolo_output_path": "debug_images/d2.jpg",
+                    "preprocessed_image_path": "debug_images/preprocessed_image.jpg"
                 },
                 "total_fields": 8
             }
@@ -227,7 +287,8 @@ def get_debug_image(filename):
     from flask import send_file
 
     # Security: only allow specific debug image files
-    allowed_files = ['egyptian_id_debug.jpg', 'cropped_id_card.jpg', 'd2.jpg']
+    allowed_files = ['egyptian_id_debug.jpg',
+                     'cropped_id_card.jpg', 'd2.jpg', 'preprocessed_image.jpg']
 
     if filename not in allowed_files:
         return jsonify({"error": "File not allowed"}), 403

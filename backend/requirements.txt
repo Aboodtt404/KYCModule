@@ -4,3 +4,7 @@ numpy
 pytesseract
 ultralytics
 easyocr
+scipy
+passporteye
+python-dateutil
+matplotlib
