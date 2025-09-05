@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useDocuments, useOCR, useEgyptianIDOCR, usePassportOCR, useEgyptianIdResults, usePassportResults } from './useQueries';
 import { useFileList } from './FileList';
-import { Image, Loader2, ScanText, AlertCircle, Flag, Database, Clock } from 'lucide-react';
+import { useImageCompression } from './hooks/useImageCompression';
+import { Image, Loader2, ScanText, AlertCircle, Flag, Database, Clock, Zap } from 'lucide-react';
 import { FileMetadata } from './types';
 
 interface OcrResult {
@@ -61,8 +62,26 @@ export function OCRProcessor() {
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [ocrType, setOcrType] = useState<'egyptian' | 'passport'>('egyptian');
   const [error, setError] = useState<string>('');
+  const [compressing, setCompressing] = useState<boolean>(false);
+  const [compressionInfo, setCompressionInfo] = useState<{
+    originalSize: number;
+    compressedSize: number;
+    compressionRatio: number;
+  } | null>(null);
 
   const imageFiles = documents?.filter(doc => doc.mimeType.startsWith('image/')) || [];
+
+  const {
+    compressImageFile,
+    isCompressing: hookCompressing,
+    compressionResult,
+    compressionError,
+    needsCompressionCheck
+  } = useImageCompression({
+    maxSizeKB: 500, // 500KB limit for IC compatibility
+    autoCompress: true,
+    showCompressionInfo: true
+  });
 
   const handleImageSelect = async (file: FileMetadata) => {
     try {
@@ -92,12 +111,41 @@ export function OCRProcessor() {
         throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
       }
 
-      const imageBlob = await response.blob();
+      let imageBlob = await response.blob();
       console.log('Image blob size:', imageBlob.size, 'bytes');
       console.log('Image blob type:', imageBlob.type);
 
       if (imageBlob.size === 0) {
         throw new Error('Image data is empty');
+      }
+
+      // Check if compression is needed
+      const needsCompression = needsCompressionCheck(new File([imageBlob], 'image.jpg', { type: imageBlob.type }));
+
+      if (needsCompression) {
+        setCompressing(true);
+        try {
+          const compressedFile = await compressImageFile(new File([imageBlob], 'image.jpg', { type: imageBlob.type }));
+          imageBlob = compressedFile;
+
+          // Update compression info
+          if (compressionResult) {
+            setCompressionInfo({
+              originalSize: new File([imageBlob], 'image.jpg', { type: imageBlob.type }).size,
+              compressedSize: compressionResult.compressedSize,
+              compressionRatio: compressionResult.compressionRatio
+            });
+          }
+
+          console.log('Image compressed:', {
+            original: `${(new File([imageBlob], 'image.jpg', { type: imageBlob.type }).size / 1024 / 1024).toFixed(2)} MB`,
+            compressed: `${(imageBlob.size / 1024 / 1024).toFixed(2)} MB`
+          });
+        } catch (compressionError) {
+          console.warn('Compression failed, using original image:', compressionError);
+        } finally {
+          setCompressing(false);
+        }
       }
 
       if (ocrType === 'egyptian') {
@@ -230,16 +278,43 @@ export function OCRProcessor() {
                 <img src={imageUrl} alt={selectedImage.path} className="w-full h-auto max-h-96 object-contain" />
               </div>
 
-              <div className="text-center">
+              <div className="text-center space-y-4">
+                {/* Compression Status */}
+                {compressing && (
+                  <div className="flex items-center justify-center space-x-2 p-3 bg-blue-50 rounded-lg">
+                    <Zap className="w-5 h-5 text-blue-500 animate-pulse" />
+                    <span className="text-blue-700">Compressing image for optimal processing...</span>
+                  </div>
+                )}
+
+                {compressionInfo && (
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-center space-x-2 mb-2">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-800">Image Compressed</span>
+                    </div>
+                    <div className="text-xs text-green-700 space-y-1">
+                      <div>Original: {(compressionInfo.originalSize / 1024 / 1024).toFixed(2)} MB</div>
+                      <div>Compressed: {(compressionInfo.compressedSize / 1024 / 1024).toFixed(2)} MB</div>
+                      <div>Space saved: {((1 - compressionInfo.compressionRatio) * 100).toFixed(1)}%</div>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={handleRunOcr}
-                  disabled={ocrMutation.isPending || egyptianIDMutation.isPending}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center mx-auto"
+                  disabled={ocrMutation.isPending || egyptianIDMutation.isPending || compressing}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(ocrMutation.isPending || egyptianIDMutation.isPending) ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Processing...
+                    </>
+                  ) : compressing ? (
+                    <>
+                      <Zap className="w-5 h-5 animate-pulse mr-2" />
+                      Compressing...
                     </>
                   ) : (
                     <>

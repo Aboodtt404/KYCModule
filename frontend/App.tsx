@@ -53,7 +53,7 @@ function App() {
             <h1 className="text-xl font-bold text-gray-800">Document Manager</h1>
             <p className="text-sm text-gray-600 mt-1">Upload, process & manage files</p>
           </div>
-          
+
           <nav className="mt-6">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -61,11 +61,10 @@ function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center px-6 py-3 text-left transition-colors ${
-                    activeTab === tab.id
+                  className={`w-full flex items-center px-6 py-3 text-left transition-colors ${activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <Icon className="w-5 h-5 mr-3" />
                   {tab.label}
@@ -80,13 +79,13 @@ function App() {
           <div className="p-8">
             {renderContent()}
           </div>
-          
+
           {/* Footer */}
           <footer className="mt-auto p-6 text-center text-sm text-gray-500 border-t border-gray-200">
             © 2025. Built with <Heart className="inline w-4 h-4 text-red-500" /> using{' '}
-            <a 
-              href="https://caffeine.ai" 
-              target="_blank" 
+            <a
+              href="https://caffeine.ai"
+              target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 hover:text-blue-800"
             >

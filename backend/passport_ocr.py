@@ -177,7 +177,7 @@ class PassportOCR:
 
             return {
                 'mrz_detected': True,
-                'mrz_roi_path': debug_mrz_path,
+                'mrz_roi_path': 'mrz_roi.jpg',  # Return just the filename
                 'error': None
             }
 

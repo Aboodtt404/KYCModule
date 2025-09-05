@@ -24,12 +24,44 @@ CORS(app, resources={
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({
+    health_status = {
         "status": "healthy",
-        "services": {
-            "egyptian_id": True
-        }
-    })
+        "services": {},
+        "errors": [],
+        "timestamp": time.time()
+    }
+
+    # Test Egyptian ID service
+    try:
+        from egyptian_ocr_id import detect_and_process_id_card
+        health_status["services"]["egyptian_id"] = True
+    except ImportError as e:
+        health_status["services"]["egyptian_id"] = False
+        health_status["errors"].append(f"Egyptian ID import error: {str(e)}")
+        health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["services"]["egyptian_id"] = False
+        health_status["errors"].append(f"Egyptian ID service error: {str(e)}")
+        health_status["status"] = "degraded"
+
+    # Test Passport service
+    try:
+        from passport_ocr import process_passport, get_passport_debug_info
+        health_status["services"]["passport"] = True
+    except ImportError as e:
+        health_status["services"]["passport"] = False
+        health_status["errors"].append(f"Passport import error: {str(e)}")
+        health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["services"]["passport"] = False
+        health_status["errors"].append(f"Passport service error: {str(e)}")
+        health_status["status"] = "degraded"
+
+    # Check if any service is down
+    if not all(health_status["services"].values()):
+        health_status["status"] = "degraded"
+
+    return jsonify(health_status)
 
 
 @app.route('/ocr', methods=['POST'])
@@ -143,6 +175,10 @@ def process_egyptian_id():
 
             processing_time = time.time() - start_time
 
+            # Extract just the filename from the debug image path
+            debug_image_filename = os.path.basename(
+                debug_image_path) if debug_image_path else "egyptian_id_debug.jpg"
+
             result = {
                 "success": True,
                 "processing_time": round(processing_time, 2),
@@ -159,10 +195,10 @@ def process_egyptian_id():
                 },
                 "debug_info": {
                     "detected_fields": detected_fields,
-                    "debug_image_path": debug_image_path,
-                    "cropped_image_path": "debug_images/cropped_id_card.jpg",
-                    "yolo_output_path": "debug_images/d2.jpg",
-                    "preprocessed_image_path": "debug_images/preprocessed_image.jpg"
+                    "debug_image_path": debug_image_filename,
+                    "cropped_image_path": "cropped_id_card.jpg",
+                    "yolo_output_path": "d2.jpg",
+                    "preprocessed_image_path": "preprocessed_image.jpg"
                 },
                 "total_fields": 8
             }
@@ -189,7 +225,7 @@ def get_debug_image(filename):
     from flask import send_file
 
     allowed_files = ['egyptian_id_debug.jpg',
-                     'cropped_id_card.jpg', 'd2.jpg', 'preprocessed_image.jpg']
+                     'cropped_id_card.jpg', 'd2.jpg', 'preprocessed_image.jpg', 'mrz_roi.jpg']
 
     if filename not in allowed_files:
         return jsonify({"error": "File not allowed"}), 403
@@ -198,9 +234,14 @@ def get_debug_image(filename):
     file_path = os.path.join(debug_folder, filename)
 
     if not os.path.exists(file_path):
-        return jsonify({"error": "Debug image not found"}), 404
+        logger.warning(f"Debug image not found: {file_path}")
+        return jsonify({"error": f"Debug image not found: {filename}"}), 404
 
-    return send_file(file_path, mimetype='image/jpeg')
+    try:
+        return send_file(file_path, mimetype='image/jpeg')
+    except Exception as e:
+        logger.error(f"Error serving debug image {filename}: {e}")
+        return jsonify({"error": f"Error serving debug image: {str(e)}"}), 500
 
 
 @app.route('/', methods=['GET'])
