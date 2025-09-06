@@ -10,7 +10,78 @@ reader = easyocr.Reader(['ar'], gpu=False)
 
 
 def preprocess_image(cropped_image):
+    """
+    Smart preprocessing for OCR that handles high-resolution images better.
+    Resizes images to optimal resolution and applies appropriate preprocessing.
+    """
+    height, width = cropped_image.shape[:2]
+    print(f"🔍 Original image size: {width}x{height}")
+
+    # Convert to grayscale first
     gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+
+    # Smart resizing based on image dimensions
+    if width > 1500 or height > 1500:
+        print("📏 High-resolution image detected, applying smart resizing...")
+
+        # Calculate optimal size (target width around 1000-1200px)
+        optimal_width = 1000
+        if width > height:
+            # Landscape orientation
+            scale = optimal_width / width
+            new_width = optimal_width
+            new_height = int(height * scale)
+        else:
+            # Portrait orientation
+            optimal_height = 1000
+            scale = optimal_height / height
+            new_height = optimal_height
+            new_width = int(width * scale)
+
+        # Ensure minimum dimensions for readability
+        new_width = max(new_width, 400)
+        new_height = max(new_height, 300)
+
+        print(
+            f"📐 Resizing from {width}x{height} to {new_width}x{new_height} (scale: {scale:.3f})")
+
+        # Use INTER_AREA for downsampling (better for text)
+        gray_image = cv2.resize(gray_image, (new_width, new_height),
+                                interpolation=cv2.INTER_AREA)
+
+        # Apply denoising for high-res images
+        print("🧹 Applying denoising for high-resolution image...")
+        gray_image = cv2.fastNlMeansDenoising(
+            gray_image, h=10, templateWindowSize=7, searchWindowSize=21)
+
+        # Enhance contrast for better OCR
+        print("🎨 Enhancing contrast...")
+        gray_image = cv2.equalizeHist(gray_image)
+
+    elif width < 400 or height < 300:
+        print("📏 Low-resolution image detected, upscaling...")
+
+        # Upscale small images
+        scale = max(400 / width, 300 / height)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+
+        print(
+            f"📐 Upscaling from {width}x{height} to {new_width}x{new_height} (scale: {scale:.3f})")
+
+        # Use INTER_CUBIC for upsampling
+        gray_image = cv2.resize(gray_image, (new_width, new_height),
+                                interpolation=cv2.INTER_CUBIC)
+
+    else:
+        print("✅ Image size is optimal for OCR")
+
+    # Final contrast enhancement for all images
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray_image = clahe.apply(gray_image)
+
+    print(
+        f"✅ Preprocessing completed. Final size: {gray_image.shape[1]}x{gray_image.shape[0]}")
     return gray_image
 
 
@@ -270,7 +341,8 @@ def process_image(cropped_image):
             elif class_name == 'nid':
                 expanded_bbox = expand_bbox_height(
                     bbox, scale=1.5, image_shape=cropped_image.shape)
-                cropped_nid = cropped_image[expanded_bbox[1]:expanded_bbox[3], expanded_bbox[0]:expanded_bbox[2]]
+                cropped_nid = cropped_image[expanded_bbox[1]
+                    :expanded_bbox[3], expanded_bbox[0]:expanded_bbox[2]]
                 nid = detect_national_id(cropped_nid)
                 print(f"   📝 National ID: '{nid}'")
 
