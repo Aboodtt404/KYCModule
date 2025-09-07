@@ -112,7 +112,6 @@ function App() {
             </button>
           </div>
 
-<<<<<<< HEAD
           {/* Tabs */}
           <nav className="mt-4 flex-1">
             <TooltipProvider>
@@ -142,30 +141,10 @@ function App() {
                 );
               })}
             </TooltipProvider>
-=======
-          <nav className="mt-6">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center px-6 py-3 text-left transition-colors ${activeTab === tab.id
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                      : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                >
-                  <Icon className="w-5 h-5 mr-3" />
-                  {tab.label}
-                </button>
-              );
-            })}
->>>>>>> 6676e97842cd940129cd9e4f127d2536cb428636
           </nav>
         </div>
 
         {/* Main Content */}
-<<<<<<< HEAD
         <div className="flex-1 flex flex-col">
           {/* Header */}
           <header className="px-8 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm flex justify-between items-center sticky top-0 z-10">
@@ -196,25 +175,6 @@ function App() {
             <ContentWrapper>{renderContent()}</ContentWrapper>
           </main>
 
-=======
-        <div className="flex-1">
-          <div className="p-8">
-            {renderContent()}
-          </div>
-
-          {/* Footer */}
-          <footer className="mt-auto p-6 text-center text-sm text-gray-500 border-t border-gray-200">
-            © 2025. Built with <Heart className="inline w-4 h-4 text-red-500" /> using{' '}
-            <a
-              href="https://caffeine.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800"
-            >
-              caffeine.ai
-            </a>
-          </footer>
->>>>>>> 6676e97842cd940129cd9e4f127d2536cb428636
         </div>
       </div>
     </div>
