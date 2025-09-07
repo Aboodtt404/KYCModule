@@ -259,14 +259,14 @@ if __name__ == '__main__':
     print("✅ Services: Egyptian ID OCR, Passport OCR")
 
     print("\n🌐 Server Endpoints:")
-    print("  📊 Health: http://localhost:5000/health")
-    print("  🔍 OCR: http://localhost:5000/ocr (redirects to Egyptian ID)")
-    print("  🇪🇬 Egyptian ID: http://localhost:5000/egyptian-id")
-    print("  🛂 Passport OCR: http://localhost:5000/passport")
-    print("  🖼️ Debug Images: http://localhost:5000/debug-image/<filename>")
-    print("  ℹ️ Info: http://localhost:5000/info")
+    print("  📊 Health: http://0.0.0.0:5000/health")
+    print("  🔍 OCR: http://0.0.0.0:5000/ocr (redirects to Egyptian ID)")
+    print("  🇪🇬 Egyptian ID: http://0.0.0.0:5000/egyptian-id")
+    print("  🛂 Passport OCR: http://0.0.0.0:5000/passport")
+    print("  🖼️ Debug Images: http://0.0.0.0:5000/debug-image/<filename>")
+    print("  ℹ️ Info: http://0.0.0.0:5000/info")
 
-    print("\n🚀 Starting server on http://localhost:5000")
+    print("\n🚀 Starting server on http://0.0.0.0:5000")
     print("=" * 40)
 
     app.run(
