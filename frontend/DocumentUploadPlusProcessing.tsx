@@ -1,10 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { useFileUpload } 
-import { useVerifyKYC } from '../hooks/useQueries'; (I can provide you this)
-import { extractStructuredData } from '../utils/dataExtraction'; (same as above)
-import { enhanceImage } from '../utils/imageEnhancement'; (provided for reference)
+import { useVerifyKYC } from '../hooks/useQueries'; 
+import { extractStructuredData } from '../utils/dataExtraction'; 
+import { enhanceImage } from '../utils/imageEnhancement'; 
 import { Upload, FileImage, CheckCircle, AlertCircle, Settings } from 'lucide-react';
-import StructuredDataDisplay from './StructuredDataDisplay'; (provided)
+import StructuredDataDisplay from './StructuredDataDisplay'; 
 
 type DocumentType = 'national-id' | 'passport';
 
