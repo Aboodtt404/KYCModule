@@ -7,7 +7,7 @@
   html {
     font-family: 'Inter', system-ui, sans-serif;
   }
-  
+
   body {
     @apply bg-gray-50 text-gray-900;
   }
@@ -70,11 +70,11 @@
   .btn-primary {
     @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors;
   }
-  
+
   .btn-secondary {
     @apply bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors;
   }
-  
+
   .card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200;
   }
@@ -114,9 +114,12 @@ select:focus-visible {
 
 /* Loading animation */
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -202,6 +205,7 @@ tbody tr:hover {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -231,6 +235,7 @@ tbody tr:hover {
   .no-print {
     display: none !important;
   }
+<<<<<<< HEAD
 }
 
 @layer base {
@@ -241,3 +246,6 @@ tbody tr:hover {
     @apply bg-background text-foreground;
   }
 }
+=======
+}
+>>>>>>> 6676e97842cd940129cd9e4f127d2536cb428636
