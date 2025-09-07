@@ -1,10 +1,20 @@
 import React, { useState, useCallback } from 'react';
+<<<<<<< HEAD
 import { useFileUpload } 
 import { useVerifyKYC } from '../hooks/useQueries'; 
 import { extractStructuredData } from '../utils/dataExtraction'; 
 import { enhanceImage } from '../utils/imageEnhancement'; 
 import { Upload, FileImage, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import StructuredDataDisplay from './StructuredDataDisplay'; 
+=======
+import { useFileUpload } from '../hooks/useFileUpload';
+import { useVerifyKYC } from '../hooks/useQueries';
+import { extractStructuredData } from '../utils/dataExtraction';
+import { enhanceImage } from '../utils/imageEnhancement';
+import { useImageCompression } from '../hooks/useImageCompression';
+import { Upload, FileImage, CheckCircle, AlertCircle, Settings, Zap } from 'lucide-react';
+import StructuredDataDisplay from './StructuredDataDisplay';
+>>>>>>> 6676e97842cd940129cd9e4f127d2536cb428636
 
 type DocumentType = 'national-id' | 'passport';
 
@@ -30,6 +40,12 @@ interface UploadState {
   structuredData: StructuredData | null;
   enhancedImageUrl: string | null;
   originalImageUrl: string | null;
+  compressing: boolean;
+  compressionInfo: {
+    originalSize: number;
+    compressedSize: number;
+    compressionRatio: number;
+  } | null;
 }
 
 export default function DocumentUpload() {
@@ -45,15 +61,33 @@ export default function DocumentUpload() {
     structuredData: null,
     enhancedImageUrl: null,
     originalImageUrl: null,
+    compressing: false,
+    compressionInfo: null,
   });
 
   const { uploadFile } = useFileUpload();
   const verifyKYC = useVerifyKYC();
+  const {
+    compressImageFile,
+    isCompressing,
+    compressionResult,
+    compressionError,
+    needsCompressionCheck,
+    getRecommendations
+  } = useImageCompression({
+    maxSizeKB: 500, // 500KB limit for IC compatibility
+    autoCompress: true,
+    showCompressionInfo: true
+  });
 
-  const handleFileSelect = useCallback((file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     // Create preview URL for original image
     const originalUrl = URL.createObjectURL(file);
-    
+
+    // Check if compression is needed
+    const needsCompression = needsCompressionCheck(file);
+    const recommendations = getRecommendations(file);
+
     setUploadState(prev => ({
       ...prev,
       file,
@@ -63,8 +97,40 @@ export default function DocumentUpload() {
       structuredData: null,
       enhancedImageUrl: null,
       originalImageUrl: originalUrl,
+      compressing: needsCompression,
+      compressionInfo: null,
     }));
-  }, []);
+
+    // Compress image if needed
+    if (needsCompression) {
+      try {
+        const compressedFile = await compressImageFile(file);
+
+        setUploadState(prev => ({
+          ...prev,
+          file: compressedFile,
+          compressing: false,
+          compressionInfo: compressionResult ? {
+            originalSize: file.size,
+            compressedSize: compressionResult.compressedSize,
+            compressionRatio: compressionResult.compressionRatio
+          } : null,
+        }));
+      } catch (error) {
+        console.error('Compression failed:', error);
+        setUploadState(prev => ({
+          ...prev,
+          compressing: false,
+          error: `Compression failed: ${compressionError || 'Unknown error'}. Using original file.`,
+        }));
+      }
+    } else {
+      setUploadState(prev => ({
+        ...prev,
+        compressing: false,
+      }));
+    }
+  }, [compressImageFile, needsCompressionCheck, getRecommendations, compressionResult, compressionError]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -90,22 +156,22 @@ export default function DocumentUpload() {
 
       // Apply client-side image enhancements
       const enhancedFile = await enhanceImage(uploadState.file, uploadState.documentType);
-      
+
       // Create preview URL for enhanced image
       const enhancedUrl = URL.createObjectURL(enhancedFile);
-      
-      setUploadState(prev => ({ 
-        ...prev, 
-        enhancing: false, 
+
+      setUploadState(prev => ({
+        ...prev,
+        enhancing: false,
         uploading: true,
-        enhancedImageUrl: enhancedUrl 
+        enhancedImageUrl: enhancedUrl
       }));
 
       // Upload enhanced file
       const timestamp = Date.now();
       const fileName = `${uploadState.documentType}-enhanced-${timestamp}-${uploadState.file.name}`;
       const filePath = `kyc-documents/${fileName}`;
-      
+
       await uploadFile(filePath, enhancedFile);
 
       setUploadState(prev => ({ ...prev, uploading: false, processing: true }));
@@ -163,29 +229,27 @@ export default function DocumentUpload() {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload KYC Document</h3>
-        
+
         {/* Document Type Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-3">Document Type</label>
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => setUploadState(prev => ({ ...prev, documentType: 'national-id' }))}
-              className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                uploadState.documentType === 'national-id'
+              className={`p-4 border-2 rounded-lg text-left transition-colors ${uploadState.documentType === 'national-id'
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <div className="font-medium text-gray-900">National ID</div>
               <div className="text-sm text-gray-600">Arabic national identity card</div>
             </button>
             <button
               onClick={() => setUploadState(prev => ({ ...prev, documentType: 'passport' }))}
-              className={`p-4 border-2 rounded-lg text-left transition-colors ${
-                uploadState.documentType === 'passport'
+              className={`p-4 border-2 rounded-lg text-left transition-colors ${uploadState.documentType === 'passport'
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <div className="font-medium text-gray-900">Passport</div>
               <div className="text-sm text-gray-600">International passport</div>
@@ -207,6 +271,28 @@ export default function DocumentUpload() {
                 <p className="text-sm text-gray-600">
                   {(uploadState.file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
+
+                {/* Compression Status */}
+                {uploadState.compressing && (
+                  <div className="flex items-center space-x-2 mt-2">
+                    <Zap className="w-4 h-4 text-blue-500 animate-pulse" />
+                    <span className="text-sm text-blue-600">Compressing image...</span>
+                  </div>
+                )}
+
+                {uploadState.compressionInfo && (
+                  <div className="mt-2 p-2 bg-green-50 rounded-md">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <Zap className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-800">Image Compressed</span>
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <div>Original: {(uploadState.compressionInfo.originalSize / 1024 / 1024).toFixed(2)} MB</div>
+                      <div>Compressed: {(uploadState.compressionInfo.compressedSize / 1024 / 1024).toFixed(2)} MB</div>
+                      <div>Saved: {((1 - uploadState.compressionInfo.compressionRatio) * 100).toFixed(1)}%</div>
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 onClick={resetUpload}
@@ -247,9 +333,9 @@ export default function DocumentUpload() {
               {uploadState.originalImageUrl && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Original Image</p>
-                  <img 
-                    src={uploadState.originalImageUrl} 
-                    alt="Original document" 
+                  <img
+                    src={uploadState.originalImageUrl}
+                    alt="Original document"
                     className="w-full h-48 object-contain border rounded-lg bg-gray-50"
                   />
                 </div>
@@ -257,9 +343,9 @@ export default function DocumentUpload() {
               {uploadState.enhancedImageUrl && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Enhanced Image</p>
-                  <img 
-                    src={uploadState.enhancedImageUrl} 
-                    alt="Enhanced document" 
+                  <img
+                    src={uploadState.enhancedImageUrl}
+                    alt="Enhanced document"
                     className="w-full h-48 object-contain border rounded-lg bg-gray-50"
                   />
                 </div>
@@ -279,10 +365,10 @@ export default function DocumentUpload() {
               {uploadState.enhancing
                 ? 'Enhancing Image...'
                 : uploadState.uploading
-                ? 'Uploading...'
-                : uploadState.processing
-                ? 'Processing with OCR...'
-                : 'Enhance and Verify'}
+                  ? 'Uploading...'
+                  : uploadState.processing
+                    ? 'Processing with OCR...'
+                    : 'Enhance and Verify'}
             </button>
           </div>
         )}
@@ -295,19 +381,19 @@ export default function DocumentUpload() {
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                 <div>
                   <p className="font-medium text-blue-900">
-                    {uploadState.enhancing 
+                    {uploadState.enhancing
                       ? 'Applying image enhancements...'
-                      : uploadState.uploading 
-                      ? 'Uploading enhanced document...' 
-                      : 'Processing with OCR...'
+                      : uploadState.uploading
+                        ? 'Uploading enhanced document...'
+                        : 'Processing with OCR...'
                     }
                   </p>
                   <p className="text-sm text-blue-700">
-                    {uploadState.enhancing 
+                    {uploadState.enhancing
                       ? 'Applying brightness, contrast, sharpening, denoising, cropping, orientation correction, and color normalization'
-                      : uploadState.uploading 
-                      ? 'Securely uploading your enhanced document'
-                      : 'Extracting structured data from enhanced image'
+                      : uploadState.uploading
+                        ? 'Securely uploading your enhanced document'
+                        : 'Extracting structured data from enhanced image'
                     }
                   </p>
                 </div>
