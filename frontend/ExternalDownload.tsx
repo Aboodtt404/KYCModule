@@ -41,9 +41,9 @@ const mockFiles: MockFile[] = [
 ];
 
 export function ExternalDownload() {
-  const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
-  const [downloadedFiles, setDownloadedFiles] = useState<Set<string>>(new Set());
-  const [failedFiles, setFailedFiles] = useState<Set<string>>(new Set());
+  const [downloadingFiles, setDownloadingFiles] = useState(new Set<string>());
+  const [downloadedFiles, setDownloadedFiles] = useState(new Set<string>());
+  const [failedFiles, setFailedFiles] = useState(new Set<string>());
 
   const handleDownload = async (file: MockFile) => {
     setDownloadingFiles(prev => new Set(prev).add(file.id));
