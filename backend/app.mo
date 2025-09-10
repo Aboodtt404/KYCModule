@@ -1,4 +1,3 @@
-import Outcalls "http-outcalls/outcalls";
 import FileStorage "file-storage/file-storage";
 import Http "file-storage/http";
 import Text "mo:base/Text";
@@ -7,7 +6,7 @@ import OrderedMap "mo:base/OrderedMap";
 import Nat "mo:base/Nat";
 import Iter "mo:base/Iter";
 import Debug "mo:base/Debug";
-import IC "ic:aaaaa-aa";
+import OCRCanister "canister:ocr_canister";
 
 persistent actor {
     var storage = FileStorage.new();
@@ -60,81 +59,47 @@ persistent actor {
         docId;
     };
 
-    public shared query func transform(input : Outcalls.TransformationInput) : async Outcalls.TransformationOutput {
-        let response = input.response;
-        {
-            response with headers = [];
-        };
+    // OCR Canister Integration - No more HTTP outcalls needed!
+    
+    public func getOcrHealth() : async Text {
+        // Check OCR canister health
+        await OCRCanister.health_check();
     };
 
     public func getEgyptianIdOcr(path : Text) : async Text {
-        let ocrServiceUrl = "http://194.31.150.154:5000/egyptian-id";
-
+        // Get image data from storage
         let asset = switch(FileStorage.getAsset(storage, path)) {
             case null { Debug.trap("Asset not found"); };
             case (?asset) { asset };
         };
 
-        let requestBody = asset.chunks[0];
+        let imageData = asset.chunks[0];
         
-        let request : IC.http_request_args = {
-            url = ocrServiceUrl;
-            max_response_bytes = null;
-            headers = [];
-            body = ?requestBody;
-            method = #post;
-            transform = ?{
-                function = transform;
-                context = Blob.fromArray([]);
-            };
-            is_replicated = null;
-        };
-
-        let httpResponse = await (with cycles = 25_000_000_000) IC.http_request(request);
-
-        switch (Text.decodeUtf8(httpResponse.body)) {
-            case (null) { Debug.trap("empty HTTP response") };
-            case (?decodedResponse) { 
-                // Save the OCR result to persistent storage
-                egyptianIdResults := textMap.put(egyptianIdResults, path, decodedResponse);
-                decodedResponse;
-            };
-        };
+        // Call OCR canister directly - no HTTP outcalls!
+        let ocrResult = await OCRCanister.process_egyptian_id(imageData);
+        
+        // Save the OCR result to persistent storage
+        egyptianIdResults := textMap.put(egyptianIdResults, path, ocrResult);
+        
+        ocrResult;
     };
 
     public func getPassportOcr(path : Text) : async Text {
-        let ocrServiceUrl = "http://194.31.150.154:5000/passport";
-
+        // Get image data from storage
         let asset = switch(FileStorage.getAsset(storage, path)) {
             case null { Debug.trap("Asset not found"); };
             case (?asset) { asset };
         };
 
-        let requestBody = asset.chunks[0];
+        let imageData = asset.chunks[0];
         
-        let request : IC.http_request_args = {
-            url = ocrServiceUrl;
-            max_response_bytes = null;
-            headers = [];
-            body = ?requestBody;
-            method = #post;
-            transform = ?{
-                function = transform;
-                context = Blob.fromArray([]);
-            };
-            is_replicated = null;
-        };
-
-        let httpResponse = await (with cycles = 25_000_000_000) IC.http_request(request);
-
-        switch (Text.decodeUtf8(httpResponse.body)) {
-            case (null) { Debug.trap("empty HTTP response") };
-            case (?decodedResponse) { 
-                // Save the OCR result to persistent storage
-                passportResults := textMap.put(passportResults, path, decodedResponse);
-                decodedResponse;
-            };
-        };
+        // Call OCR canister directly - no HTTP outcalls!
+        let ocrResult = await OCRCanister.process_passport(imageData);
+        
+        // Save the OCR result to persistent storage
+        passportResults := textMap.put(passportResults, path, ocrResult);
+        
+        ocrResult;
     };
 
     // Functions to retrieve stored OCR results

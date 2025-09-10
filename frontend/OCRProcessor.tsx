@@ -393,7 +393,7 @@ export function OCRProcessor() {
                             <label className="text-sm font-medium text-gray-600">Debug Images</label>
                             <div className="mt-2 space-y-2">
                               <a
-                                href={`http://localhost:5000/debug-image/${debugInfo.preprocessed_image_path}`}
+                                href={`http://194.31.150.154:5000/debug-image/${debugInfo.preprocessed_image_path}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm block"
@@ -402,7 +402,7 @@ export function OCRProcessor() {
                               </a>
                               <br />
                               <a
-                                href={`http://localhost:5000/debug-image/${debugInfo.debug_image_path}`}
+                                href={`http://194.31.150.154:5000/debug-image/${debugInfo.debug_image_path}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm block"
@@ -411,7 +411,7 @@ export function OCRProcessor() {
                               </a>
                               <br />
                               <a
-                                href={`http://localhost:5000/debug-image/${debugInfo.cropped_image_path}`}
+                                href={`http://194.31.150.154:5000/debug-image/${debugInfo.cropped_image_path}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm block"
@@ -420,7 +420,7 @@ export function OCRProcessor() {
                               </a>
                               <br />
                               <a
-                                href={`http://localhost:5000/debug-image/${debugInfo.yolo_output_path}`}
+                                href={`http://194.31.150.154:5000/debug-image/${debugInfo.yolo_output_path}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm block"
@@ -541,7 +541,7 @@ export function OCRProcessor() {
                           <p className="text-xs text-gray-500 mb-1">Debug Images</p>
                           {debugInfo.mrz_roi_path && (
                             <a
-                              href={`http://localhost:5000/debug-image/${debugInfo.mrz_roi_path}`}
+                              href={`http://194.31.150.154:5000/debug-image/${debugInfo.mrz_roi_path}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"

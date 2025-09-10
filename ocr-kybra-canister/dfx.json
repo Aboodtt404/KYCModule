@@ -1,0 +1,10 @@
+{
+    "version": 1,
+    "canisters": {
+        "ocr_canister": {
+            "type": "custom",
+            "candid": "src/__init__.py",
+            "build": "python3 -m kybra ocr_canister src/__init__.py"
+        }
+    }
+}

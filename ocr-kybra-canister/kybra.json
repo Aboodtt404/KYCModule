@@ -1,0 +1,11 @@
+{
+    "kybra_version": "0.7.1",
+    "name": "ocr_canister",
+    "dfx": "0.15.0",
+    "canisters": {
+        "ocr_canister": {
+            "main": "src/__init__.py",
+            "type": "python"
+        }
+    }
+}

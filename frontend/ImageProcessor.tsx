@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useFileList } from './FileList';
-import { FileUpload } from './FileUpload'; // Changed to import FileUpload instead of useFileUpload
+import { useFileUpload } from './FileUploadd';
 import { useDocuments } from './useQueries';
 import { Image, Download, Upload, Loader2, Sliders, RotateCcw } from 'lucide-react';
 import { FileMetadata } from './types';
@@ -18,23 +18,23 @@ interface Enhancement {
   default: number;
 }
 
-// import { useFileUpload } from './FileUpload'; // BEGIN: Added missing import
+// import { FileUpload } from './FileUpload'; // BEGIN: Added missing import
 
 const enhancements: Enhancement[] = [
-    { type: 'brightness', value: 0, label: 'Brightness', min: -100, max: 100, step: 5, default: 0 },
-    { type: 'contrast', value: 0, label: 'Contrast', min: -100, max: 100, step: 5, default: 0 },
-    { type: 'sharpness', value: 0, label: 'Sharpness', min: 0, max: 200, step: 10, default: 0 },
+  { type: 'brightness', value: 0, label: 'Brightness', min: -100, max: 100, step: 5, default: 0 },
+  { type: 'contrast', value: 0, label: 'Contrast', min: -100, max: 100, step: 5, default: 0 },
+  { type: 'sharpness', value: 0, label: 'Sharpness', min: 0, max: 200, step: 10, default: 0 },
 ];
 
 export function ImageProcessor() {
-    const { data: documents } = useDocuments();
-    const { getFileUrl } = useFileList();
-    const { uploadFile, isUploading } = FileUpload(); // END: Fixed issue with useFileUpload
-    const [selectedImage, setSelectedImage] = useState<FileMetadata | null>(null);
-    const [originalUrl, setOriginalUrl] = useState<string>('');
-    const [processedUrl, setProcessedUrl] = useState<string>('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
+  const { data: documents } = useDocuments();
+  const { getFileUrl } = useFileList();
+  const { uploadFile, isUploading } = useFileUpload();
+  const [selectedImage, setSelectedImage] = useState<FileMetadata | null>(null);
+  const [originalUrl, setOriginalUrl] = useState<string>('');
+  const [processedUrl, setProcessedUrl] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isGreyscale, setIsGreyscale] = useState(false);
   const [enhancementValues, setEnhancementValues] = useState<Record<EnhancementType, number>>({
     greyscale: 0,
@@ -69,11 +69,11 @@ export function ImageProcessor() {
     if (!originalUrl || !canvasRef.current) return;
 
     setIsProcessing(true);
-    
+
     try {
-      const img = new HTMLImageElement();
+      const img = document.createElement('img');
       img.crossOrigin = 'anonymous';
-      
+
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
@@ -84,27 +84,11 @@ export function ImageProcessor() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
+      // Set canvas size to match image
       canvas.width = img.width;
       canvas.height = img.height;
 
-      // Apply CSS filters for brightness, contrast, and other effects
-      let filterString = '';
-      
-      if (enhancementValues.brightness !== 0) {
-        filterString += `brightness(${100 + enhancementValues.brightness}%) `;
-      }
-      
-      if (enhancementValues.contrast !== 0) {
-        filterString += `contrast(${100 + enhancementValues.contrast}%) `;
-      }
-      
-      if (enhancementValues.sharpness > 0) {
-        // Sharpness is simulated through contrast and brightness adjustments
-        const sharpnessBoost = enhancementValues.sharpness / 100;
-        filterString += `contrast(${100 + sharpnessBoost * 20}%) `;
-      }
-
-      ctx.filter = filterString || 'none';
+      // Draw the original image first
       ctx.drawImage(img, 0, 0);
 
       // Apply greyscale if enabled
@@ -120,6 +104,72 @@ export function ImageProcessor() {
         }
 
         ctx.putImageData(imageData, 0, 0);
+      }
+
+      // Apply brightness and contrast adjustments
+      if (enhancementValues.brightness !== 0 || enhancementValues.contrast !== 0) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        const brightness = enhancementValues.brightness;
+        const contrast = enhancementValues.contrast;
+        const contrastFactor = (100 + contrast) / 100;
+
+        for (let i = 0; i < data.length; i += 4) {
+          // Apply brightness
+          let r = data[i] + brightness;
+          let g = data[i + 1] + brightness;
+          let b = data[i + 2] + brightness;
+
+          // Apply contrast
+          r = ((r - 128) * contrastFactor) + 128;
+          g = ((g - 128) * contrastFactor) + 128;
+          b = ((b - 128) * contrastFactor) + 128;
+
+          // Clamp values to 0-255
+          data[i] = Math.max(0, Math.min(255, r));
+          data[i + 1] = Math.max(0, Math.min(255, g));
+          data[i + 2] = Math.max(0, Math.min(255, b));
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      // Apply sharpness (unsharp mask)
+      if (enhancementValues.sharpness > 0) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const sharpness = enhancementValues.sharpness / 100;
+
+        // Simple sharpening kernel
+        const kernel = [
+          0, -sharpness, 0,
+          -sharpness, 1 + 4 * sharpness, -sharpness,
+          0, -sharpness, 0
+        ];
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const newData = new Uint8ClampedArray(data);
+
+        for (let y = 1; y < height - 1; y++) {
+          for (let x = 1; x < width - 1; x++) {
+            for (let c = 0; c < 3; c++) { // RGB channels
+              let sum = 0;
+              for (let ky = -1; ky <= 1; ky++) {
+                for (let kx = -1; kx <= 1; kx++) {
+                  const idx = ((y + ky) * width + (x + kx)) * 4 + c;
+                  sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
+                }
+              }
+              const idx = (y * width + x) * 4 + c;
+              newData[idx] = Math.max(0, Math.min(255, sum));
+            }
+          }
+        }
+
+        const newImageData = new ImageData(newData, width, height);
+        ctx.putImageData(newImageData, 0, 0);
       }
 
       // Convert to blob URL
@@ -162,26 +212,18 @@ export function ImageProcessor() {
     try {
       const link = document.createElement('a');
       link.href = processedUrl;
-      
+
       // Create descriptive filename
+      const enhancements: string[] = [];
+      if (isGreyscale) enhancements.push('greyscale');
+      if (enhancementValues.brightness !== 0) enhancements.push(`brightness${enhancementValues.brightness > 0 ? '+' : ''}${enhancementValues.brightness}`);
+      if (enhancementValues.contrast !== 0) enhancements.push(`contrast${enhancementValues.contrast > 0 ? '+' : ''}${enhancementValues.contrast}`);
+      if (enhancementValues.sharpness !== 0) enhancements.push(`sharpness+${enhancementValues.sharpness}`);
 
+      const enhancementSuffix = enhancements.length > 0 ? `_${enhancements.join('_')}` : '_enhanced';
+      const filename = `${selectedImage.path.replace(/\.[^/.]+$/, '')}${enhancementSuffix}.jpg`;
 
-    const [enhancementValues, setEnhancementValues] = useState({
-        brightness: 0,
-        contrast: 0,
-        sharpness: 0,
-    });
-
-    const enhancements: string[] = []; // Specify the type as string[]
-    if (isGreyscale) enhancements.push('greyscale');
-    if (enhancementValues.brightness !== 0) enhancements.push(`brightness${enhancementValues.brightness > 0 ? '+' : ''}${enhancementValues.brightness}`);
-    if (enhancementValues.contrast !== 0) enhancements.push(`contrast${enhancementValues.contrast > 0 ? '+' : ''}${enhancementValues.contrast}`);
-    if (enhancementValues.sharpness !== 0) enhancements.push(`sharpness+${enhancementValues.sharpness}`);
-    
-    const enhancementSuffix = enhancements.length > 0 ? `_${enhancements.join('_')}` : '_enhanced';
-    const filename = `${selectedImage.path.replace(/\.[^/.]+$/, '')}${enhancementSuffix}.jpg`;
-    
-    link.download = filename;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -201,24 +243,24 @@ export function ImageProcessor() {
         if (blob) {
           const arrayBuffer = await blob.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
-          
+
           // Create descriptive filename
-          const enhancements: string[] = []; // Specify the type as string[]
+          const enhancements: string[] = [];
           if (isGreyscale) enhancements.push('greyscale');
           if (enhancementValues.brightness !== 0) enhancements.push(`brightness${enhancementValues.brightness > 0 ? '+' : ''}${enhancementValues.brightness}`);
           if (enhancementValues.contrast !== 0) enhancements.push(`contrast${enhancementValues.contrast > 0 ? '+' : ''}${enhancementValues.contrast}`);
           if (enhancementValues.sharpness !== 0) enhancements.push(`sharpness+${enhancementValues.sharpness}`);
-          
+
           const enhancementSuffix = enhancements.length > 0 ? `_${enhancements.join('_')}` : '_enhanced';
           const filename = `${selectedImage.path.replace(/\.[^/.]+$/, '')}${enhancementSuffix}.jpg`;
-          
+
           await uploadFile(
             filename,
             'image/jpeg',
             uint8Array,
             (progress) => setUploadProgress(progress)
           );
-          
+
           setUploadProgress(0);
         }
       }, 'image/jpeg', 0.9);
@@ -240,7 +282,7 @@ export function ImageProcessor() {
         {/* Image Selection */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Select Image</h3>
-          
+
           {imageFiles.length === 0 ? (
             <div className="text-center py-8">
               <Image className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -252,11 +294,10 @@ export function ImageProcessor() {
                 <button
                   key={`${file.path}-${index}`}
                   onClick={() => loadImage(file)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                    selectedImage?.path === file.path
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedImage?.path === file.path
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                    }`}
                 >
                   <div className="flex items-center">
                     <Image className="w-4 h-4 text-blue-600 mr-2" />
@@ -271,7 +312,7 @@ export function ImageProcessor() {
           {selectedImage && (
             <div className="mt-6 pt-6 border-t border-gray-200">
               <h4 className="text-sm font-medium text-gray-900 mb-4">Enhancement Controls</h4>
-              
+
               {/* Greyscale Toggle */}
               <div className="mb-4">
                 <label className="flex items-center">
@@ -340,7 +381,7 @@ export function ImageProcessor() {
         <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-gray-900">Image Processing</h3>
-            
+
             {processedUrl && (
               <div className="flex space-x-2">
                 <button
@@ -360,7 +401,7 @@ export function ImageProcessor() {
                     </>
                   )}
                 </button>
-                
+
                 <button
                   onClick={saveProcessed}
                   disabled={isUploading}

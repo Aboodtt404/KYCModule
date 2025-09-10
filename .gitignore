@@ -37,3 +37,4 @@ backend/venv
 # Dataset to train the model
 /dataset
 /reports
+ocr-kybra-canister/.kybra
