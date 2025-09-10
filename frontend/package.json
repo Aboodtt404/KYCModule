@@ -5,13 +5,32 @@
   "scripts": {
     "prebuild": "npm i --include=dev && dfx generate backend",
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "tw": "tailwindcss init -p"
   },
   "dependencies": {
-    "@dfinity/agent": "2.2.0"
+    "@dfinity/agent": "2.2.0",
+    "@dfinity/candid": "^2.4.1",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@tailwindcss/vite": "^4.1.13",
+    "@tanstack/react-query": "^5.86.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.12",
+    "lucide-react": "^0.542.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "vite": "^5.4.19",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vite": "^7.1.4",
     "vite-plugin-environment": "1.1.3"
   }
 }

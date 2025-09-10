@@ -30,6 +30,9 @@ frontend/dist
 .DS_Store
 Thumbs.db 
 
+# Python
+.venv
+backend/venv
 
 # Dataset to train the model
 /dataset
