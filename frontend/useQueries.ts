@@ -93,7 +93,7 @@ export function useOCR() {
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       try {
-        const response = await fetch('http://localhost:5000/ocr', {
+        const response = await fetch('http://194.31.150.154:5000/ocr', {
           method: 'POST',
           body: imageData,
           headers: {

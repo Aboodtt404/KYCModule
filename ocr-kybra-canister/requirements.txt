@@ -1,0 +1,10 @@
+kybra
+opencv-python
+numpy
+easyocr
+ultralytics
+scipy
+passporteye
+python-dateutil
+matplotlib
+pillow
