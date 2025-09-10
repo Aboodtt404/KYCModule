@@ -33,3 +33,4 @@ Thumbs.db
 
 # Dataset to train the model
 /dataset
+/reports
