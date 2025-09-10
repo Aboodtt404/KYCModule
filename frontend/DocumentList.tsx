@@ -19,10 +19,10 @@ export function DocumentList() {
     const { getFileUrl } = useFileList() as { getFileUrl: (file: FileMetadata) => Promise<string> }; // Ensure useFileList is defined and exported properly
   const deleteDocumentMutation = useDeleteDocument();
 
-  const [selectedFile, setSelectedFile] = useState<FileMetadata | null>(null);
+  const [selectedFile, setSelectedFile] = useState(null as FileMetadata | null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
-  const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
+  const [downloadingFiles, setDownloadingFiles] = useState(new Set<string>());
 
   const handlePreview = async (file: FileMetadata) => {
     if (!isImage(file.mimeType)) return;

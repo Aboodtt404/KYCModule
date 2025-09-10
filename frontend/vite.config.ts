@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath, URL } from 'url';
 import environment from 'vite-plugin-environment';
+import path from 'path';
 
 export default defineConfig({
   base: './',
@@ -21,6 +22,10 @@ export default defineConfig({
       {
         find: 'declarations',
         replacement: fileURLToPath(new URL('../src/declarations', import.meta.url))
+      },
+      {
+        find: '@',
+        replacement: path.resolve(__dirname, './src')
       }
     ]
   },
