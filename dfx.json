@@ -1,10 +1,8 @@
 {
   "canisters": {
     "ocr_canister": {
-      "type": "custom",
-      "candid": "ocr-kybra-canister/src/__init__.py",
-      "build": "cd ocr-kybra-canister && export CANISTER_CANDID_PATH=src/__init__.py && python3 -m kybra ocr_canister src/__init__.py",
-      "wasm": "ocr-kybra-canister/.kybra/ocr_canister/ocr_canister.wasm"
+      "type": "kybra",
+      "main": "ocr-kybra-canister/src/main.py"
     },
     "backend": {
       "main": "backend/app.mo",
