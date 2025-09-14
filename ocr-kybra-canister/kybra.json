@@ -4,8 +4,36 @@
     "dfx": "0.15.0",
     "canisters": {
         "ocr_canister": {
-            "main": "src/__init__.py",
-            "type": "python"
+            "main": "src/main.py",
+            "type": "python",
+            "exclude": [
+                "ultralytics",
+                "ultralytics.*",
+                "easyocr",
+                "easyocr.*",
+                "torch",
+                "torch.*",
+                "torchvision",
+                "torchvision.*",
+                "cv2",
+                "cv2.*",
+                "passporteye",
+                "passporteye.*",
+                "PIL",
+                "PIL.*",
+                "numpy",
+                "numpy.*",
+                "scipy",
+                "scipy.*",
+                "matplotlib",
+                "matplotlib.*",
+                "sklearn",
+                "sklearn.*",
+                "tensorflow",
+                "tensorflow.*",
+                "keras",
+                "keras.*"
+            ]
         }
     }
 }

@@ -38,3 +38,4 @@ backend/venv
 /dataset
 /reports
 ocr-kybra-canister/.kybra
+ocr-kybra-canister/venv
