@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useActor } from './useActor';
+import { useActor } from '../../../useActor';
 
 const CHUNK_SIZE = 2_000_000;
 
