@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useActor } from './useActor';
-import { useFileList } from './FileList';
+import { useFileList } from './src/components/shared/FileList';
 import { FileMetadata } from './types';
 
 export function useDocuments() {
