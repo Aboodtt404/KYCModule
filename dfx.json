@@ -1,16 +1,9 @@
 {
   "canisters": {
-    "ocr_canister": {
-      "type": "kybra",
-      "main": "ocr-kybra-canister/src/main.py"
-    },
     "backend": {
       "main": "backend/app.mo",
       "type": "motoko",
-      "args": "--enhanced-orthogonal-persistence",
-      "dependencies": [
-        "ocr_canister"
-      ]
+      "args": "--enhanced-orthogonal-persistence"
     },
     "frontend": {
       "dependencies": [

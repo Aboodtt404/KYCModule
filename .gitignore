@@ -39,3 +39,4 @@ backend/venv
 /reports
 ocr-kybra-canister/.kybra
 ocr-kybra-canister/venv
+venv/
