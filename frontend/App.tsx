@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { Login } from "./src/pages/auth/Login";
 import { AdminDashboard } from "./src/pages/admin/AdminDashboard";
-import  KYCPage  from "./src/pages/user/KYCPage";
+import { KYCPage } from "./src/pages/user/KYCPage";
 
 // Create a client
 const queryClient = new QueryClient({

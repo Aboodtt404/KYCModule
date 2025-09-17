@@ -34,8 +34,17 @@ export function useActor() {
         }
     }, [actorQuery.data, queryClient]);
 
-    return {
+    const result = {
         actor: actorQuery.data || null,
         isFetching: actorQuery.isFetching
     };
+    
+    console.log('useActor returning:', { 
+        hasActor: !!result.actor, 
+        isFetching: result.isFetching,
+        error: actorQuery.error,
+        status: actorQuery.status
+    });
+    
+    return result;
 }

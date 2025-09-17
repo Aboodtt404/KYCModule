@@ -1,9 +1,12 @@
 import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function LogoHero({
   className = "h-40 sm:h-60",
+  onNext,
 }: {
   className?: string;
+  onNext?: () => void;
 }) {
   const [animate, setAnimate] = useState(false);
 
@@ -13,15 +16,17 @@ export default function LogoHero({
   };
 
   return (
-    <div className={`w-full ${className} flex items-center justify-center`}>
-      <div
-        className={`relative cursor-pointer select-none transition-all duration-1000 ${
-          animate
-            ? "animate-bounce scale-110 rotate-12"
-            : "hover:scale-105 hover:-rotate-2"
-        }`}
-        onClick={handleClick}
-      >
+    <div className="space-y-8">
+      {/* Logo Section */}
+      <div className={`w-full ${className} flex items-center justify-center`}>
+        <div
+          className={`relative cursor-pointer select-none transition-all duration-1000 ${
+            animate
+              ? "animate-bounce scale-110 rotate-12"
+              : "hover:scale-105 hover:-rotate-2"
+          }`}
+          onClick={handleClick}
+        >
         {/* Isometric cube container */}
         <div className="relative w-32 h-32">
           {/* SVG for precise isometric cube */}
@@ -143,6 +148,30 @@ export default function LogoHero({
               }}
             />
           </svg>
+        </div>
+        </div>
+      </div>
+
+      {/* Welcome Message and Button */}
+      <div className="text-center space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-white">Welcome to KYC Verification</h1>
+          <p className="text-gray-300 text-lg">
+            Verify your identity to get started with our secure platform
+          </p>
+        </div>
+        
+        <div className="flex flex-col items-center space-y-4">
+          <Button 
+            onClick={onNext}
+            className="px-8 py-3 text-lg font-semibold bg-emerald-500 hover:bg-emerald-600 text-black rounded-xl transition-all duration-200 hover:scale-105"
+          >
+            Start Verification
+          </Button>
+          
+          <p className="text-sm text-gray-400">
+            This process helps keep your account secure
+          </p>
         </div>
       </div>
     </div>
