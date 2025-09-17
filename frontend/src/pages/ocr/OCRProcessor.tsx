@@ -670,7 +670,7 @@ export function OCRProcessor() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {debugInfo.preprocessed_image_path && (
                   <a
-                    href={`http://localhost:5000/debug-image/${debugInfo.preprocessed_image_path}`}
+                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.preprocessed_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -684,7 +684,7 @@ export function OCRProcessor() {
                 )}
                 {debugInfo.debug_image_path && (
                   <a
-                    href={`http://localhost:5000/debug-image/${debugInfo.debug_image_path}`}
+                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.debug_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -698,7 +698,7 @@ export function OCRProcessor() {
                 )}
                 {debugInfo.cropped_image_path && (
                   <a
-                    href={`http://localhost:5000/debug-image/${debugInfo.cropped_image_path}`}
+                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.cropped_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -712,7 +712,7 @@ export function OCRProcessor() {
                 )}
                 {debugInfo.yolo_output_path && (
                   <a
-                    href={`http://localhost:5000/debug-image/${debugInfo.yolo_output_path}`}
+                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.yolo_output_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
@@ -726,7 +726,7 @@ export function OCRProcessor() {
                 )}
                 {debugInfo.mrz_roi_path && (
                   <a
-                    href={`http://localhost:5000/debug-image/${debugInfo.mrz_roi_path}`}
+                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.mrz_roi_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"

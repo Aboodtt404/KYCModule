@@ -1,0 +1,7 @@
+type Response = record { message : text; success : bool };
+service : {
+  debug_print_otps : () -> (vec record { text; text; nat64 });
+  get_verified_phones : () -> (vec text);
+  send_sms : (text) -> (Response);
+  verify_otp : (text, text) -> (Response);
+}
