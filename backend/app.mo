@@ -6,8 +6,51 @@ import OrderedMap "mo:base/OrderedMap";
 import Nat "mo:base/Nat";
 import Iter "mo:base/Iter";
 import Debug "mo:base/Debug";
+import Cycles "mo:base/ExperimentalCycles";
+import Array "mo:base/Array";
 
 persistent actor {
+    // HTTP Outcalls Types
+    type HttpRequestArgs = {
+        url : Text;
+        max_response_bytes : ?Nat64;
+        headers : [HttpHeader];
+        body : ?[Nat8];
+        method : HttpMethod;
+        transform : ?TransformRawResponseFunction;
+    };
+
+    type HttpHeader = {
+        name : Text;
+        value : Text;
+    };
+
+    type HttpMethod = {
+        #get;
+        #post;
+        #head;
+    };
+
+    type HttpResponsePayload = {
+        status : Nat;
+        headers : [HttpHeader];
+        body : [Nat8];
+    };
+
+    type TransformRawResponseFunction = {
+        function : shared query TransformRawResponseArgs -> async HttpResponsePayload;
+        context : Blob;
+    };
+
+    type TransformRawResponseArgs = {
+        response : HttpResponsePayload;
+        context : Blob;
+    };
+
+    // IC Management Canister Interface
+    type IC = actor {
+        http_request : HttpRequestArgs -> async HttpResponsePayload;
+    };
     var storage = FileStorage.new();
 
     transient let natMap = OrderedMap.Make<Nat>(Nat.compare);
@@ -18,6 +61,31 @@ persistent actor {
     // OCR Results Storage
     var egyptianIdResults : OrderedMap.Map<Text, Text> = textMap.empty<Text>();
     var passportResults : OrderedMap.Map<Text, Text> = textMap.empty<Text>();
+
+    // IC Management Canister for HTTP Outcalls
+    let ic : IC = actor ("aaaaa-aa");
+    
+    // OCR Server Configuration
+    let OCR_SERVER_BASE_URL = "http://194.31.150.154:5000";
+
+    // Transform function for HTTP responses
+    public query func transform_response(raw : TransformRawResponseArgs) : async HttpResponsePayload {
+        let transformed : HttpResponsePayload = {
+            status = raw.response.status;
+            body = raw.response.body;
+            headers = [
+                {
+                    name = "Content-Security-Policy";
+                    value = "default-src 'self'";
+                },
+                {
+                    name = "Referrer-Policy";
+                    value = "strict-origin";
+                },
+            ];
+        };
+        transformed;
+    };
 
     public func list() : async [FileStorage.FileMetadata] {
         FileStorage.list(storage);
@@ -61,47 +129,138 @@ persistent actor {
     // OCR HTTP Outcalls Integration
     
     public func getOcrHealth() : async Text {
-        // Make HTTP outcall to external OCR service health endpoint
-        // TODO: Implement HTTP outcall to OCR service health check
-        "OCR service health check - HTTP outcalls method";
+        try {
+            // Add cycles for HTTP outcall (required)
+            Cycles.add<system>(20_000_000_000);
+            
+            let request : HttpRequestArgs = {
+                url = OCR_SERVER_BASE_URL # "/health";
+                max_response_bytes = ?1024;
+                headers = [
+                    { name = "Content-Type"; value = "application/json" }
+                ];
+                body = null;
+                method = #get;
+                transform = ?{
+                    function = transform_response;
+                    context = Blob.fromArray([]);
+                };
+            };
+
+            let response = await ic.http_request(request);
+            
+            // Convert response body from [Nat8] to Text
+            let responseText = switch (Text.decodeUtf8(Blob.fromArray(response.body))) {
+                case (?text) { text };
+                case null { "Failed to decode response" };
+            };
+            
+            responseText;
+        } catch (error) {
+            "Health check failed: HTTP outcall error";
+        };
     };
 
     public func getEgyptianIdOcr(path : Text) : async Text {
-        // Get image data from storage
-        let asset = switch(FileStorage.getAsset(storage, path)) {
-            case null { Debug.trap("Asset not found"); };
-            case (?asset) { asset };
-        };
+        try {
+            // Get image data from storage
+            let asset = switch(FileStorage.getAsset(storage, path)) {
+                case null { Debug.trap("Asset not found"); };
+                case (?asset) { asset };
+            };
 
-        let imageData = asset.chunks[0];
-        
-        // Make HTTP outcall to external OCR service for Egyptian ID processing
-        // TODO: Implement HTTP outcall to OCR service
-        let ocrResult = "Egyptian ID OCR result via HTTP outcalls - TODO: implement";
-        
-        // Save the OCR result to persistent storage
-        egyptianIdResults := textMap.put(egyptianIdResults, path, ocrResult);
-        
-        ocrResult;
+            let imageData = asset.chunks[0];
+            
+            // Add cycles for HTTP outcall (more for image processing)
+            Cycles.add<system>(50_000_000_000);
+            
+            let request : HttpRequestArgs = {
+                url = OCR_SERVER_BASE_URL # "/egyptian-id";
+                max_response_bytes = ?10_000; // Larger response for OCR results
+                headers = [
+                    { name = "Content-Type"; value = "application/octet-stream" }
+                ];
+                body = ?Blob.toArray(imageData);
+                method = #post;
+                transform = ?{
+                    function = transform_response;
+                    context = Blob.fromArray([]);
+                };
+            };
+
+            let response = await ic.http_request(request);
+            
+            // Convert response body from [Nat8] to Text
+            let ocrResult = switch (Text.decodeUtf8(Blob.fromArray(response.body))) {
+                case (?text) { 
+                    // Save the OCR result to persistent storage
+                    egyptianIdResults := textMap.put(egyptianIdResults, path, text);
+                    text;
+                };
+                case null { 
+                    let errorResult = "{\"status\":\"error\",\"message\":\"Failed to decode OCR response\",\"data\":null}";
+                    egyptianIdResults := textMap.put(egyptianIdResults, path, errorResult);
+                    errorResult;
+                };
+            };
+            
+            ocrResult;
+        } catch (error) {
+            let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
+            egyptianIdResults := textMap.put(egyptianIdResults, path, errorResult);
+            errorResult;
+        };
     };
 
     public func getPassportOcr(path : Text) : async Text {
-        // Get image data from storage
-        let asset = switch(FileStorage.getAsset(storage, path)) {
-            case null { Debug.trap("Asset not found"); };
-            case (?asset) { asset };
-        };
+        try {
+            // Get image data from storage
+            let asset = switch(FileStorage.getAsset(storage, path)) {
+                case null { Debug.trap("Asset not found"); };
+                case (?asset) { asset };
+            };
 
-        let imageData = asset.chunks[0];
-        
-        // Make HTTP outcall to external OCR service for passport processing
-        // TODO: Implement HTTP outcall to OCR service
-        let ocrResult = "Passport OCR result via HTTP outcalls - TODO: implement";
-        
-        // Save the OCR result to persistent storage
-        passportResults := textMap.put(passportResults, path, ocrResult);
-        
-        ocrResult;
+            let imageData = asset.chunks[0];
+            
+            // Add cycles for HTTP outcall (more for image processing)
+            Cycles.add<system>(50_000_000_000);
+            
+            let request : HttpRequestArgs = {
+                url = OCR_SERVER_BASE_URL # "/passport";
+                max_response_bytes = ?10_000; // Larger response for OCR results
+                headers = [
+                    { name = "Content-Type"; value = "application/octet-stream" }
+                ];
+                body = ?Blob.toArray(imageData);
+                method = #post;
+                transform = ?{
+                    function = transform_response;
+                    context = Blob.fromArray([]);
+                };
+            };
+
+            let response = await ic.http_request(request);
+            
+            // Convert response body from [Nat8] to Text
+            let ocrResult = switch (Text.decodeUtf8(Blob.fromArray(response.body))) {
+                case (?text) { 
+                    // Save the OCR result to persistent storage
+                    passportResults := textMap.put(passportResults, path, text);
+                    text;
+                };
+                case null { 
+                    let errorResult = "{\"status\":\"error\",\"message\":\"Failed to decode OCR response\",\"data\":null}";
+                    passportResults := textMap.put(passportResults, path, errorResult);
+                    errorResult;
+                };
+            };
+            
+            ocrResult;
+        } catch (error) {
+            let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
+            passportResults := textMap.put(passportResults, path, errorResult);
+            errorResult;
+        };
     };
 
     // Functions to retrieve stored OCR results
