@@ -10,8 +10,14 @@
     "frontend"
   ],
   "dependencies": {
+<<<<<<< HEAD
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-label": "^2.1.7",
+=======
+    "@fortawesome/free-regular-svg-icons": "^7.0.1",
+    "@fortawesome/free-solid-svg-icons": "^7.0.1",
+    "@fortawesome/react-fontawesome": "^3.0.2",
+>>>>>>> b39fae27837b325f504d18fa1cdb95f3f4517997
     "@tanstack/react-query": "^5.83.0",
     "class-variance-authority": "^0.7.1",
     "lucide-react": "^0.525.0",
