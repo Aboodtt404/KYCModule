@@ -1,20 +1,10 @@
 import React, { useState, useCallback } from 'react';
-<<<<<<< HEAD
 import { useFileUpload } 
 import { useVerifyKYC } from '../hooks/useQueries'; 
 import { extractStructuredData } from '../utils/dataExtraction'; 
 import { enhanceImage } from '../utils/imageEnhancement'; 
 import { Upload, FileImage, CheckCircle, AlertCircle, Settings } from 'lucide-react';
 import StructuredDataDisplay from './StructuredDataDisplay'; 
-=======
-import { useFileUpload } from '../hooks/useFileUpload';
-import { useVerifyKYC } from '../hooks/useQueries';
-import { extractStructuredData } from '../utils/dataExtraction';
-import { enhanceImage } from '../utils/imageEnhancement';
-import { useImageCompression } from '../hooks/useImageCompression';
-import { Upload, FileImage, CheckCircle, AlertCircle, Settings, Zap } from 'lucide-react';
-import StructuredDataDisplay from './StructuredDataDisplay';
->>>>>>> 6676e97842cd940129cd9e4f127d2536cb428636
 
 type DocumentType = 'national-id' | 'passport';
 
