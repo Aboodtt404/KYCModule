@@ -5,11 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { Login } from "./src/pages/auth/Login";
 import { AdminDashboard } from "./src/pages/admin/AdminDashboard";
-<<<<<<< HEAD
 import { KYCPage } from "./src/pages/user/KYCPage";
-=======
-import KYCPage from "./src/pages/user/KYCPage";
->>>>>>> b39fae27837b325f504d18fa1cdb95f3f4517997
 
 // admin child pages
 import { DocumentList } from "./src/pages/documents/DocumentList";
