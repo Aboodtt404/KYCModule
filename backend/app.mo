@@ -6,7 +6,6 @@ import OrderedMap "mo:base/OrderedMap";
 import Nat "mo:base/Nat";
 import Iter "mo:base/Iter";
 import Debug "mo:base/Debug";
-import OCRCanister "canister:ocr_canister";
 
 persistent actor {
     var storage = FileStorage.new();
@@ -59,11 +58,12 @@ persistent actor {
         docId;
     };
 
-    // OCR Canister Integration - No more HTTP outcalls needed!
+    // OCR HTTP Outcalls Integration
     
     public func getOcrHealth() : async Text {
-        // Check OCR canister health
-        await OCRCanister.health_check();
+        // Make HTTP outcall to external OCR service health endpoint
+        // TODO: Implement HTTP outcall to OCR service health check
+        "OCR service health check - HTTP outcalls method";
     };
 
     public func getEgyptianIdOcr(path : Text) : async Text {
@@ -75,8 +75,9 @@ persistent actor {
 
         let imageData = asset.chunks[0];
         
-        // Call OCR canister directly - no HTTP outcalls!
-        let ocrResult = await OCRCanister.process_egyptian_id(imageData);
+        // Make HTTP outcall to external OCR service for Egyptian ID processing
+        // TODO: Implement HTTP outcall to OCR service
+        let ocrResult = "Egyptian ID OCR result via HTTP outcalls - TODO: implement";
         
         // Save the OCR result to persistent storage
         egyptianIdResults := textMap.put(egyptianIdResults, path, ocrResult);
@@ -93,8 +94,9 @@ persistent actor {
 
         let imageData = asset.chunks[0];
         
-        // Call OCR canister directly - no HTTP outcalls!
-        let ocrResult = await OCRCanister.process_passport(imageData);
+        // Make HTTP outcall to external OCR service for passport processing
+        // TODO: Implement HTTP outcall to OCR service
+        let ocrResult = "Passport OCR result via HTTP outcalls - TODO: implement";
         
         // Save the OCR result to persistent storage
         passportResults := textMap.put(passportResults, path, ocrResult);
