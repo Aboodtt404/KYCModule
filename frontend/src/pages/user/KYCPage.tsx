@@ -1,7 +1,10 @@
 "use client";
 import React, { useState } from "react";
-import ProgressBar from "@/components/kyc/ProgressBar";
-import StepIndicator from "@/components/kyc/StepIndicator";
+import { motion } from "framer-motion";
+import { useStepper } from "../../../hooks/useStepper";
+
+import StepperHeader from "@/components/kyc/StepperHeader";
+
 import OTPStep from "@/components/kyc/OTPStep";
 import DocumentStep from "@/components/kyc/DocumentStep";
 import SelfieStep from "@/components/kyc/SelfieStep";
@@ -11,80 +14,64 @@ import LogoHero from "@/components/kyc/ThreeHero";
 
 export default function KYCPage() {
   const totalSteps = 6;
-  const [step, setStep] = useState<number>(1);
+  const { step, next, prev, skipToEnd, percent } = useStepper(totalSteps);
 
   // shared data
-  const [phone, setPhone] = useState<string | undefined>();
+  const [phone, setPhone] = useState<string>();
   const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [selfieCaptured, setSelfieCaptured] = useState<boolean>(false);
-
-  function next() {
-    setStep((s) => Math.min(totalSteps, s + 1));
-  }
-  function prev() {
-    setStep((s) => Math.max(1, s - 1));
-  }
+  const [selfieCaptured, setSelfieCaptured] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="mb-4">
-          <StepIndicator step={step} total={totalSteps} />
-          <ProgressBar value={Math.round((step / totalSteps) * 100)} />
-        </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-lg">
+        {/* Stepper header */}
+        <StepperHeader step={step} total={totalSteps} percent={percent} />
 
-        <div className="bg-transparent rounded-2xl p-4 sm:p-6">
+        {/* Animated step content */}
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.4 }}
+          className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl"
+        >
           {step === 1 && (
-            <div className="space-y-4">
-              <LogoHero />
-              <div className="bg-white/4 backdrop-blur-md p-4 rounded-xl">
-                <h2 className="text-lg font-semibold">Verify your identity</h2>
-                <p className="text-sm text-gray-300 mt-2">
+            <div className="space-y-6 text-center">
+              <div className="flex justify-center">
+                <LogoHero className="max-h-40" />
+              </div>
+              <div>
+                <h2 className="text-lg sm:text-xl font-semibold mt-4">
+                  Verify your identity
+                </h2>
+                <p className="text-gray-300 text-sm sm:text-base mt-1">
                   This process helps keep your account secure.
                 </p>
-                <div className="mt-4 flex gap-2">
-                  <button
-                    className="flex-1 py-3 rounded-lg bg-emerald-400 text-black font-medium"
-                    onClick={next}
-                  >
-                    Start verification
-                  </button>
-                </div>
               </div>
+              <button
+                onClick={next}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform hover:scale-105 hover:shadow-[0_0_10px_rgba(0,255,136,0.6)]"
+              >
+                Start Verification
+              </button>
             </div>
           )}
 
-          {step === 2 && (
-            <OTPStep
-              onNext={() => {
-                next();
-              }}
-              onSent={(p) => setPhone(p)}
-            />
-          )}
-
-          {step === 3 && (
-            <DocumentStep
-              onNext={() => next()}
-              onUploaded={(f) => setDocumentFile(f)}
-            />
-          )}
-
+          {step === 2 && <OTPStep onNext={next} onSent={setPhone} />}
+          {step === 3 && <DocumentStep onNext={next} onUploaded={setDocumentFile} />}
           {step === 4 && (
             <SelfieStep
               onNext={() => {
                 setSelfieCaptured(true);
                 next();
               }}
-              onCapture={() => {
-                setSelfieCaptured(true);
-              }}
+              onCapture={() => setSelfieCaptured(true)}
             />
           )}
-
           {step === 5 && (
             <ReviewStep
-              onSubmit={() => next()}
+              onSubmit={next}
               summary={{
                 phone,
                 documentName: documentFile?.name,
@@ -92,31 +79,23 @@ export default function KYCPage() {
               }}
             />
           )}
+          {step === 6 && <SuccessStep onDone={() => {}} />}
+        </motion.div>
 
-          {step === 6 && (
-            <SuccessStep
-              onDone={() => {
-                /* navigate away or close */
-              }}
-            />
-          )}
-        </div>
-
-        <div className="mt-4 flex justify-between text-xs text-gray-400">
+        {/* Navigation controls */}
+        <div className="mt-6 flex justify-between text-xs text-gray-400">
           <button
             onClick={prev}
-            className={`px-3 py-2 rounded-md ${
-              step === 1 ? "opacity-40 cursor-not-allowed" : "hover:bg-white/4"
+            className={`px-3 py-2 rounded-md transition ${
+              step === 1 ? "opacity-40 cursor-not-allowed" : "hover:bg-white/10"
             }`}
             disabled={step === 1}
           >
             Back
           </button>
           <button
-            onClick={() => {
-              setStep(totalSteps);
-            }}
-            className="px-3 py-2 rounded-md hover:bg-white/4"
+            onClick={skipToEnd}
+            className="px-3 py-2 rounded-md hover:bg-white/10"
           >
             Skip to end
           </button>
