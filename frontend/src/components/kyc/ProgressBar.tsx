@@ -2,8 +2,15 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-type Props = { value: number };
+type Props = { 
+  value: number; 
+  height?: string; // optional height class
+};
 
+export default function ProgressBar({ value, height = "h-2" }: Props) {
+  const clamped = Math.max(0, Math.min(100, value)); // ensure between 0–100
+
+<<<<<<< HEAD
 export default function ProgressBar({ value }: Props) {
   const percentage = Math.max(0, Math.min(100, value));
   
@@ -25,6 +32,14 @@ export default function ProgressBar({ value }: Props) {
           transition={{ duration: 0.6, ease: "easeOut" }}
         />
       </div>
+=======
+  return (
+    <div className={`w-full ${height} bg-white/10 rounded-full overflow-hidden`}>
+      <div
+        className="h-full bg-emerald-400 transition-all duration-500 ease-in-out"
+        style={{ width: `${clamped}%` }}
+      />
+>>>>>>> b39fae27837b325f504d18fa1cdb95f3f4517997
     </div>
   );
 }

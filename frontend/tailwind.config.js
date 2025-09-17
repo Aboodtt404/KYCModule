@@ -3,7 +3,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
-    "./src/src/**/*.{js,ts,jsx,tsx}", // Add this line for your nested src structure
+    "./src/src/**/*.{js,ts,jsx,tsx}", // nested src
   ],
   theme: {
     extend: {
@@ -47,8 +47,27 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        float: {
+          "0%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-6px)" },
+          "100%": { transform: "translateY(0px)" },
+        },
+        glow: {
+          "0%, 100%": {
+            filter: "drop-shadow(0 0 6px rgba(0,255,136,0.8))",
+          },
+          "50%": {
+            filter: "drop-shadow(0 0 14px rgba(0,255,136,1))",
+          },
+        },
+      },
+      animation: {
+        float: "float 3s ease-in-out infinite",
+        glow: "glow 2.5s ease-in-out infinite",
+      },
     },
   },
   plugins: [],
   darkMode: "class",
-}
+};
