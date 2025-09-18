@@ -1,10 +1,15 @@
 import React, { useState } from "react";
+import { motion } from "framer-motion";
+
+interface LogoHeroProps {
+  className?: string;
+  onNext?: () => void;
+}
 
 export default function LogoHero({
   className = "h-40 sm:h-60",
-}: {
-  className?: string;
-}) {
+  onNext,
+}: LogoHeroProps) {
   const [animate, setAnimate] = useState(false);
 
   const handleClick = () => {
@@ -12,14 +17,38 @@ export default function LogoHero({
     setTimeout(() => setAnimate(false), 1000);
   };
 
+  const handleStartVerification = () => {
+    if (onNext) {
+      onNext();
+    }
+  };
+
   return (
-    <div className={`w-full ${className} flex items-center justify-center`}>
-      <div
-        className={`relative cursor-pointer select-none transition-all duration-1000 ${
-          animate
+    <div className={`w-full ${className} flex flex-col items-center justify-center space-y-8`}>
+      {/* Title and Description */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="text-center space-y-4"
+      >
+        <h1 className="text-4xl font-bold text-white mb-2">
+          Welcome to KYC Verification
+        </h1>
+        <p className="text-lg text-gray-300 max-w-md">
+          Complete your identity verification in just a few simple steps to get started.
+        </p>
+      </motion.div>
+
+      {/* 3D Cube */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className={`relative cursor-pointer select-none transition-all duration-1000 ${animate
             ? "animate-bounce scale-110 rotate-12"
             : "hover:scale-105 hover:-rotate-2"
-        }`}
+          }`}
         onClick={handleClick}
       >
         {/* Isometric cube container */}
@@ -144,7 +173,25 @@ export default function LogoHero({
             />
           </svg>
         </div>
-      </div>
+      </motion.div>
+
+      {/* Start Button */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.4 }}
+        className="flex flex-col items-center space-y-4"
+      >
+        <button
+          onClick={handleStartVerification}
+          className="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-green-300 focus:ring-opacity-50"
+        >
+          Start Verification
+        </button>
+        <p className="text-sm text-gray-400 text-center max-w-sm">
+          This process takes about 2-3 minutes and requires your phone number and a valid ID document.
+        </p>
+      </motion.div>
     </div>
   );
 }

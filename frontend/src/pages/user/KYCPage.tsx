@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import { useStepper } from "../../../hooks/useStepper";
 
 import StepperHeader from "@/components/kyc/StepperHeader";
+import ProgressBar from "@/components/kyc/ProgressBar";
+import StepIndicator from "@/components/kyc/StepIndicator";
 
 import OTPStep from "@/components/kyc/OTPStep";
 import { DocumentStep } from "@/components/kyc/DocumentStep";
