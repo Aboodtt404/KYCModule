@@ -100,7 +100,13 @@ persistent actor {
     };
 
     public query func http_request(request : Http.HttpRequest) : async Http.HttpResponse {
-        FileStorage.fileRequest(storage, request, httpStreamingCallback);
+        // Handle API routes
+        if (Text.startsWith(request.url, #text("/api/"))) {
+            handleApiRequestSync(request);
+        } else {
+            // Serve static files for non-API routes
+            FileStorage.fileRequest(storage, request, httpStreamingCallback);
+        };
     };
 
     public query func httpStreamingCallback(token : Http.StreamingToken) : async Http.StreamingCallbackHttpResponse {
@@ -288,5 +294,32 @@ persistent actor {
     public func deletePassportResult(path : Text) : async () {
         let (newMap, _) = textMap.remove(passportResults, path);
         passportResults := newMap;
+    };
+
+    // API Request Handler (Synchronous for query functions)
+    private func handleApiRequestSync(request : Http.HttpRequest) : Http.HttpResponse {
+        if (request.url == "/api/process-document") {
+            handleProcessDocumentSync(request);
+        } else {
+            // Return 404 for unknown API endpoints
+            {
+                status_code = 404;
+                headers = [("Content-Type", "application/json")];
+                body = Text.encodeUtf8("{\"error\":\"Not Found\"}");
+                streaming_strategy = null;
+            };
+        };
+    };
+
+    // Process Document API Endpoint (Synchronous)
+    private func handleProcessDocumentSync(request : Http.HttpRequest) : Http.HttpResponse {
+        // For now, return a mock response since we need to implement proper JSON parsing
+        // TODO: Implement proper JSON parsing and OCR processing
+        {
+            status_code = 200;
+            headers = [("Content-Type", "application/json")];
+            body = Text.encodeUtf8("{\"success\":true,\"data\":{\"name\":\"Sample Name\",\"idNumber\":\"123456789\",\"birthDate\":\"1990-01-01\"}}");
+            streaming_strategy = null;
+        };
     };
 };

@@ -41,13 +41,13 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
     // First try the main key
     let value = editedData[fieldKey];
     if (value) return value;
-    
+
     // Then try fallback keys
     for (const fallbackKey of fallbackKeys) {
       value = editedData[fallbackKey];
       if (value) return value;
     }
-    
+
     // If still no value, try to construct full_name from first_name and second_name
     if (fieldKey === 'full_name') {
       const firstName = editedData['first_name'] || editedData['firstName'];
@@ -58,7 +58,7 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
       if (firstName) return firstName;
       if (secondName) return secondName;
     }
-    
+
     return '';
   };
 
@@ -82,7 +82,7 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
     };
     reader.readAsDataURL(file);
     setShowCamera(false);
-    
+
     // Clear previous verification results when new selfie is captured
     setVerificationResult(null);
     setIsIdentityVerified(false);
@@ -106,13 +106,13 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
       // Convert selfie to base64
       const selfieBase64 = await convertFileToBase64(selfieFile);
       console.log(`Selfie ${requestId} converted to base64, length:`, selfieBase64.length);
-      
+
       // Call the face verification API
       const result = await verifyFace(faceImage, selfieBase64);
       console.log(`Face verification ${requestId} result:`, result);
-      
+
       setVerificationResult(result.verification_result);
-      
+
       if (result.verification_result.is_match) {
         setIsIdentityVerified(true);
         toast.success("Identity verified successfully! You can now edit the information.");
@@ -140,10 +140,10 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
       initial={{ opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -40 }}
-      className="w-full max-w-4xl mx-auto"
+      className="w-full max-w-8xl mx-auto px-4"
     >
-      <GlassCard>
-        <div className="text-center mb-8">
+      <GlassCard className="p-8 sm:p-12">
+        <div className="text-center mb-12">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -152,7 +152,7 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
           >
             <Edit3 className="w-8 h-8 text-white" />
           </motion.div>
-          
+
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -161,7 +161,7 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
           >
             Verify Identity & Edit Information
           </motion.h2>
-          
+
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -172,24 +172,24 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
           {/* Face Verification Section */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Identity Verification
               </h3>
-              
+
               {/* Face from ID */}
               <div className="mb-4">
                 <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
                   Face from ID Document
                 </Label>
-                <div className="w-full h-48 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden">
+                <div className="w-full h-64 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden">
                   {faceImage ? (
-                    <img 
-                      src={`data:image/jpeg;base64,${faceImage}`} 
-                      alt="Face from ID" 
+                    <img
+                      src={`data:image/jpeg;base64,${faceImage}`}
+                      alt="Face from ID"
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -205,13 +205,13 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
                 </Label>
                 <div className="space-y-3">
                   <div
-                    className="w-full h-48 bg-gray-100 dark:bg-gray-800 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border-2 border-dashed border-gray-300 dark:border-gray-600"
+                    className="w-full h-64 bg-gray-100 dark:bg-gray-800 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border-2 border-dashed border-gray-300 dark:border-gray-600"
                     onClick={() => setShowCamera(true)}
                   >
                     {selfiePreview ? (
-                      <img 
-                        src={selfiePreview} 
-                        alt="Selfie preview" 
+                      <img
+                        src={selfiePreview}
+                        alt="Selfie preview"
                         className="w-full h-full object-cover rounded-lg"
                       />
                     ) : (
@@ -261,18 +261,16 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`p-4 rounded-lg border ${
-                    verificationResult.is_match
+                  className={`p-4 rounded-lg border ${verificationResult.is_match
                       ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800"
                       : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center space-x-3">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      verificationResult.is_match
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${verificationResult.is_match
                         ? "bg-emerald-100 dark:bg-emerald-800"
                         : "bg-red-100 dark:bg-red-800"
-                    }`}>
+                      }`}>
                       {verificationResult.is_match ? (
                         <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       ) : (
@@ -280,18 +278,16 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className={`text-sm font-medium ${
-                        verificationResult.is_match
+                      <p className={`text-sm font-medium ${verificationResult.is_match
                           ? "text-emerald-800 dark:text-emerald-200"
                           : "text-red-800 dark:text-red-200"
-                      }`}>
+                        }`}>
                         {verificationResult.is_match ? "Identity Verified" : "Verification Failed"}
                       </p>
-                      <p className={`text-xs ${
-                        verificationResult.is_match
+                      <p className={`text-xs ${verificationResult.is_match
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-red-600 dark:text-red-400"
-                      }`}>
+                        }`}>
                         Similarity: {(verificationResult.similarity_score * 100).toFixed(1)}% • {verificationResult.confidence} confidence
                         {lastSelfieTimestamp && (
                           <span className="ml-2 text-gray-500">
@@ -386,7 +382,7 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
           </div>
 
           {/* Field Editing Section */}
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Edit Information
@@ -416,13 +412,13 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               {fieldsToShow.map(({ key, label, required }) => (
                 <div key={key} className="space-y-2">
                   <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {label} {required && <span className="text-red-500">*</span>}
                   </Label>
-                  
+
                   {editingField === key ? (
                     <div className="flex space-x-2">
                       <Input
@@ -450,11 +446,10 @@ export function FieldEditStep({ ocrData, faceImage, onNext, onBack }: FieldEditS
                     </div>
                   ) : (
                     <div
-                      className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                        isIdentityVerified
+                      className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${isIdentityVerified
                           ? "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                           : "bg-gray-100 dark:bg-gray-900 border-gray-300 dark:border-gray-600 cursor-not-allowed opacity-60"
-                      }`}
+                        }`}
                       onClick={() => isIdentityVerified && setEditingField(key)}
                     >
                       <span className="text-gray-900 dark:text-white">

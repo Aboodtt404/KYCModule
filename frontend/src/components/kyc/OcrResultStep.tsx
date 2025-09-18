@@ -13,6 +13,9 @@ interface OcrResultStepProps {
 }
 
 export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultStepProps) {
+  console.log("OcrResultStep - ocrData:", ocrData);
+  console.log("OcrResultStep - faceImage:", faceImage);
+
   return (
     <GlassCard>
       <motion.div
@@ -38,9 +41,9 @@ export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultS
           >
             <div className="relative">
               <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-emerald-200 dark:border-emerald-800 shadow-lg">
-                <img 
-                  src={`data:image/jpeg;base64,${faceImage}`} 
-                  alt="Face from ID" 
+                <img
+                  src={`data:image/jpeg;base64,${faceImage}`}
+                  alt="Face from ID"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -62,18 +65,18 @@ export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultS
               { key: 'gender', label: 'Gender', fallbackKeys: ['sex'] },
               { key: 'governorate', label: 'Governorate', fallbackKeys: ['state', 'province'] }
             ];
-            
+
             const getFieldValue = (fieldKey: string, fallbackKeys: string[] = []) => {
               // First try the main key
               let value = ocrData[fieldKey];
               if (value) return value;
-              
+
               // Then try fallback keys
               for (const fallbackKey of fallbackKeys) {
                 value = ocrData[fallbackKey];
                 if (value) return value;
               }
-              
+
               // If still no value, try to construct full_name from first_name and second_name
               if (fieldKey === 'full_name') {
                 const firstName = ocrData['first_name'] || ocrData['firstName'];
@@ -84,24 +87,24 @@ export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultS
                 if (firstName) return firstName;
                 if (secondName) return secondName;
               }
-              
+
               return '';
             };
-            
+
             return fieldsToShow.map(({ key, label, fallbackKeys }) => {
               const value = getFieldValue(key, fallbackKeys);
               const displayValue = typeof value === 'string' ? value : (value ? String(value) : '');
-              
+
               return (
                 <div className="grid w-full items-center gap-1.5" key={key}>
                   <Label htmlFor={key} className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {label}
                   </Label>
-                  <Input 
-                    id={key} 
-                    value={displayValue} 
-                    disabled 
-                    className="text-foreground bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600" 
+                  <Input
+                    id={key}
+                    value={displayValue}
+                    disabled
+                    className="text-foreground bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-600"
                   />
                 </div>
               );
@@ -110,8 +113,8 @@ export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultS
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mt-6 w-full max-w-md">
-          <Button 
-            onClick={onNext} 
+          <Button
+            onClick={onNext}
             className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <div className="flex items-center space-x-2">
@@ -119,8 +122,8 @@ export function OcrResultStep({ ocrData, faceImage, onNext, onEdit }: OcrResultS
               <span>Continue</span>
             </div>
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={onEdit}
             variant="outline"
             className="flex-1 h-12 text-lg font-semibold border-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200"

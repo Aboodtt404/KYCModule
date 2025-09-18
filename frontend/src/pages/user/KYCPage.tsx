@@ -1,25 +1,23 @@
 "use client";
 import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { useStepper } from "../../../hooks/useStepper";
+import { motion, AnimatePresence } from "framer-motion";
 
 import StepperHeader from "@/components/kyc/StepperHeader";
 import ProgressBar from "@/components/kyc/ProgressBar";
 import StepIndicator from "@/components/kyc/StepIndicator";
 
 import OTPStep from "@/components/kyc/OTPStep";
-import { DocumentStep } from "@/components/kyc/DocumentStep";
+import DocumentStep from "@/components/kyc/DocumentStep";
+import { OcrResultStep } from "@/components/kyc/OcrResultStep";
+import { FieldEditStep } from "@/components/kyc/FieldEditStep";
+import SelfieStep from "@/components/kyc/SelfieStep";
 import ReviewStep from "@/components/kyc/ReviewStep";
 import SuccessStep from "@/components/kyc/SuccessStep";
 import LogoHero from "@/components/kyc/ThreeHero";
-import { OcrResultStep } from "@/components/kyc/OcrResultStep";
-import { FieldEditStep } from "@/components/kyc/FieldEditStep";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
 
 const TOTAL_STEPS = 6;
 
-export function KYCPage() {
+export default function KYCPage() {
   const [step, setStep] = useState(1);
   const [userData, setUserData] = useState({
     phone: "",
@@ -79,7 +77,6 @@ export function KYCPage() {
     handleNext();
   };
 
-
   const renderStep = () => {
     switch (step) {
       case 1:
@@ -89,8 +86,25 @@ export function KYCPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -40 }}
             key="step1"
+            className="space-y-6 text-center"
           >
-            <LogoHero onNext={handleNext} />
+            <div className="flex justify-center">
+              <LogoHero className="max-h-40" />
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-semibold mt-4">
+                Verify your identity
+              </h2>
+              <p className="text-gray-300 text-sm sm:text-base mt-1">
+                This process helps keep your account secure.
+              </p>
+            </div>
+            <button
+              onClick={handleNext}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform hover:scale-105 hover:shadow-[0_0_10px_rgba(0,255,136,0.6)]"
+            >
+              Start Verification
+            </button>
           </motion.div>
         );
       case 2:
@@ -98,25 +112,25 @@ export function KYCPage() {
       case 3:
         return <DocumentStep onNext={handleDocumentSubmit} />;
       case 4:
-        return <OcrResultStep 
-          ocrData={userData.ocrData || {}} 
+        return <OcrResultStep
+          ocrData={userData.ocrData || {}}
           faceImage={userData.faceImage || ""}
-          onNext={handleContinueWithoutEdit} 
+          onNext={handleContinueWithoutEdit}
           onEdit={handleStartEditing}
         />;
       case 5:
         if (userData.needsEditing) {
-          return <FieldEditStep 
-            ocrData={userData.ocrData || {}} 
+          return <FieldEditStep
+            ocrData={userData.ocrData || {}}
             faceImage={userData.faceImage || ""}
             onNext={handleFieldEditSubmit}
             onBack={handleBack}
           />;
         } else {
-          return <ReviewStep 
-            userData={userData} 
+          return <ReviewStep
+            userData={userData}
             editedData={userData.editedData}
-            onNext={handleNext} 
+            onNext={handleNext}
           />;
         }
       case 6:
@@ -127,14 +141,27 @@ export function KYCPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background-gradient flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-lg">
+        {/* Progress Bar */}
         {step <= TOTAL_STEPS && <ProgressBar value={(step / TOTAL_STEPS) * 100} />}
-        
-        <div className="mt-8">
-          <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
-        </div>
 
+        {/* Animated step content */}
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.4 }}
+          className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl mt-8"
+        >
+          <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
+        </motion.div>
+
+        {/* Step Indicator */}
+        {step <= TOTAL_STEPS && <StepIndicator step={step} total={TOTAL_STEPS} />}
+
+        {/* Navigation controls */}
         {step < TOTAL_STEPS && step > 1 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -152,8 +179,6 @@ export function KYCPage() {
             </button>
           </motion.div>
         )}
-
-        {step <= TOTAL_STEPS && <StepIndicator step={step} total={TOTAL_STEPS} />}
       </div>
     </div>
   );

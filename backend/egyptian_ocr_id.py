@@ -370,7 +370,7 @@ def process_image(cropped_image):
     print(f"📋 Total fields detected: {len(detected_fields)}")
 
     decoded_info = decode_egyptian_id(nid)
-    return (first_name, second_name, merged_name, nid, address, decoded_info["Birth Date"], decoded_info["Governorate"], decoded_info["Gender"], detected_fields, debug_output_path)
+    return (first_name, second_name, merged_name, nid, address, decoded_info["Birth Date"], decoded_info["Governorate"], decoded_info["Gender"], detected_fields, debug_output_path, serial)
 
 
 def decode_egyptian_id(id_number):
