@@ -2,14 +2,6 @@
 
 A Know Your Customer (KYC) verification system with Egyptian ID and passport OCR processing, face recognition, and identity verification.
 
-## Features
-
-- 📄 **Document OCR**: Extract data from Egyptian ID cards and passports
-- 👤 **Face Recognition**: Verify identity using face matching
-- ✏️ **Data Editing**: Edit extracted information after identity verification
-- 🌐 **Web Interface**: Modern React frontend with glassmorphism design
-- ☁️ **Cloud OCR**: External Python OCR server for document processing
-
 ## Quick Start
 
 ### Prerequisites
@@ -50,12 +42,6 @@ KYCModule/
 │       └── pages/user/      # User pages
 └── README.md
 ```
-
-## API Endpoints
-
-- `POST /egyptian-id` - Process Egyptian ID cards
-- `POST /passport` - Process passports
-- `GET /health` - Health check
 
 ## Testing
 
