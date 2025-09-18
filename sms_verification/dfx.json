@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "sms_verification_backend": {
+      "candid": "src/sms_verification_backend/sms_verification_backend.did",
+      "package": "sms_verification_backend",
+      "type": "rust"
+    },
+    "sms_verification_frontend": {
+      "dependencies": [
+        "sms_verification_backend"
+      ],
+      "source": [
+        "src/sms_verification_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "sms_verification_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
