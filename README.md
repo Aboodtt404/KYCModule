@@ -1,31 +1,87 @@
 # KYC Module
 
-A document verification system that extracts information from Egyptian ID cards and passports using OCR technology.
+A Know Your Customer (KYC) verification system with Egyptian ID and passport OCR processing, face recognition, and identity verification.
 
 ## Features
 
-- Egyptian ID Card processing
-- Passport processing
-- Web interface for document upload
+- 📄 **Document OCR**: Extract data from Egyptian ID cards and passports
+- 👤 **Face Recognition**: Verify identity using face matching
+- ✏️ **Data Editing**: Edit extracted information after identity verification
+- 🌐 **Web Interface**: Modern React frontend with glassmorphism design
+- ☁️ **Cloud OCR**: External Python OCR server for document processing
 
-## Setup
+## Quick Start
 
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-python3 ocr_server.py
-```
+### Prerequisites
 
-### Frontend
+- Node.js 18+
+- DFX (Internet Computer SDK)
+
+### 1. Frontend Setup
+
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
 ```
 
-## Usage
+### 2. Deploy to Internet Computer
 
-1. Start backend server (http://localhost:5000)
-2. Start frontend server (http://localhost:3000)
-3. Upload documents through the web interface
+```bash
+dfx start --background
+dfx deploy
+```
+
+### 3. Access the Application
+
+Open your browser and navigate to the deployed canister URL.
+
+## Project Structure
+
+```
+KYCModule/
+├── backend/           # Python OCR server
+│   ├── ocr_server.py  # Flask API server
+│   ├── egyptian_ocr_id.py  # Egyptian ID processing
+│   └── passport_ocr.py     # Passport processing
+├── frontend/          # React frontend
+│   └── src/
+│       ├── components/kyc/  # KYC components
+│       └── pages/user/      # User pages
+└── README.md
+```
+
+## API Endpoints
+
+- `POST /egyptian-id` - Process Egyptian ID cards
+- `POST /passport` - Process passports
+- `GET /health` - Health check
+
+## Testing
+
+1. Upload an Egyptian ID or passport image
+2. Review extracted information
+3. Take a selfie for identity verification
+4. Edit information if needed
+5. Submit for verification
+
+## Troubleshooting
+
+- **Frontend Build Errors**: Run `npm install` and check Node.js version
+- **DFX Deployment**: Ensure DFX is properly installed and IC network is accessible
+- **OCR Processing**: Ensure the cloud OCR server is accessible and running
+
+## Requirements
+
+### Frontend
+- React 18
+- TypeScript
+- Tailwind CSS
+- Framer Motion
+
+### Cloud OCR Server
+- Flask
+- OpenCV
+- EasyOCR
+- YOLO
+- Face Recognition
