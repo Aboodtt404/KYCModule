@@ -4,6 +4,7 @@ import GlassCard from "./GlassCard";
 import UploadBox from "./UploadBox";
 import ThreeHero from "./ThreeHero";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 export default function DocumentStep({
   onNext,
@@ -23,32 +24,26 @@ export default function DocumentStep({
 
   async function handleProcessDocument() {
     if (!file) return;
-
     setIsProcessing(true);
+
     try {
-      // Convert file to ArrayBuffer for binary data transmission
       const arrayBuffer = await file.arrayBuffer();
+      const ocrEndpoint =
+        type === "id"
+          ? "http://194.31.150.154:5000/egyptian-id"
+          : "http://194.31.150.154:5000/passport";
 
-      // Determine the correct OCR endpoint based on document type
-      const ocrEndpoint = type === "id"
-        ? "http://194.31.150.154:5000/egyptian-id"
-        : "http://194.31.150.154:5000/passport";
-
-      // Call the cloud OCR server directly with binary image data
       const response = await fetch(ocrEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'image/jpeg' },
+        method: "POST",
+        headers: { "Content-Type": "image/jpeg" },
         body: arrayBuffer,
       });
 
-      if (!response.ok) {
-        throw new Error(`OCR server responded with status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`OCR server error ${response.status}`);
 
       const result = await response.json();
 
       if (result.success && result.extracted_data) {
-        // Use the actual OCR data from the server
         const extractedData = result.extracted_data;
         const ocrData = {
           full_name: extractedData.full_name || "Unknown",
@@ -63,70 +58,81 @@ export default function DocumentStep({
           face_image: extractedData.face_image || null,
         };
 
-        console.log("OCR Data extracted:", ocrData);
-        console.log("Full server response:", result);
         onNext(ocrData, file, extractedData.face_image);
       } else {
-        throw new Error(result.error || 'OCR processing failed');
+        throw new Error(result.error || "OCR failed");
       }
     } catch (error) {
-      console.error('OCR processing error:', error);
-      // Fallback to mock data if OCR fails
-      const ocrData = {
-        name: "Sample Name",
-        idNumber: "123456789",
-        birthDate: "1990-01-01",
-      };
-      onNext(ocrData, file);
+      console.error("OCR error:", error);
+      onNext(
+        {
+          name: "Sample Name",
+          idNumber: "123456789",
+          birthDate: "1990-01-01",
+        },
+        file
+      );
     } finally {
       setIsProcessing(false);
     }
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <ThreeHero className="h-36 sm:h-52" />
-      <GlassCard>
+      <GlassCard className="p-6">
+        {/* Document Type Selector */}
         <div className="flex gap-3 justify-center flex-col sm:flex-row">
-          <button
-            className={`p-3 rounded-xl w-full sm:w-auto ${type === "id" ? "bg-emerald-500 text-black" : "bg-white/6"
+          {[
+            { key: "id", label: "🪪 National ID" },
+            { key: "passport", label: "🛂 Passport" },
+          ].map((doc) => (
+            <button
+              key={doc.key}
+              className={`p-3 rounded-xl w-full sm:w-auto transition ${
+                type === doc.key
+                  ? "bg-emerald-500 text-black font-semibold"
+                  : "bg-white/10 hover:bg-white/20"
               }`}
-            onClick={() => setType("id")}
-          >
-            🪪 National ID
-          </button>
-          <button
-            className={`p-3 rounded-xl w-full sm:w-auto ${type === "passport" ? "bg-emerald-500 text-black" : "bg-white/6"
-              }`}
-            onClick={() => setType("passport")}
-          >
-            🛂 Passport
-          </button>
+              onClick={() => setType(doc.key as "id" | "passport")}
+            >
+              {doc.label}
+            </button>
+          ))}
         </div>
 
-        <div className="mt-4">
+        {/* Upload */}
+        <div className="mt-6">
           <UploadBox
-            label={`Upload ${type === "id" ? "National ID (front)" : "Passport"
-              }`}
+            label={`Upload ${
+              type === "id" ? "National ID (front)" : "Passport"
+            }`}
             onFile={handleFile}
           />
         </div>
 
+        {/* File details + process button */}
         {file && (
-          <div className="mt-4 text-sm text-gray-200">
+          <div className="mt-6 text-sm text-gray-200 space-y-3">
             <div className="flex items-center justify-between">
-              <div>{file.name}</div>
-              <div>{Math.round(file.size / 1000)} KB</div>
+              <span className="truncate max-w-[70%]">{file.name}</span>
+              <span className="text-gray-400">
+                {(file.size / 1000).toFixed(1)} KB
+              </span>
             </div>
-            <div className="mt-3 flex gap-2">
-              <Button
-                onClick={handleProcessDocument}
-                className="w-full"
-                disabled={isProcessing}
-              >
-                {isProcessing ? "Processing..." : "Process Document"}
-              </Button>
-            </div>
+            <Button
+              onClick={handleProcessDocument}
+              className="w-full"
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Processing...
+                </span>
+              ) : (
+                "Process Document"
+              )}
+            </Button>
           </div>
         )}
       </GlassCard>

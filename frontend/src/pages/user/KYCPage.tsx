@@ -2,20 +2,25 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-import StepperHeader from "@/components/kyc/StepperHeader";
 import ProgressBar from "@/components/kyc/ProgressBar";
-import StepIndicator from "@/components/kyc/StepIndicator";
 
 import OTPStep from "@/components/kyc/OTPStep";
 import DocumentStep from "@/components/kyc/DocumentStep";
 import { OcrResultStep } from "@/components/kyc/OcrResultStep";
 import { FieldEditStep } from "@/components/kyc/FieldEditStep";
-import SelfieStep from "@/components/kyc/SelfieStep";
 import ReviewStep from "@/components/kyc/ReviewStep";
 import SuccessStep from "@/components/kyc/SuccessStep";
 import LogoHero from "@/components/kyc/ThreeHero";
 
 const TOTAL_STEPS = 6;
+
+// Progress calculation: only 100% when SuccessStep is reached
+const getProgress = (step: number): number => {
+  if (step < TOTAL_STEPS) {
+    return Math.round(((step - 1) / (TOTAL_STEPS - 1)) * 85);
+  }
+  return 100;
+};
 
 export default function KYCPage() {
   const [step, setStep] = useState(1);
@@ -29,7 +34,7 @@ export default function KYCPage() {
   });
 
   const handleNext = () => {
-    setStep((prev) => Math.min(prev + 1, TOTAL_STEPS + 1));
+    setStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
   };
 
   const handleBack = () => {
@@ -41,10 +46,14 @@ export default function KYCPage() {
     handleNext();
   };
 
-  const handleDocumentSubmit = (ocrData: Record<string, string>, file: File, faceImage?: string) => {
+  const handleDocumentSubmit = (
+    ocrData: Record<string, string>,
+    file: File,
+    faceImage?: string
+  ) => {
     setUserData((prev) => ({
       ...prev,
-      ocrData: ocrData,
+      ocrData,
       documentFile: file,
       faceImage: faceImage || null,
     }));
@@ -54,7 +63,7 @@ export default function KYCPage() {
   const handleFieldEditSubmit = (editedData: Record<string, string>) => {
     setUserData((prev) => ({
       ...prev,
-      editedData: editedData,
+      editedData,
       needsEditing: false,
     }));
     handleNext();
@@ -71,7 +80,7 @@ export default function KYCPage() {
   const handleContinueWithoutEdit = () => {
     setUserData((prev) => ({
       ...prev,
-      editedData: prev.ocrData, // Use original OCR data as final data
+      editedData: prev.ocrData, // Use original OCR data
       needsEditing: false,
     }));
     handleNext();
@@ -112,26 +121,32 @@ export default function KYCPage() {
       case 3:
         return <DocumentStep onNext={handleDocumentSubmit} />;
       case 4:
-        return <OcrResultStep
-          ocrData={userData.ocrData || {}}
-          faceImage={userData.faceImage || ""}
-          onNext={handleContinueWithoutEdit}
-          onEdit={handleStartEditing}
-        />;
-      case 5:
-        if (userData.needsEditing) {
-          return <FieldEditStep
+        return (
+          <OcrResultStep
             ocrData={userData.ocrData || {}}
             faceImage={userData.faceImage || ""}
-            onNext={handleFieldEditSubmit}
-            onBack={handleBack}
-          />;
+            onNext={handleContinueWithoutEdit}
+            onEdit={handleStartEditing}
+          />
+        );
+      case 5:
+        if (userData.needsEditing) {
+          return (
+            <FieldEditStep
+              ocrData={userData.ocrData || {}}
+              faceImage={userData.faceImage || ""}
+              onNext={handleFieldEditSubmit}
+              onBack={handleBack}
+            />
+          );
         } else {
-          return <ReviewStep
-            userData={userData}
-            editedData={userData.editedData}
-            onNext={handleNext}
-          />;
+          return (
+            <ReviewStep
+              userData={userData}
+              editedData={userData.editedData}
+              onNext={handleNext}
+            />
+          );
         }
       case 6:
         return <SuccessStep />;
@@ -144,7 +159,7 @@ export default function KYCPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg">
         {/* Progress Bar */}
-        {step <= TOTAL_STEPS && <ProgressBar value={(step / TOTAL_STEPS) * 100} />}
+        {step <= TOTAL_STEPS && <ProgressBar value={getProgress(step)} />}
 
         {/* Animated step content */}
         <motion.div
@@ -158,9 +173,6 @@ export default function KYCPage() {
           <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
         </motion.div>
 
-        {/* Step Indicator */}
-        {step <= TOTAL_STEPS && <StepIndicator step={step} total={TOTAL_STEPS} />}
-
         {/* Navigation controls */}
         {step < TOTAL_STEPS && step > 1 && (
           <motion.div
@@ -172,8 +184,18 @@ export default function KYCPage() {
               onClick={handleBack}
               className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
               </svg>
               <span>Go Back</span>
             </button>
