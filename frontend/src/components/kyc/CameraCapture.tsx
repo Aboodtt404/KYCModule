@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, X } from "lucide-react";
 
@@ -20,27 +20,28 @@ export function CameraCapture({ onCapture, onCancel, isOpen }: CameraCaptureProp
     try {
       setError(null);
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'user',
+        video: {
+          facingMode: "user",
           width: { ideal: 640 },
-          height: { ideal: 480 }
+          height: { ideal: 480 },
         },
-        audio: false
+        audio: false,
       });
-      
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.error('Camera error:', err);
-      setError('Unable to access camera. Please check permissions.');
+      console.error("Camera error:", err);
+      setError("Unable to access camera. Please check permissions.");
+      setIsCapturing(false);
     }
   };
 
   const stopCamera = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
   };
@@ -50,25 +51,26 @@ export function CameraCapture({ onCapture, onCancel, isOpen }: CameraCaptureProp
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext("2d");
 
     if (!context) return;
 
-    // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-
-    // Draw video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert canvas to blob
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], 'selfie.jpg', { type: 'image/jpeg' });
-        onCapture(file);
-        stopCamera();
-      }
-    }, 'image/jpeg', 0.8);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
+          onCapture(file);
+          stopCamera();
+          setIsCapturing(false);
+        }
+      },
+      "image/jpeg",
+      0.8
+    );
   };
 
   const handleStartCapture = () => {
@@ -80,6 +82,11 @@ export function CameraCapture({ onCapture, onCancel, isOpen }: CameraCaptureProp
     setIsCapturing(false);
     stopCamera();
   };
+
+  // 🔑 Always clean up when unmounting
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
 
   if (!isOpen) return null;
 
@@ -129,13 +136,14 @@ export function CameraCapture({ onCapture, onCancel, isOpen }: CameraCaptureProp
                 className="w-full h-64 bg-gray-900 rounded-lg object-cover"
               />
               <div className="absolute inset-0 border-4 border-white rounded-lg pointer-events-none">
+                {/* Overlay corners */}
                 <div className="absolute top-2 left-2 w-8 h-8 border-2 border-white rounded-full"></div>
                 <div className="absolute top-2 right-2 w-8 h-8 border-2 border-white rounded-full"></div>
                 <div className="absolute bottom-2 left-2 w-8 h-8 border-2 border-white rounded-full"></div>
                 <div className="absolute bottom-2 right-2 w-8 h-8 border-2 border-white rounded-full"></div>
               </div>
             </div>
-            
+
             <div className="flex space-x-2">
               <Button onClick={capturePhoto} className="flex-1">
                 <Camera className="w-4 h-4 mr-2" />
