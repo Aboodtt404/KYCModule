@@ -9,7 +9,7 @@ import Debug "mo:base/Debug";
 import Cycles "mo:base/ExperimentalCycles";
 // Removed unused Array import
 
-actor {
+persistent actor {
     // HTTP Outcalls Types
     type HttpRequestArgs = {
         url : Text;
