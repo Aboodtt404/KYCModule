@@ -279,19 +279,19 @@ export function ImageProcessor() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Image Processor</h2>
-        <p className="text-gray-600">Apply various enhancements to your images</p>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Image Processor</h2>
+        <p className="text-gray-600 dark:text-gray-300">Apply various enhancements to your images</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Image Selection */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Select Image</h3>
+        <div className="bg-white dark:bg-glass dark:backdrop-blur-md rounded-lg shadow-sm border border-gray-200 dark:border-white/10 p-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Select Image</h3>
 
           {imageFiles.length === 0 ? (
             <div className="text-center py-8">
-              <Image className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <p className="text-gray-600">No images available</p>
+              <Image className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400 mb-4" />
+              <p className="text-gray-600 dark:text-gray-300">No images available</p>
             </div>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -300,13 +300,13 @@ export function ImageProcessor() {
                   key={`${file.path}-${index}`}
                   onClick={() => loadImage(file)}
                   className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedImage?.path === file.path
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                    : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
                     }`}
                 >
                   <div className="flex items-center">
-                    <Image className="w-4 h-4 text-blue-600 mr-2" />
-                    <span className="text-sm font-medium truncate">{file.path}</span>
+                    <Image className={`w-4 h-4 mr-2 ${selectedImage?.path === file.path ? 'text-blue-600' : 'text-gray-500 dark:text-gray-300'}`} />
+                    <span className="text-sm font-medium truncate text-gray-800 dark:text-gray-100">{file.path}</span>
                   </div>
                 </button>
               ))}
@@ -315,8 +315,8 @@ export function ImageProcessor() {
 
           {/* Enhancement Controls */}
           {selectedImage && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h4 className="text-sm font-medium text-gray-900 mb-4">Enhancement Controls</h4>
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-white/10">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Enhancement Controls</h4>
 
               {/* Greyscale Toggle */}
               <div className="mb-4">
@@ -327,14 +327,14 @@ export function ImageProcessor() {
                     onChange={(e) => setIsGreyscale(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="ml-2 text-sm text-gray-700">Greyscale</span>
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-200">Greyscale</span>
                 </label>
               </div>
 
               {/* Enhancement Sliders */}
               {enhancements.map((enhancement) => (
                 <div key={enhancement.type} className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     {enhancement.label}: {enhancementValues[enhancement.type]}
                   </label>
                   <input
@@ -344,7 +344,7 @@ export function ImageProcessor() {
                     step={enhancement.step}
                     value={enhancementValues[enhancement.type]}
                     onChange={(e) => handleEnhancementChange(enhancement.type, Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
                   />
                 </div>
               ))}
@@ -383,9 +383,9 @@ export function ImageProcessor() {
         </div>
 
         {/* Image Preview and Processing */}
-        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="lg:col-span-2 bg-white dark:bg-glass dark:backdrop-blur-md rounded-lg shadow-sm border border-gray-200 dark:border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Image Processing</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Image Processing</h3>
 
             {processedUrl && (
               <div className="flex space-x-2">
@@ -429,16 +429,16 @@ export function ImageProcessor() {
           </div>
 
           {!selectedImage ? (
-            <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
-              <Image className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <p className="text-gray-600">Select an image to start processing</p>
+            <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+              <Image className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400 mb-4" />
+              <p className="text-gray-600 dark:text-gray-300">Select an image to start processing</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Original Image */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Original</h4>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Original</h4>
+                <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-gray-900">
                   {originalUrl && (
                     <img
                       src={originalUrl}
@@ -451,8 +451,8 @@ export function ImageProcessor() {
 
               {/* Processed Image */}
               <div>
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Enhanced Preview</h4>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Enhanced Preview</h4>
+                <div className="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-gray-900">
                   {processedUrl ? (
                     <img
                       src={processedUrl}
@@ -460,8 +460,8 @@ export function ImageProcessor() {
                       className="w-full h-auto"
                     />
                   ) : (
-                    <div className="aspect-square bg-gray-50 flex items-center justify-center">
-                      <p className="text-gray-500 text-center px-4">
+                    <div className="aspect-square bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+                      <p className="text-gray-500 dark:text-gray-300 text-center px-4">
                         Adjust settings and click "Apply Enhancements" to preview
                       </p>
                     </div>

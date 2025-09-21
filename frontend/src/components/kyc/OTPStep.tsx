@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Phone, Shield, CheckCircle, ArrowLeft } from "lucide-react";
 import GlassCard from "./GlassCard";
 import { useSmsVerificationActor } from "../../../hooks/useSmsVerificationActor";
-import type { Response } from "../../../declarations/sms_verification_backend/sms_verification_backend.did";
+import type { Response } from "../../declarations/sms_verification_backend/sms_verification_backend.did";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Props {
@@ -21,7 +21,12 @@ export default function OTPStep({ onNext, onSent }: Props) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
-  const { actor } = useSmsVerificationActor();
+  const { actor } = useSmsVerificationActor() as {
+    actor: {
+      send_sms: (phone: string) => Promise<Response>;
+      verify_otp: (phone: string, otp: string) => Promise<Response>;
+    } | null;
+  };
 
   async function handleSendCode() {
     if (!actor) return;
