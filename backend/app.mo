@@ -53,14 +53,16 @@ persistent actor {
     };
     var storage = FileStorage.new();
 
-    let natMap = OrderedMap.Make<Nat>(Nat.compare);
-    let textMap = OrderedMap.Make<Text>(Text.compare);
-    var ocrRatings : OrderedMap.Map<Nat, Nat> = natMap.empty<Nat>();
-    var nextDocId : Nat = 0;
+    // Use stable storage types for persistent actor
+    stable var ocrRatings : [(Nat, Nat)] = [];
+    stable var nextDocId : Nat = 0;
     
-    // OCR Results Storage
-    var egyptianIdResults : OrderedMap.Map<Text, Text> = textMap.empty<Text>();
-    var passportResults : OrderedMap.Map<Text, Text> = textMap.empty<Text>();
+    // OCR Results Storage - using arrays for stability
+    stable var egyptianIdResults : [(Text, Text)] = [];
+    stable var passportResults : [(Text, Text)] = [];
+    
+    // Helper functions to work with stable arrays
+    // Note: Map instances are created locally in functions to avoid stability issues
 
     // IC Management Canister for HTTP Outcalls
     let ic : IC = actor ("aaaaa-aa");
@@ -114,15 +116,20 @@ persistent actor {
     };
 
     public func rateOcrQuality(docId : Nat, rating : Nat) : async () {
-        ocrRatings := natMap.put(ocrRatings, docId, rating);
+        let natMap = OrderedMap.Make<Nat>(Nat.compare);
+        let map = natMap.fromIter(ocrRatings.vals());
+        let newMap = natMap.put(map, docId, rating);
+        ocrRatings := Iter.toArray(natMap.entries(newMap));
     };
 
     public func getOcrRating(docId : Nat) : async ?Nat {
-        natMap.get(ocrRatings, docId);
+        let natMap = OrderedMap.Make<Nat>(Nat.compare);
+        let map = natMap.fromIter(ocrRatings.vals());
+        natMap.get(map, docId);
     };
 
     public func getAllOcrRatings() : async [(Nat, Nat)] {
-        Iter.toArray(natMap.entries(ocrRatings));
+        ocrRatings;
     };
 
     public func addDocument(path : Text, mimeType : Text, chunk : Blob, complete : Bool) : async Nat {
@@ -200,12 +207,18 @@ persistent actor {
             let ocrResult = switch (Text.decodeUtf8(Blob.fromArray(response.body))) {
                 case (?text) { 
                     // Save the OCR result to persistent storage
-                    egyptianIdResults := textMap.put(egyptianIdResults, path, text);
+                    let textMap = OrderedMap.Make<Text>(Text.compare);
+                    let map = textMap.fromIter(egyptianIdResults.vals());
+                    let newMap = textMap.put(map, path, text);
+                    egyptianIdResults := Iter.toArray(textMap.entries(newMap));
                     text;
                 };
                 case null { 
                     let errorResult = "{\"status\":\"error\",\"message\":\"Failed to decode OCR response\",\"data\":null}";
-                    egyptianIdResults := textMap.put(egyptianIdResults, path, errorResult);
+                    let textMap = OrderedMap.Make<Text>(Text.compare);
+                    let map = textMap.fromIter(egyptianIdResults.vals());
+                    let newMap = textMap.put(map, path, errorResult);
+                    egyptianIdResults := Iter.toArray(textMap.entries(newMap));
                     errorResult;
                 };
             };
@@ -213,7 +226,10 @@ persistent actor {
             ocrResult;
         } catch (_error) {
             let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
-            egyptianIdResults := textMap.put(egyptianIdResults, path, errorResult);
+            let textMap = OrderedMap.Make<Text>(Text.compare);
+            let map = textMap.fromIter(egyptianIdResults.vals());
+            let newMap = textMap.put(map, path, errorResult);
+            egyptianIdResults := Iter.toArray(textMap.entries(newMap));
             errorResult;
         };
     };
@@ -251,12 +267,18 @@ persistent actor {
             let ocrResult = switch (Text.decodeUtf8(Blob.fromArray(response.body))) {
                 case (?text) { 
                     // Save the OCR result to persistent storage
-                    passportResults := textMap.put(passportResults, path, text);
+                    let textMap = OrderedMap.Make<Text>(Text.compare);
+                    let map = textMap.fromIter(passportResults.vals());
+                    let newMap = textMap.put(map, path, text);
+                    passportResults := Iter.toArray(textMap.entries(newMap));
                     text;
                 };
                 case null { 
                     let errorResult = "{\"status\":\"error\",\"message\":\"Failed to decode OCR response\",\"data\":null}";
-                    passportResults := textMap.put(passportResults, path, errorResult);
+                    let textMap = OrderedMap.Make<Text>(Text.compare);
+                    let map = textMap.fromIter(passportResults.vals());
+                    let newMap = textMap.put(map, path, errorResult);
+                    passportResults := Iter.toArray(textMap.entries(newMap));
                     errorResult;
                 };
             };
@@ -264,36 +286,47 @@ persistent actor {
             ocrResult;
         } catch (_error) {
             let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
-            passportResults := textMap.put(passportResults, path, errorResult);
+            let textMap = OrderedMap.Make<Text>(Text.compare);
+            let map = textMap.fromIter(passportResults.vals());
+            let newMap = textMap.put(map, path, errorResult);
+            passportResults := Iter.toArray(textMap.entries(newMap));
             errorResult;
         };
     };
 
     // Functions to retrieve stored OCR results
     public func getEgyptianIdResult(path : Text) : async ?Text {
-        textMap.get(egyptianIdResults, path);
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(egyptianIdResults.vals());
+        textMap.get(map, path);
     };
 
     public func getPassportResult(path : Text) : async ?Text {
-        textMap.get(passportResults, path);
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(passportResults.vals());
+        textMap.get(map, path);
     };
 
     public func getAllEgyptianIdResults() : async [(Text, Text)] {
-        Iter.toArray(textMap.entries(egyptianIdResults));
+        egyptianIdResults;
     };
 
     public func getAllPassportResults() : async [(Text, Text)] {
-        Iter.toArray(textMap.entries(passportResults));
+        passportResults;
     };
 
     public func deleteEgyptianIdResult(path : Text) : async () {
-        let (newMap, _) = textMap.remove(egyptianIdResults, path);
-        egyptianIdResults := newMap;
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(egyptianIdResults.vals());
+        let (newMap, _) = textMap.remove(map, path);
+        egyptianIdResults := Iter.toArray(textMap.entries(newMap));
     };
 
     public func deletePassportResult(path : Text) : async () {
-        let (newMap, _) = textMap.remove(passportResults, path);
-        passportResults := newMap;
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(passportResults.vals());
+        let (newMap, _) = textMap.remove(map, path);
+        passportResults := Iter.toArray(textMap.entries(newMap));
     };
 
     // API Request Handler (Synchronous for query functions)

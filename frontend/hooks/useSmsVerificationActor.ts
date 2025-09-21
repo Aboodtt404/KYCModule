@@ -2,7 +2,7 @@ import { createActor } from "@/declarations/sms_verification_backend/index";
 import type { _SERVICE } from "@/declarations/sms_verification_backend/sms_verification_backend.did";
 import { useQuery } from "@tanstack/react-query";
 
-const canisterId = "uxrrr-q7777-77774-qaaaq-cai";
+const canisterId = "uzt4z-lp777-77774-qaabq-cai";
 
 export function useSmsVerificationActor() {
   const { data: actor, isLoading } = useQuery({

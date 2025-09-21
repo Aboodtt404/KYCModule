@@ -60,7 +60,14 @@ pub async fn send_sms(to: String) -> Response {
         account_sid
     );
 
-    let body_data = format!("To={}&From={}&Body={}", to, from_number, otp);
+    // Ensure phone number starts with + for international format
+    let formatted_to = if to.starts_with('+') { to.clone() } else { format!("+{}", to) };
+    
+    let body_data = format!("To={}&From={}&Body={}", 
+        urlencoding::encode(&formatted_to), 
+        urlencoding::encode(&from_number), 
+        urlencoding::encode(&otp)
+    );
     let auth_header = format!(
         "Basic {}",
         general_purpose::STANDARD.encode(format!("{}:{}", account_sid, auth_token))

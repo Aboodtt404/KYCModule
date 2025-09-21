@@ -5,9 +5,15 @@
       "type": "motoko",
       "args": "--enhanced-orthogonal-persistence"
     },
+    "sms_verification_backend": {
+      "candid": "sms_verification/src/sms_verification_backend/sms_verification_backend.did",
+      "package": "sms_verification_backend",
+      "type": "rust"
+    },
     "frontend": {
       "dependencies": [
-        "backend"
+        "backend",
+        "sms_verification_backend"
       ],
       "frontend": {
         "entrypoint": "frontend/index.html"
@@ -22,6 +28,11 @@
   "defaults": {
     "build": {
       "packtool": "mops sources"
+    }
+  },
+  "workspace": {
+    "sms_verification_backend": {
+      "root": "sms_verification"
     }
   }
 }
