@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "sms_verification/src/sms_verification_backend"
+]
+resolver = "2"
+
+# This workspace includes the SMS verification module
