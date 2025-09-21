@@ -7,9 +7,9 @@ import Nat "mo:base/Nat";
 import Iter "mo:base/Iter";
 import Debug "mo:base/Debug";
 import Cycles "mo:base/ExperimentalCycles";
-import Array "mo:base/Array";
+// Removed unused Array import
 
-persistent actor {
+actor {
     // HTTP Outcalls Types
     type HttpRequestArgs = {
         url : Text;
@@ -53,8 +53,8 @@ persistent actor {
     };
     var storage = FileStorage.new();
 
-    transient let natMap = OrderedMap.Make<Nat>(Nat.compare);
-    transient let textMap = OrderedMap.Make<Text>(Text.compare);
+    let natMap = OrderedMap.Make<Nat>(Nat.compare);
+    let textMap = OrderedMap.Make<Text>(Text.compare);
     var ocrRatings : OrderedMap.Map<Nat, Nat> = natMap.empty<Nat>();
     var nextDocId : Nat = 0;
     
@@ -162,7 +162,7 @@ persistent actor {
             };
             
             responseText;
-        } catch (error) {
+        } catch (_error) {
             "Health check failed: HTTP outcall error";
         };
     };
@@ -211,7 +211,7 @@ persistent actor {
             };
             
             ocrResult;
-        } catch (error) {
+        } catch (_error) {
             let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
             egyptianIdResults := textMap.put(egyptianIdResults, path, errorResult);
             errorResult;
@@ -262,7 +262,7 @@ persistent actor {
             };
             
             ocrResult;
-        } catch (error) {
+        } catch (_error) {
             let errorResult = "{\"status\":\"error\",\"message\":\"HTTP outcall failed\",\"data\":null}";
             passportResults := textMap.put(passportResults, path, errorResult);
             errorResult;
@@ -312,7 +312,7 @@ persistent actor {
     };
 
     // Process Document API Endpoint (Synchronous)
-    private func handleProcessDocumentSync(request : Http.HttpRequest) : Http.HttpResponse {
+    private func handleProcessDocumentSync(_request : Http.HttpRequest) : Http.HttpResponse {
         // For now, return a mock response since we need to implement proper JSON parsing
         // TODO: Implement proper JSON parsing and OCR processing
         {
