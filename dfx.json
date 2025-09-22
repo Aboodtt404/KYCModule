@@ -5,34 +5,29 @@
       "type": "motoko",
       "args": "--enhanced-orthogonal-persistence"
     },
-    "sms_verification_backend": {
-      "candid": "sms_verification/src/sms_verification_backend/sms_verification_backend.did",
-      "package": "sms_verification_backend",
-      "type": "rust"
-    },
     "frontend": {
       "dependencies": [
-        "backend",
-        "sms_verification_backend"
+        "backend"
       ],
       "frontend": {
-        "entrypoint": "frontend/index.html"
+        "entrypoint": "frontend/dist/index.html"
       },
       "source": [
         "frontend/dist"
       ],
-      "type": "assets"
+      "type": "assets",
+      "routes": [
+        {
+          "match": "/**",
+          "serve": "/index.html"
+        }
+      ]
     }
   },
   "output_env_file": ".env",
   "defaults": {
     "build": {
       "packtool": "mops sources"
-    }
-  },
-  "workspace": {
-    "sms_verification_backend": {
-      "root": "sms_verification"
     }
   }
 }
