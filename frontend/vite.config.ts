@@ -4,7 +4,7 @@ import environment from 'vite-plugin-environment';
 import path from 'path';
 
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [environment('all', { prefix: 'CANISTER_' }), environment('all', { prefix: 'DFX_' })],
   envDir: '../',
   define: {
