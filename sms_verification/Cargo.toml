@@ -1,1 +1,5 @@
-# This is now part of the root workspace
+[workspace]
+members = [
+    "src/sms_verification_backend"
+]
+resolver = "2"
