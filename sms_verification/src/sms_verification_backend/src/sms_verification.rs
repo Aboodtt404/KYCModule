@@ -19,7 +19,6 @@ thread_local! {
     static VERIFIED_PHONES: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
 
-// Generate a 6-digit OTP
 async fn generate_otp() -> String {
     let (bytes,) = raw_rand().await.unwrap_or((vec![0; 8],));
     let num = u64::from_le_bytes(bytes[..8].try_into().unwrap_or([0; 8]));
@@ -30,7 +29,6 @@ async fn generate_otp() -> String {
 pub async fn send_sms(to: String) -> Response {
     let now = ic_cdk::api::time();
 
-    // Check if OTP already exists
     let already_exists = OTP_STORE.with(|store| store.borrow().get(&to).cloned());
     if let Some((_otp, expiry)) = already_exists {
         if now < expiry {
@@ -42,25 +40,19 @@ pub async fn send_sms(to: String) -> Response {
         }
     }
 
-    // Generate new OTP
     let otp = generate_otp().await;
-    let expires_at = now + 30_000_000_000; // 30 seconds
+    let expires_at = now + 30_000_000_000;
 
-    OTP_STORE.with(|store| {
-        store.borrow_mut().insert(to.clone(), (otp.clone(), expires_at));
-    });
-
-    // Twilio credentials
-    let account_sid = "AC99262ff2dcd2b7e2d54d2e63bc335789";
-    let auth_token = "4548b85e5a1b282500fbae5c2ed3943d";
-    let from_number = "+17328386631";
+    // TODO: Replace with environment variables or secure configuration
+    let account_sid = std::env::var("TWILIO_ACCOUNT_SID").unwrap_or_else(|_| "YOUR_ACCOUNT_SID".to_string());
+    let auth_token = std::env::var("TWILIO_AUTH_TOKEN").unwrap_or_else(|_| "YOUR_AUTH_TOKEN".to_string());
+    let from_number = std::env::var("TWILIO_FROM_NUMBER").unwrap_or_else(|_| "YOUR_FROM_NUMBER".to_string());
 
     let url = format!(
         "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
         account_sid
     );
 
-    // Ensure phone number starts with + for international format
     let formatted_to = if to.starts_with('+') { to.clone() } else { format!("+{}", to) };
     
     let body_data = format!("To={}&From={}&Body={}", 
@@ -85,17 +77,35 @@ pub async fn send_sms(to: String) -> Response {
         transform: None,
     };
 
-    match http_request(request, 1_000_000_000).await {
-        Ok((HttpResponse { status, body, .. },)) => {
-            let code: u32 = status.0.try_into().unwrap_or(0);
-            if code == 200 || code == 201 {
-                Response { success: true, message: "OTP sent successfully!".to_string() }
-            } else {
-                Response { success: false, message: format!("Twilio error {}: {}", code, String::from_utf8_lossy(&body)) }
+    let mut last_error = String::new();
+    for attempt in 1..=3 {
+        match http_request(request.clone(), 10_000_000_000).await {
+            Ok((HttpResponse { status, body, .. },)) => {
+                let code: u32 = status.0.try_into().unwrap_or(0);
+                if code == 200 || code == 201 {
+                    OTP_STORE.with(|store| {
+                        store.borrow_mut().insert(to.clone(), (otp.clone(), expires_at));
+                    });
+                    return Response { success: true, message: "OTP sent successfully!".to_string() };
+                } else {
+                    last_error = format!("Twilio error {}: {}", code, String::from_utf8_lossy(&body));
+                    if attempt < 3 {
+                        let delay = attempt * 1_000_000_000;
+                        ic_cdk::api::time::sleep(delay).await;
+                    }
+                }
+            }
+            Err(e) => {
+                last_error = format!("HTTP request failed (attempt {}): {:?}", attempt, e);
+                if attempt < 3 {
+                    let delay = attempt * 1_000_000_000;
+                    ic_cdk::api::time::sleep(delay).await;
+                }
             }
         }
-        Err(e) => Response { success: false, message: format!("HTTP request failed: {:?}", e) },
     }
+    
+    Response { success: false, message: last_error }
 }
 
 #[update]
