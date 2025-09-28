@@ -1,0 +1,45 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import GlassCard from "./GlassCard";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Edit3, CheckCircle, User } from "lucide-react";
+export function OcrResultStep({ ocrData, faceImage, onNext, onEdit, }) {
+    console.log("OcrResultStep - ocrData:", ocrData);
+    console.log("OcrResultStep - faceImage:", faceImage);
+    // Define fields to display in order
+    const fieldsToShow = [
+        { key: "full_name", label: "Full Name", fallbackKeys: ["first_name", "second_name", "name"] },
+        { key: "national_id", label: "National ID", fallbackKeys: ["id", "national_id_number"] },
+        { key: "address", label: "Address", fallbackKeys: ["location", "residence"] },
+        { key: "birth_date", label: "Birth Date", fallbackKeys: ["date_of_birth", "birthday"] },
+        { key: "gender", label: "Gender", fallbackKeys: ["sex"] },
+        { key: "governorate", label: "Governorate", fallbackKeys: ["state", "province"] },
+    ];
+    const getFieldValue = (fieldKey, fallbackKeys = []) => {
+        let value = ocrData[fieldKey];
+        if (value)
+            return value;
+        for (const fallbackKey of fallbackKeys) {
+            value = ocrData[fallbackKey];
+            if (value)
+                return value;
+        }
+        if (fieldKey === "full_name") {
+            const firstName = ocrData["first_name"] || ocrData["firstName"];
+            const secondName = ocrData["second_name"] || ocrData["secondName"];
+            if (firstName && secondName)
+                return `${firstName} ${secondName}`;
+            if (firstName)
+                return firstName;
+            if (secondName)
+                return secondName;
+        }
+        return "";
+    };
+    return (_jsx(GlassCard, { children: _jsxs(motion.div, { initial: { opacity: 0, y: 40 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -40 }, className: "flex flex-col gap-6 items-center justify-center", children: [_jsxs("div", { className: "flex flex-col gap-2 text-center", children: [_jsx("h2", { className: "text-2xl font-bold", children: "Review Extracted Information" }), _jsx("p", { className: "text-sm text-gray-500 dark:text-gray-400 max-w-lg mx-auto", children: "Please review the details extracted from your document. If everything looks correct, continue. If not, you can edit the details." })] }), faceImage && (_jsx(motion.div, { initial: { opacity: 0, scale: 0.9 }, animate: { opacity: 1, scale: 1 }, className: "flex justify-center mb-4", children: _jsxs("div", { className: "relative", children: [_jsx("div", { className: "w-32 h-32 rounded-full overflow-hidden border-4 border-emerald-500 shadow-lg shadow-emerald-500/30", children: _jsx("img", { src: `data:image/jpeg;base64,${faceImage}`, alt: "Face from ID", className: "w-full h-full object-cover" }) }), _jsx("div", { className: "absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center shadow-md", children: _jsx(User, { className: "w-4 h-4 text-white" }) })] }) })), _jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl", children: fieldsToShow.map(({ key, label, fallbackKeys }) => {
+                        const value = getFieldValue(key, fallbackKeys);
+                        return (_jsxs("div", { className: "grid w-full items-center gap-1.5", children: [_jsx(Label, { htmlFor: key, className: "text-sm font-medium text-gray-700 dark:text-gray-300", children: label }), _jsx(Input, { id: key, value: value, disabled: true, className: "bg-white/10 dark:bg-gray-800 border border-gray-300/30 dark:border-gray-700/50 text-gray-900 dark:text-gray-100" })] }, key));
+                    }) }), _jsxs("div", { className: "flex flex-col sm:flex-row gap-4 mt-6 w-full max-w-md", children: [_jsx(Button, { onClick: onNext, className: "flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-md hover:shadow-lg transition-all", children: _jsxs("div", { className: "flex items-center gap-2 justify-center", children: [_jsx(CheckCircle, { className: "w-5 h-5" }), _jsx("span", { children: "Continue" })] }) }), _jsx(Button, { onClick: onEdit, variant: "outline", className: "flex-1 h-12 text-lg font-semibold border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all", children: _jsxs("div", { className: "flex items-center gap-2 justify-center", children: [_jsx(Edit3, { className: "w-5 h-5" }), _jsx("span", { children: "Edit Details" })] }) })] })] }, "ocr-result") }));
+}
