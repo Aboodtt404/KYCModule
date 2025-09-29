@@ -148,7 +148,7 @@ persistent actor {
             
             let request : HttpRequestArgs = {
                 url = OCR_SERVER_BASE_URL # "/health";
-                max_response_bytes = ?1024;
+                max_response_bytes = ?100_000;
                 headers = [
                     { name = "Content-Type"; value = "application/json" }
                 ];
@@ -189,7 +189,7 @@ persistent actor {
             
             let request : HttpRequestArgs = {
                 url = OCR_SERVER_BASE_URL # "/egyptian-id";
-                max_response_bytes = ?10_000; // Larger response for OCR results
+                max_response_bytes = ?100_000; // Larger response for OCR results
                 headers = [
                     { name = "Content-Type"; value = "application/octet-stream" }
                 ];
@@ -249,7 +249,7 @@ persistent actor {
             
             let request : HttpRequestArgs = {
                 url = OCR_SERVER_BASE_URL # "/passport";
-                max_response_bytes = ?10_000; // Larger response for OCR results
+                max_response_bytes = ?100_000; // Larger response for OCR results
                 headers = [
                     { name = "Content-Type"; value = "application/octet-stream" }
                 ];

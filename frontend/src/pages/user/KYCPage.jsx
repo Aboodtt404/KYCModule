@@ -91,7 +91,15 @@ export default function KYCPage() {
             case 2:
                 return <OTPStep onNext={handleOtpVerified}/>;
             case 3:
-                return <DocumentStep onNext={handleDocumentSubmit}/>;
+                return (
+                    <DocumentStep
+                    onNext={handleDocumentSubmit}
+                    onUploaded={(file) =>
+                        setUserData((prev) => ({ ...prev, documentFile: file }))
+                    }
+                    />
+                );
+
             case 4:
                 return (<OcrResultStep ocrData={userData.ocrData || {}} faceImage={userData.faceImage || ""} onNext={handleContinueWithoutEdit} onEdit={handleStartEditing}/>);
             case 5:
