@@ -40,4 +40,4 @@ backend/venv
 ocr-kybra-canister/.kybra
 ocr-kybra-canister/venv
 venv/
-/frontend/backup_src_ts
+frontend/backup_src_ts
