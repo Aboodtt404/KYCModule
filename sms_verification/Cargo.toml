@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "src/sms_verification_backend"
+]
+resolver = "2"
