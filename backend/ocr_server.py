@@ -2,7 +2,7 @@
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from egyptian_ocr_id import detect_and_process_id_card
+from egyptian_ocr_id import detect_and_process_id_card, detect_id_card_quick
 from passport_ocr import process_passport, get_passport_debug_info
 import logging
 import time
@@ -244,6 +244,48 @@ def server_info():
     })
 
 
+@app.route('/detect-id-card', methods=['POST'])
+def detect_id_card():
+    """
+    Quick ID card detection endpoint for real-time camera feedback.
+    Returns detection status, bounding box, and quality metrics without full OCR.
+    """
+    try:
+        if not request.data:
+            return jsonify({"error": "No image data provided"}), 400
+
+        logger.info(f"ID detection request: {len(request.data)} bytes")
+
+        if len(request.data) < 100:
+            return jsonify({"error": "Data too small to be a valid image"}), 400
+
+        # Save image temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+            temp_file.write(request.data)
+            temp_file_path = temp_file.name
+
+        try:
+            # Run quick detection
+            result = detect_id_card_quick(temp_file_path)
+
+            logger.info(
+                f"Detection: {result['detected']}, "
+                f"Confidence: {result.get('confidence', 0):.2f}, "
+                f"Quality: {result.get('quality', {}).get('quality_level', 'unknown')}"
+            )
+
+            return jsonify(result)
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+
+    except Exception as e:
+        logger.error(f"Detection error: {e}")
+        return jsonify({"error": str(e), "detected": False}), 500
+
+
 @app.route('/egyptian-id', methods=['POST'])
 def process_egyptian_id():
     try:
@@ -419,6 +461,7 @@ if __name__ == '__main__':
     print("\n🌐 Server Endpoints:")
     print("  📊 Health: http://localhost:5000/health")
     print("  🔍 OCR: http://localhost:5000/ocr (redirects to Egyptian ID)")
+    print("  📸 ID Detection: http://localhost:5000/detect-id-card (real-time)")
     print("  🇪🇬 Egyptian ID: http://localhost:5000/egyptian-id")
     print("  🛂 Passport OCR: http://localhost:5000/passport")
     print("  🖼️ Debug Images: http://localhost:5000/debug-image/<filename>")

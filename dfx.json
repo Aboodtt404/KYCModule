@@ -16,7 +16,7 @@
         "sms_verification_backend"
       ],
       "frontend": {
-          "entrypoint": "frontend/dist/index.html"
+        "entrypoint": "frontend/dist/index.html"
       },
       "source": [
         "frontend/dist"
