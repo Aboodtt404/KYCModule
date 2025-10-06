@@ -464,8 +464,16 @@ def detect_and_process_id_card(image_path):
     id_card_results = id_card_model(preprocessed_image)
 
     print(f"🃏 ID Card Detection Results:")
-    print(
-        f"   📊 Total ID card detections: {len(id_card_results[0].boxes) if id_card_results[0].boxes is not None else 0}")
+    num_detections = len(id_card_results[0].boxes) if id_card_results[0].boxes is not None else 0
+    print(f"   📊 Total ID card detections: {num_detections}")
+
+    # Validate that an ID card is actually detected
+    if num_detections == 0:
+        print("   ❌ No ID card detected in the image!")
+        raise ValueError("No ID card detected in the image. Please upload a clear photo of an Egyptian National ID card.")
+
+    id_card_detected = False
+    cropped_image = None
 
     for result in id_card_results:
         for box in result.boxes:
@@ -474,12 +482,17 @@ def detect_and_process_id_card(image_path):
             print(
                 f"   🎯 ID Card detected (conf: {confidence:.3f}) at [{x1}, {y1}, {x2}, {y2}]")
 
+            # Minimum confidence threshold for ID detection
+            if confidence < 0.3:
+                print(f"   ⚠️ Confidence too low ({confidence:.3f}), skipping...")
+                continue
+
+            id_card_detected = True
+
             height, width = preprocessed_image.shape[:2]
             padding_top = max(20, int((y2 - y1) * 0.1))
-            padding_sides = max(10, int((x2 - x1) * 0.05)
-                                )
-            padding_bottom = max(50, int((y2 - y1) * 0.15)
-                                 )
+            padding_sides = max(10, int((x2 - x1) * 0.05))
+            padding_bottom = max(50, int((y2 - y1) * 0.15))
 
             x1_padded = max(0, x1 - padding_sides)
             y1_padded = max(0, y1 - padding_top)
@@ -496,6 +509,15 @@ def detect_and_process_id_card(image_path):
             cropped_path = os.path.join(debug_folder, 'cropped_id_card.jpg')
             cv2.imwrite(cropped_path, cropped_image)
             print(f"💾 Cropped ID card saved to: {cropped_path}")
+            
+            # Process the first valid detection
+            break
+        
+        if id_card_detected:
+            break
+
+    if not id_card_detected or cropped_image is None:
+        raise ValueError("No valid ID card detected with sufficient confidence. Please upload a clear photo of an Egyptian National ID card.")
 
     return process_image(cropped_image)
 
@@ -691,7 +713,7 @@ def detect_id_card_quick(image_path):
             photo_variance = np.var(photo_gray)
 
             # If variance is high, likely contains a photo
-            if photo_variance > 100:  # Threshold for detecting photo presence
+            if photo_variance > 50:  # Lowered threshold from 100 to 50
                 photo_detected = True
 
                 # Calculate photo bounding box in original image coordinates (LEFT side)
@@ -714,7 +736,7 @@ def detect_id_card_quick(image_path):
                     f"   📸 Photo detected in LEFT region (variance: {photo_variance:.2f})")
             else:
                 print(
-                    f"   ⚠️ No clear photo detected (variance: {photo_variance:.2f}, threshold: 100)")
+                    f"   ⚠️ No clear photo detected (variance: {photo_variance:.2f}, threshold: 50)")
 
         # Step 4: Detect individual ID number digits (if nid field was detected)
         id_digits = []
@@ -795,9 +817,7 @@ def detect_id_card_quick(image_path):
             all_required_present and  # lastName, nid, address, serial
             len(id_digits) == 14 and  # National ID must have exactly 14 digits
             photo_detected and  # Photo must be visible
-            avg_confidence > 0.4 and
-            quality_metrics["quality_level"] in ["good", "medium"] and
-            not quality_metrics["is_blurry"]
+            avg_confidence > 0.4
         )
 
         # Generate feedback message

@@ -13,10 +13,12 @@ export default function DocumentStep({ onNext, onUploaded }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [captureMode, setCaptureMode] = useState(null); // 'camera' or 'upload'
+  const [validationError, setValidationError] = useState(null);
 
   function handleFile(f) {
     setFile(f);
     setCaptureMode('upload');
+    setValidationError(null); // Clear error on new file
     if (onUploaded) onUploaded(f); // ✅ now always safe
   }
 
@@ -24,12 +26,30 @@ export default function DocumentStep({ onNext, onUploaded }) {
     setFile(capturedFile);
     setCaptureMode('camera');
     setShowCamera(false);
+    setValidationError(null); // Clear error on new capture
     if (onUploaded) onUploaded(capturedFile);
+  }
+
+  // Validate extracted data for Unknown fields
+  function validateOCRData(ocrData, docType) {
+    const criticalFields = docType === "id" 
+      ? ["full_name", "national_id", "birth_date"]
+      : ["full_name", "birth_date"];
+    
+    const unknownFields = criticalFields.filter(
+      field => !ocrData[field] || ocrData[field] === "Unknown" || ocrData[field].trim() === ""
+    );
+
+    return {
+      isValid: unknownFields.length === 0,
+      unknownFields
+    };
   }
 
   async function handleProcessDocument() {
     if (!file) return;
     setIsProcessing(true);
+    setValidationError(null);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -61,19 +81,32 @@ export default function DocumentStep({ onNext, onUploaded }) {
           second_name: extractedData.second_name || "Unknown",
           face_image: extractedData.face_image || null,
         };
+
+        // Validate the extracted data
+        const validation = validateOCRData(ocrData, type);
+        
+        if (!validation.isValid) {
+          // Force retry if critical fields are Unknown
+          const fieldNames = validation.unknownFields
+            .map(f => f.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()))
+            .join(', ');
+          
+          setValidationError(
+            `Could not read: ${fieldNames}. Please retake the ${type === "id" ? "ID" : "passport"} photo with better lighting and clarity.`
+          );
+          setIsProcessing(false);
+          return;
+        }
+
+        // All critical fields are valid, proceed
         onNext(ocrData, file, extractedData.face_image);
       } else {
         throw new Error(result.error || "OCR failed");
       }
     } catch (error) {
       console.error("OCR error:", error);
-      onNext(
-        {
-          name: "Sample Name",
-          idNumber: "123456789",
-          birthDate: "1990-01-01",
-        },
-        file
+      setValidationError(
+        `Failed to process ${type === "id" ? "ID" : "passport"}. Please ensure the image is clear and try again.`
       );
     } finally {
       setIsProcessing(false);
@@ -84,6 +117,14 @@ export default function DocumentStep({ onNext, onUploaded }) {
     <div className="space-y-6">
       <ThreeHero className="h-36 sm:h-52" />
       <GlassCard className="p-6">
+        {/* Validation Error Display */}
+        {validationError && (
+          <div className="mb-4 p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-200">
+            <p className="font-semibold">⚠️ Validation Failed</p>
+            <p className="text-sm mt-1">{validationError}</p>
+          </div>
+        )}
+
         {/* Document Type Selector */}
         <div className="flex gap-3 justify-center flex-col sm:flex-row">
           {[

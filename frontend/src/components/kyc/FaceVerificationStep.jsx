@@ -14,12 +14,12 @@ export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    const streamRef = useRef(null);
+    const streamRef = useRef(null); // Revert to using useRef for the stream
 
     // Start camera for live capture
     const startCamera = async () => {
         try {
-            console.log("🎥 Starting camera...");
+            console.log("🎥 Starting camera... (here)");
             setError(null);
 
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -33,17 +33,7 @@ export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
 
             console.log("✅ Camera access granted");
             streamRef.current = stream;
-            setStep("capturing"); // Change step AFTER getting stream
-
-            // Wait a bit for React to render the video element
-            setTimeout(() => {
-                if (videoRef.current) {
-                    console.log("📹 Attaching stream to video...");
-                    videoRef.current.srcObject = stream;
-                } else {
-                    console.error("❌ Video ref is null after timeout");
-                }
-            }, 100);
+            setStep("capturing"); // This will trigger the useEffect to attach the stream
         } catch (err) {
             console.error("❌ Camera error:", err);
             setError(`Unable to access camera: ${err.message}`);
@@ -54,6 +44,7 @@ export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
     // Stop camera
     const stopCamera = () => {
         if (streamRef.current) {
+            console.log("🛑 Stopping camera stream...");
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
@@ -83,10 +74,26 @@ export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
         console.log("✅ Photo captured");
     };
 
-    // Cleanup on unmount
+    // Effect to handle stream attachment and cleanup
     useEffect(() => {
-        return () => stopCamera();
-    }, []);
+        if (step === "capturing" && videoRef.current && streamRef.current) {
+            const videoElement = videoRef.current;
+            const stream = streamRef.current;
+
+            console.log("📹 useEffect triggered: Attaching stream to video element.");
+            videoElement.srcObject = stream;
+            videoElement.play().catch(err => {
+                console.error("Video play failed:", err);
+                setError("Could not start camera preview.");
+            });
+
+            // This cleanup function runs when the step changes OR the component unmounts
+            return () => {
+                console.log("🛑 useEffect cleanup: Stopping camera stream.");
+                stream.getTracks().forEach(track => track.stop());
+            };
+        }
+    }, [step]); // This effect depends on the 'step' state
 
     const verifyFaces = async (liveFaceBase64) => {
         setStep("verifying");
@@ -236,17 +243,14 @@ export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
                             </div>
 
                             <div className="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="w-full h-full object-cover transform scale-x-[-1]"
-                                />
-
-                                {/* Face oval guide */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-48 h-64 border-4 border-white/50 rounded-full"></div>
+                                <div className="absolute inset-0 transform scale-x-[-1]">
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="w-full h-full object-cover"
+                                    />
                                 </div>
                             </div>
 

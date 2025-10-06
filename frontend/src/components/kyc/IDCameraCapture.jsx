@@ -12,13 +12,16 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
     const abortControllersRef = useRef([]);  // Track ALL active abort controllers
     const isCapturingRef = useRef(false);  // Use ref for immediate updates
     const activeRequestsRef = useRef(0);  // Track number of active requests
+    const manualCaptureTimerRef = useRef(null); // Timer for manual fallback
 
+    const [isCameraFlipped, setIsCameraFlipped] = useState(false); // Add this state back
     const [isCapturing, setIsCapturing] = useState(false);
     const [error, setError] = useState(null);
     const [detection, setDetection] = useState(null);
     const [isDetecting, setIsDetecting] = useState(false);
     const [autoCapturing, setAutoCapturing] = useState(false);
     const [showingFields, setShowingFields] = useState(false);
+    const [showManualCapture, setShowManualCapture] = useState(false); // State for fallback button
 
     // Start camera
     const startCamera = async () => {
@@ -26,7 +29,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             setError(null);
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: "environment", // Use back camera for ID cards
+                    facingMode: { ideal: "environment" }, // Prefer back camera, but allow fallback
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
                 },
@@ -35,6 +38,19 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             streamRef.current = stream;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
+            }
+
+            // Check which camera is being used and set flip state
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+                const settings = track.getSettings();
+                if (settings.facingMode === 'user') {
+                    console.log('🤳 Front camera detected, will flip canvas for processing.');
+                    setIsCameraFlipped(true);
+                } else {
+                    console.log('📸 Back camera detected, no flip needed.');
+                    setIsCameraFlipped(false);
+                }
             }
         } catch (err) {
             console.error("Camera error:", err);
@@ -62,6 +78,11 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             clearInterval(detectionIntervalRef.current);
             detectionIntervalRef.current = null;
             console.log('🛑 Interval cleared ✓');
+        }
+        if (manualCaptureTimerRef.current) {
+            console.log('🛑 Clearing manual capture timer...');
+            clearTimeout(manualCaptureTimerRef.current);
+            manualCaptureTimerRef.current = null;
         }
 
         // Abort ALL in-flight requests immediately
@@ -123,6 +144,12 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             const context = canvas.getContext("2d");
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
+
+            // Apply horizontal flip if using front camera
+            if (isCameraFlipped) {
+                context.translate(canvas.width, 0);
+                context.scale(-1, 1);
+            }
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             // Convert canvas to blob (JPEG)
@@ -207,27 +234,36 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
     };
 
     // Capture final photo
-    const capturePhoto = (detectionData = null) => {
+    const capturePhoto = (detectionData = null, isManual = false) => {
+        // Stop the manual capture timer since a capture is being attempted
+        if (manualCaptureTimerRef.current) {
+            clearTimeout(manualCaptureTimerRef.current);
+        }
+
         // Use passed detection data or fall back to state (for manual captures)
         const currentDetection = detectionData || detection;
 
-        // Safety check: Only capture if ready_for_capture is true
-        // (Backend validates: 4 required fields + 14 digits + photo, firstName optional)
-        if (!currentDetection || !currentDetection.detected || !currentDetection.ready_for_capture ||
-            !currentDetection.id_digits || currentDetection.id_digits.length !== 14) {
-            console.warn('Capture aborted - missing requirements:', {
+        // For AUTO-CAPTURE: requirements are strict
+        if (!isManual && (!currentDetection || !currentDetection.ready_for_capture)) {
+            console.warn('Auto-capture aborted - missing requirements:', {
                 detected: currentDetection?.detected,
                 readyForCapture: currentDetection?.ready_for_capture,
-                fieldCount: currentDetection?.field_count,
-                digitCount: currentDetection?.id_digits?.length,
-                photoDetected: currentDetection?.photo?.detected
             });
             setAutoCapturing(false);
             setShowingFields(false);
             return;
         }
 
-        console.log('📸 Capturing photo - all requirements met!', {
+        // For MANUAL-CAPTURE: requirements are looser, just need an ID in the frame
+        if (isManual && (!currentDetection || !currentDetection.detected)) {
+            console.warn('Manual capture aborted - no ID card detected.');
+            setError("No ID card visible. Please position the card in the frame before capturing.");
+            // Briefly show error then clear it
+            setTimeout(() => setError(null), 3000);
+            return;
+        }
+
+        console.log(`📸 Capturing photo (Manual: ${isManual}) - all requirements met!`, {
             fields: currentDetection.field_count,
             digits: currentDetection.id_digits.length,
             photo: currentDetection.photo?.detected
@@ -240,6 +276,12 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+
+        // Apply horizontal flip if using front camera before capture
+        if (isCameraFlipped) {
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
+        }
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         canvas.toBlob(
@@ -291,6 +333,12 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                 console.log('⏰ Detection interval tick');
                 detectIDCard();
             }, 500);
+
+            // Start timer for manual capture fallback
+            manualCaptureTimerRef.current = setTimeout(() => {
+                console.log('⏳ Timer expired, showing manual capture button.');
+                setShowManualCapture(true);
+            }, 10000); // 10 seconds
         }, 500);
     };
 
@@ -309,12 +357,27 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
         setShowingFields(false);
         setIsDetecting(false);
         setError(null);
+        setShowManualCapture(false); // Reset manual capture state
+        setIsCameraFlipped(false); // Reset flip state
     };
 
-    // Cleanup on unmount
+    // Main effect for handling component visibility
     useEffect(() => {
-        return () => stopCamera();
-    }, []);
+        // When the component is opened, start the capture process
+        if (isOpen) {
+            handleStartCapture();
+        }
+
+        // Return a cleanup function that will be called whenever isOpen changes
+        // or when the component unmounts. This is the key to fixing the leak.
+        return () => {
+            console.log('🛑 Cleanup effect triggered (isOpen changed or unmount)');
+            // Ensure the camera is off when the component is not open/visible
+            if (isCapturingRef.current) {
+                stopCamera();
+            }
+        };
+    }, [isOpen]); // This effect is now tied to the component's visibility
 
     if (!isOpen) return null;
 
@@ -393,6 +456,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                             <p className="text-white text-lg font-medium">
                                                 Scanning for ID card...
                                             </p>
+                                            {showManualCapture && <p className="text-gray-300 text-sm">(Or use manual capture below)</p>}
                                         </div>
                                     </div>
                                 </div>
@@ -495,8 +559,17 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                             </div>
                         </div>
 
-                        {/* Cancel Button */}
-                        <div className="flex justify-center">
+                        {/* Button Group */}
+                        <div className="flex items-center gap-3 mt-4">
+                            {showManualCapture && !autoCapturing && (
+                                <Button
+                                    onClick={() => capturePhoto(null, true)}
+                                    className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+                                >
+                                    <Camera className="w-5 h-5 mr-2" />
+                                    Capture Manually
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 onClick={() => {
@@ -505,7 +578,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                     onCancel();
                                 }}
                                 disabled={autoCapturing}
-                                className="w-full"
+                                className={showManualCapture ? "h-12" : "w-full h-12"} // Full width if it's the only button
                             >
                                 {autoCapturing ? "Capturing..." : "Cancel"}
                             </Button>

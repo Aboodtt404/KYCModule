@@ -211,3 +211,50 @@ export function useGetPassportResult(path) {
     enabled: !!actor && !isFetching && !!path,
   });
 }
+
+// KYC Submissions
+export function useSubmitKYC() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ submissionId, kycData }) => {
+      if (!actor) throw new Error('Actor not available');
+      const jsonData = JSON.stringify(kycData);
+      await actor.submitKYC(submissionId, jsonData);
+      return { submissionId, kycData };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kycSubmissions'] });
+    },
+  });
+}
+
+export function useKYCSubmissions() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery({
+    queryKey: ['kycSubmissions'],
+    queryFn: async () => {
+      if (!actor) return [];
+      const submissions = await actor.getAllKYCSubmissions();
+      return submissions || [];
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useDeleteKYCSubmission() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (submissionId) => {
+      if (!actor) throw new Error('Actor not available');
+      await actor.deleteKYCSubmission(submissionId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kycSubmissions'] });
+    },
+  });
+}

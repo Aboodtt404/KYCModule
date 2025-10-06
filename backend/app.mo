@@ -61,6 +61,9 @@ persistent actor {
     stable var egyptianIdResults : [(Text, Text)] = [];
     stable var passportResults : [(Text, Text)] = [];
     
+    // KYC Submissions Storage - complete user verification data
+    stable var kycSubmissions : [(Text, Text)] = []; // (submission_id, json_data)
+    
     // Helper functions to work with stable arrays
     // Note: Map instances are created locally in functions to avoid stability issues
 
@@ -327,6 +330,31 @@ persistent actor {
         let map = textMap.fromIter(passportResults.vals());
         let (newMap, _) = textMap.remove(map, path);
         passportResults := Iter.toArray(textMap.entries(newMap));
+    };
+
+    // KYC Submissions Management
+    public func submitKYC(submissionId : Text, kycData : Text) : async () {
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(kycSubmissions.vals());
+        let newMap = textMap.put(map, submissionId, kycData);
+        kycSubmissions := Iter.toArray(textMap.entries(newMap));
+    };
+
+    public func getKYCSubmission(submissionId : Text) : async ?Text {
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(kycSubmissions.vals());
+        textMap.get(map, submissionId);
+    };
+
+    public func getAllKYCSubmissions() : async [(Text, Text)] {
+        kycSubmissions;
+    };
+
+    public func deleteKYCSubmission(submissionId : Text) : async () {
+        let textMap = OrderedMap.Make<Text>(Text.compare);
+        let map = textMap.fromIter(kycSubmissions.vals());
+        let (newMap, _) = textMap.remove(map, submissionId);
+        kycSubmissions := Iter.toArray(textMap.entries(newMap));
     };
 
     // API Request Handler (Synchronous for query functions)

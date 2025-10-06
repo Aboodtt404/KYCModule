@@ -49,7 +49,7 @@ pub async fn send_sms(to: String) -> Response {
     OTP_STORE.with(|store| {
         store.borrow_mut().insert(to.clone(), (otp.clone(), expires_at));
     });
-
+    
     let body_data = format!("To={}&From={}&Body={}", to, from_number, otp);
     let auth_header = format!(
         "Basic {}",

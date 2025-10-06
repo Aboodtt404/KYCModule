@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ProgressBar from "@/components/kyc/ProgressBar";
 import OTPStep from "@/components/kyc/OTPStep";
@@ -8,6 +8,7 @@ import { FaceVerificationStep } from "@/components/kyc/FaceVerificationStep";
 import ReviewStep from "@/components/kyc/ReviewStep";
 import SuccessStep from "@/components/kyc/SuccessStep";
 import LogoHero from "@/components/kyc/ThreeHero";
+import { useSubmitKYC } from "../../../useQueries";
 const TOTAL_STEPS = 5; // Simplified: Welcome → OTP → Document → Face → Review → Success
 // Progress calculation: only 100% when SuccessStep is reached
 const getProgress = (step) => {
@@ -25,6 +26,35 @@ export default function KYCPage() {
         faceImage: null,
         faceVerified: false,
     });
+    const [submissionComplete, setSubmissionComplete] = useState(false);
+    const submitKYC = useSubmitKYC();
+
+    // Submit KYC data when reaching success step
+    useEffect(() => {
+        if (step === TOTAL_STEPS && !submissionComplete && userData.faceVerified) {
+            const submissionId = `kyc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const kycData = {
+                submissionId,
+                timestamp: new Date().toISOString(),
+                phone: userData.phone,
+                documentFile: userData.documentFile?.name || "N/A",
+                ocrData: userData.ocrData,
+                faceVerified: userData.faceVerified,
+                status: "pending_review"
+            };
+
+            submitKYC.mutate({ submissionId, kycData }, {
+                onSuccess: () => {
+                    console.log("✅ KYC submission successful");
+                    setSubmissionComplete(true);
+                },
+                onError: (error) => {
+                    console.error("❌ KYC submission failed:", error);
+                }
+            });
+        }
+    }, [step, userData, submissionComplete, submitKYC]);
+
     const handleNext = () => {
         setStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
     };

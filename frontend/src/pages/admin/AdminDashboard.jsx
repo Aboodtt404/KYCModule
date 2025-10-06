@@ -2,10 +2,11 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, } from "../../components/ui/tooltip";
-import { FileText, Upload, Image, Star, Download, ScanText, Menu, Moon, Sun, } from "lucide-react";
+import { FileText, Upload, Image, Star, Download, ScanText, Menu, Moon, Sun, Users, } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 const tabs = [
     { id: "documents", label: "Documents", icon: FileText, to: "/admin/documents" },
+    { id: "kyc-submissions", label: "KYC Submissions", icon: Users, to: "/admin/kyc-submissions" },
     { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
     { id: "processor", label: "Image Processor", icon: Image, to: "/admin/processor" },
     { id: "rating", label: "OCR Rating", icon: Star, to: "/admin/rating" },

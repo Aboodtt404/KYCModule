@@ -11,6 +11,7 @@ import { ImageProcessor } from "./src/pages/processor/ImageProcessor";
 import { OCRRating } from "./src/pages/rating/OCRRating";
 import { OCRProcessor } from "./src/pages/ocr/OCRProcessor";
 import { ExternalDownload } from "./src/pages/external/ExternalDownload";
+import { KYCSubmissions } from "./src/pages/kyc/KYCSubmissions";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ const router = createBrowserRouter(
         { path: "rating", element: <OCRRating /> },
         { path: "ocr", element: <OCRProcessor /> },
         { path: "external", element: <ExternalDownload /> },
+        { path: "kyc-submissions", element: <KYCSubmissions /> },
       ],
     },
     { path: "/user", element: <KYCPage /> },
