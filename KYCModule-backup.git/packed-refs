@@ -1,4 +1,0 @@
-# pack-refs with: peeled fully-peeled sorted 
-3b0f04223ac539b4fff09cf78407fe52b40c75ea refs/heads/backup-master-last
-13b1452edeae21f9c53b955e2cf825c65143a034 refs/heads/master
-40d3d8d21b30ee3e884524cf644377805f2e6580 refs/heads/stable
