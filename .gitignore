@@ -44,4 +44,6 @@ venv/
 frontend/backup_src_ts
 
 # Motoko
-.mops/
+.mops
+
+backend/server
