@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Camera, Upload } from "lucide-react";
 import { IDCameraCapture } from "./IDCameraCapture";
 
-export default function DocumentStep({ onNext, onUploaded }) {
+export default function DocumentStep({ submissionId, onNext, onUploaded }) {
   const [type, setType] = useState("id");
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -60,7 +60,10 @@ export default function DocumentStep({ onNext, onUploaded }) {
 
       const response = await fetch(ocrEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "image/jpeg" },
+        headers: {
+          "Content-Type": "image/jpeg",
+          "X-Submission-ID": submissionId, // Pass submission ID
+        },
         body: arrayBuffer,
       });
 

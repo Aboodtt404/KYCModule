@@ -1,409 +1,307 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Loader2, Camera, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { verifyFace } from "@/services/faceVerification";
+import { verifyFace } from "../../services/faceVerification";
 
-export function FaceVerificationStep({ idFaceImage, onVerified, onSkip }) {
-    const [step, setStep] = useState("instruction"); // instruction, capturing, preview, verifying, success, failed
-    const [capturedImage, setCapturedImage] = useState(null);
-    const [capturedImagePreview, setCapturedImagePreview] = useState(null);
-    const [verificationResult, setVerificationResult] = useState(null);
-    const [error, setError] = useState(null);
+const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
+  const [step, setStep] = useState("instruction"); // instruction, camera, preview, verifying, success, failed
+  const [error, setError] = useState(null);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [verificationResult, setVerificationResult] = useState(null);
 
-    const videoRef = useRef(null);
-    const canvasRef = useRef(null);
-    const streamRef = useRef(null); // Revert to using useRef for the stream
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
-    // Start camera for live capture
-    const startCamera = async () => {
-        try {
-            console.log("🎥 Starting camera... (here)");
-            setError(null);
+  const startCamera = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera access error:", err);
+      setError("Could not access the camera. Please check your browser permissions.");
+      setStep("failed");
+    }
+  }, []);
 
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: "user", // Front camera
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                },
-                audio: false,
-            });
+  const stopCamera = useCallback(() => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  }, []);
 
-            console.log("✅ Camera access granted");
-            streamRef.current = stream;
-            setStep("capturing"); // This will trigger the useEffect to attach the stream
-        } catch (err) {
-            console.error("❌ Camera error:", err);
-            setError(`Unable to access camera: ${err.message}`);
-            setStep("instruction");
-        }
-    };
+  useEffect(() => {
+    if (step === "camera") {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return stopCamera;
+  }, [step, startCamera, stopCamera]);
 
-    // Stop camera
-    const stopCamera = () => {
-        if (streamRef.current) {
-            console.log("🛑 Stopping camera stream...");
-            streamRef.current.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
-        }
-    };
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+      setCapturedImage(dataUrl);
+      setStep("preview");
+    }
+  };
 
-    // Capture photo from video
-    const capturePhoto = () => {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
+  const handleVerify = async () => {
+    if (!capturedImage || !idFaceImage) return;
 
-        if (!video || !canvas) return;
+    setStep("verifying");
+    setError(null);
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const context = canvas.getContext("2d");
-        context.drawImage(video, 0, 0);
+    try {
+      // Ensure both images are raw base64 strings
+      const liveImageBase64 = capturedImage.split(",")[1] || capturedImage;
+      const idImageBase64 = idFaceImage.split(",")[1] || idFaceImage;
 
-        // Convert to base64
-        const base64data = canvas.toDataURL("image/jpeg", 0.95).split(',')[1];
-        const previewUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const result = await verifyFace(idImageBase64, liveImageBase64);
+      setVerificationResult(result.verification_result);
 
-        setCapturedImage(base64data);
-        setCapturedImagePreview(previewUrl);
+      if (result.verification_result.is_match) {
+        setStep("success");
+        setTimeout(onVerified, 2000); // Auto-proceed after 2 seconds
+      } else {
+        setStep("failed");
+      }
+    } catch (err) {
+      console.error("Face verification error:", err);
+      setError(err.message || "Face verification failed. Please try again.");
+      setStep("failed");
+    }
+  };
+  
+  const handleRetry = () => {
+    setCapturedImage(null);
+    setVerificationResult(null);
+    setError(null);
+    setStep("instruction");
+  };
 
-        stopCamera();
-        setStep("preview");
-        console.log("✅ Photo captured");
-    };
+  const renderContent = () => {
+    switch (step) {
+      case "instruction":
+        return (
+          <InstructionScreen
+            onStart={() => setStep("camera")}
+            idFaceImage={idFaceImage}
+          />
+        );
+      case "camera":
+        return (
+          <CameraScreen
+            videoRef={videoRef}
+            onCapture={handleCapture}
+            onCancel={handleRetry}
+          />
+        );
+      case "preview":
+        return (
+          <PreviewScreen
+            image={capturedImage}
+            onConfirm={handleVerify}
+            onRetry={() => setStep("camera")}
+          />
+        );
+      case "verifying":
+        return <LoadingScreen text="Verifying..." />;
+      case "success":
+        return <ResultScreen isSuccess={true} result={verificationResult} />;
+      case "failed":
+        return (
+          <ResultScreen
+            isSuccess={false}
+            result={verificationResult}
+            error={error}
+            onRetry={handleRetry}
+          />
+        );
+      default:
+        return <div>Invalid step</div>;
+    }
+  };
 
-    // Effect to handle stream attachment and cleanup
-    useEffect(() => {
-        if (step === "capturing" && videoRef.current && streamRef.current) {
-            const videoElement = videoRef.current;
-            const stream = streamRef.current;
+  return (
+    <div className="w-full max-w-2xl mx-auto p-4 bg-white/10 rounded-2xl">
+      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
+      {/* A canvas for capturing the image, hidden from view */}
+      <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
+    </div>
+  );
+};
 
-            console.log("📹 useEffect triggered: Attaching stream to video element.");
-            videoElement.srcObject = stream;
-            videoElement.play().catch(err => {
-                console.error("Video play failed:", err);
-                setError("Could not start camera preview.");
-            });
+// --- Child Components for each step ---
 
-            // This cleanup function runs when the step changes OR the component unmounts
-            return () => {
-                console.log("🛑 useEffect cleanup: Stopping camera stream.");
-                stream.getTracks().forEach(track => track.stop());
-            };
-        }
-    }, [step]); // This effect depends on the 'step' state
+const InstructionScreen = ({ onStart, idFaceImage }) => (
+  <motion.div
+    key="instruction"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    className="text-center space-y-6 p-6"
+  >
+    <h2 className="text-2xl font-bold text-white">Face Verification</h2>
+    <p className="text-gray-300">
+      Next, we need to verify your identity by comparing your face with the photo on your ID.
+    </p>
+    <div className="flex justify-center items-center gap-4">
+      <div className="w-32 h-40 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+        {idFaceImage ? (
+          <img
+            src={idFaceImage}
+            alt="Face from ID"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="text-xs text-gray-400 p-2">No ID Photo Found</div>
+        )}
+      </div>
+      <div className="text-5xl">➡️</div>
+      <div className="w-32 h-40 bg-gray-700 rounded-lg flex flex-col items-center justify-center">
+        <Camera className="w-12 h-12 text-gray-400" />
+        <p className="mt-2 text-sm text-gray-300">Live Selfie</p>
+      </div>
+    </div>
+    <p className="text-sm text-gray-400">
+      Please position your face in a well-lit area, remove any hats or glasses, and look directly at the camera.
+    </p>
+    <button
+      onClick={onStart}
+      className="w-full py-3 rounded-xl bg-emerald-500 text-black font-semibold transition transform hover:scale-105"
+      disabled={!idFaceImage}
+    >
+      {idFaceImage ? "Start Camera" : "Cannot Proceed (No ID Photo)"}
+    </button>
+  </motion.div>
+);
 
-    const verifyFaces = async (liveFaceBase64) => {
-        setStep("verifying");
-        setError(null);
+const CameraScreen = ({ videoRef, onCapture, onCancel }) => (
+  <motion.div
+    key="camera"
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.9 }}
+    className="space-y-4"
+  >
+    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
+      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+      <div className="absolute inset-0 border-8 border-white/50 rounded-lg" />
+    </div>
+    <div className="flex gap-4">
+        <button
+          onClick={onCancel}
+          className="w-full py-3 rounded-xl bg-gray-600 text-white font-semibold transition hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onCapture}
+          className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold transition hover:bg-blue-700"
+        >
+          Capture
+        </button>
+    </div>
+  </motion.div>
+);
 
-        try {
-            console.log("🔍 Starting face verification...");
-            const result = await verifyFace(idFaceImage, liveFaceBase64);
+const PreviewScreen = ({ image, onConfirm, onRetry }) => (
+  <motion.div
+    key="preview"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="space-y-4"
+  >
+    <h3 className="text-xl font-semibold text-center text-white">Is this picture clear?</h3>
+    <img src={image} alt="Captured selfie" className="w-full aspect-video object-cover rounded-lg" />
+    <div className="flex gap-4">
+      <button
+        onClick={onRetry}
+        className="w-full py-3 rounded-xl bg-gray-600 text-white font-semibold transition hover:bg-gray-700"
+      >
+        Retake
+      </button>
+      <button
+        onClick={onConfirm}
+        className="w-full py-3 rounded-xl bg-emerald-500 text-black font-semibold transition hover:bg-emerald-600"
+      >
+        Yes, looks good
+      </button>
+    </div>
+  </motion.div>
+);
 
-            console.log("✅ Face verification result:", result);
-            setVerificationResult(result.verification_result);
+const LoadingScreen = ({ text }) => (
+  <motion.div
+    key="loading"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="flex flex-col items-center justify-center space-y-4 p-12"
+  >
+    <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+    <p className="text-lg text-white font-semibold">{text}</p>
+  </motion.div>
+);
 
-            if (result.verification_result.is_match) {
-                setStep("success");
-                // Auto-proceed after 2 seconds
-                setTimeout(() => {
-                    onVerified();
-                }, 2000);
-            } else {
-                setStep("failed");
-            }
-        } catch (err) {
-            console.error("Face verification error:", err);
-            setError(err.message || "Face verification failed. Please try again.");
-            setStep("failed");
-        }
-    };
+const ResultScreen = ({ isSuccess, result, error, onRetry }) => (
+  <motion.div
+    key="result"
+    initial={{ opacity: 0, scale: 0.8 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.8 }}
+    className="text-center space-y-4 p-6"
+  >
+    {isSuccess ? (
+      <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto ring-4 ring-green-500">
+        <Check className="w-12 h-12 text-green-400" />
+      </div>
+    ) : (
+      <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto ring-4 ring-red-500">
+        <X className="w-12 h-12 text-red-400" />
+      </div>
+    )}
+    <h2 className="text-2xl font-bold">
+      {isSuccess ? "Verification Successful!" : "Verification Failed"}
+    </h2>
+    {result && (
+      <p className="text-sm text-gray-400">
+        Similarity Score:{" "}
+        <span className="font-bold text-white">
+          {(result.similarity_score * 100).toFixed(2)}%
+        </span>
+        <br />
+        (Required: {(result.threshold * 100).toFixed(2)}%)
+      </p>
+    )}
+    {error && <p className="text-red-400">{error}</p>}
+    {!isSuccess && (
+      <button
+        onClick={onRetry}
+        className="w-full py-3 mt-4 rounded-xl bg-blue-600 text-white font-semibold transition hover:bg-blue-700"
+      >
+        Try Again
+      </button>
+    )}
+  </motion.div>
+);
 
-    const handleRetry = () => {
-        // Clean up
-        stopCamera();
-        setCapturedImage(null);
-        setCapturedImagePreview(null);
-        setVerificationResult(null);
-        setError(null);
-        setStep("instruction");
-    };
-
-    const handleVerify = () => {
-        if (capturedImage) {
-            verifyFaces(capturedImage);
-        }
-    };
-
-    return (
-        <div className="w-full max-w-2xl mx-auto">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="bg-white/5 backdrop-blur-lg rounded-2xl p-8 border border-white/10"
-            >
-                {/* Header */}
-                <div className="text-center mb-6">
-                    <h2 className="text-2xl font-bold text-white mb-2">
-                        Face Verification
-                    </h2>
-                    <p className="text-gray-400">
-                        Let's verify that you're the owner of this ID
-                    </p>
-                </div>
-
-                <AnimatePresence mode="wait">
-                    {/* Instruction Screen */}
-                    {step === "instruction" && (
-                        <motion.div
-                            key="instruction"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
-                            className="space-y-6"
-                        >
-                            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6 space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <Camera className="w-5 h-5 text-blue-400 mt-1" />
-                                    <div>
-                                        <h3 className="font-semibold text-white mb-1">Take a clear selfie</h3>
-                                        <p className="text-sm text-gray-300">Make sure your face is clearly visible</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <CheckCircle className="w-5 h-5 text-green-400 mt-1" />
-                                    <div>
-                                        <h3 className="font-semibold text-white mb-1">Good lighting</h3>
-                                        <p className="text-sm text-gray-300">Find a well-lit area for best results</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <AlertCircle className="w-5 h-5 text-yellow-400 mt-1" />
-                                    <div>
-                                        <h3 className="font-semibold text-white mb-1">Remove accessories</h3>
-                                        <p className="text-sm text-gray-300">Take off glasses, hats, or masks</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* ID Face Preview */}
-                            {idFaceImage && (
-                                <div className="text-center">
-                                    <p className="text-sm text-gray-400 mb-3">We'll compare your selfie with this photo from your ID:</p>
-                                    <img
-                                        src={`data:image/jpeg;base64,${idFaceImage}`}
-                                        alt="ID Face"
-                                        className="w-32 h-32 mx-auto rounded-full object-cover border-4 border-white/20"
-                                    />
-                                </div>
-                            )}
-
-                            {/* Camera Button */}
-                            <div className="space-y-3">
-                                <Button
-                                    type="button"
-                                    onClick={startCamera}
-                                    className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                                >
-                                    <Camera className="w-5 h-5 mr-2" />
-                                    Take Selfie
-                                </Button>
-
-                                <p className="text-xs text-gray-400 text-center">
-                                    📸 For security, you must take a live photo (no uploads allowed)
-                                </p>
-                            </div>
-
-                            {/* Skip button (for testing) */}
-                            <Button
-                                variant="ghost"
-                                onClick={onSkip}
-                                className="w-full text-gray-400 hover:text-white"
-                            >
-                                Skip for now (Testing)
-                            </Button>
-                        </motion.div>
-                    )}
-
-                    {/* Camera Capturing Screen */}
-                    {step === "capturing" && (
-                        <motion.div
-                            key="capturing"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="space-y-4"
-                        >
-                            <div className="text-center mb-4">
-                                <p className="text-gray-300">Position your face in the frame</p>
-                            </div>
-
-                            <div className="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                                <div className="absolute inset-0 transform scale-x-[-1]">
-                                    <video
-                                        ref={videoRef}
-                                        autoPlay
-                                        playsInline
-                                        muted
-                                        className="w-full h-full object-cover"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3">
-                                <Button
-                                    onClick={capturePhoto}
-                                    className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-                                >
-                                    <Camera className="w-5 h-5 mr-2" />
-                                    Capture Photo
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        stopCamera();
-                                        setStep("instruction");
-                                    }}
-                                    className="h-12"
-                                >
-                                    Cancel
-                                </Button>
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* Preview Screen */}
-                    {step === "preview" && (
-                        <motion.div
-                            key="preview"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="space-y-6"
-                        >
-                            <div className="text-center">
-                                <p className="text-gray-400 mb-4">Preview your photo:</p>
-                                <img
-                                    src={capturedImagePreview}
-                                    alt="Your selfie"
-                                    className="w-64 h-64 mx-auto rounded-lg object-cover border-4 border-white/20"
-                                />
-                            </div>
-
-                            <div className="flex gap-3">
-                                <Button
-                                    onClick={handleVerify}
-                                    className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-                                >
-                                    <CheckCircle className="w-5 h-5 mr-2" />
-                                    Verify Face
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={handleRetry}
-                                    className="flex-1 h-12 text-lg font-semibold"
-                                >
-                                    <RefreshCw className="w-5 h-5 mr-2" />
-                                    Retake
-                                </Button>
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {/* Verifying Screen */}
-                    {step === "verifying" && (
-                        <motion.div
-                            key="verifying"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-center py-12 space-y-4"
-                        >
-                            <Loader2 className="w-16 h-16 animate-spin text-blue-400 mx-auto" />
-                            <h3 className="text-xl font-semibold text-white">Verifying your face...</h3>
-                            <p className="text-gray-400">Please wait while we compare the images</p>
-                        </motion.div>
-                    )}
-
-                    {/* Success Screen */}
-                    {step === "success" && verificationResult && (
-                        <motion.div
-                            key="success"
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-center py-12 space-y-4"
-                        >
-                            <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: "spring", duration: 0.5 }}
-                            >
-                                <CheckCircle className="w-24 h-24 text-green-400 mx-auto" />
-                            </motion.div>
-                            <h3 className="text-2xl font-bold text-white">Verification Successful!</h3>
-                            <p className="text-gray-300">
-                                Similarity Score: <span className="font-bold text-green-400">
-                                    {(verificationResult.similarity_score * 100).toFixed(1)}%
-                                </span>
-                            </p>
-                            <p className="text-sm text-gray-400">Redirecting to next step...</p>
-                        </motion.div>
-                    )}
-
-                    {/* Failed Screen */}
-                    {step === "failed" && (
-                        <motion.div
-                            key="failed"
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-center py-12 space-y-6"
-                        >
-                            <AlertCircle className="w-24 h-24 text-red-400 mx-auto" />
-                            <h3 className="text-2xl font-bold text-white">Verification Failed</h3>
-                            {verificationResult && (
-                                <p className="text-gray-300">
-                                    Similarity Score: <span className="font-bold text-red-400">
-                                        {(verificationResult.similarity_score * 100).toFixed(1)}%
-                                    </span>
-                                </p>
-                            )}
-                            <p className="text-gray-400">
-                                {error || "The faces don't match. Please ensure you're using your own ID."}
-                            </p>
-
-                            <div className="flex gap-3">
-                                <Button
-                                    onClick={handleRetry}
-                                    className="flex-1 bg-blue-500 hover:bg-blue-600"
-                                >
-                                    <RefreshCw className="w-4 h-4 mr-2" />
-                                    Try Again
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    onClick={onSkip}
-                                    className="flex-1"
-                                >
-                                    Skip for now
-                                </Button>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Error Message */}
-                {error && step !== "failed" && (
-                    <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                        <p className="text-sm text-red-400">{error}</p>
-                    </div>
-                )}
-            </motion.div>
-
-            {/* Hidden canvas for photo capture */}
-            <canvas ref={canvasRef} className="hidden" />
-        </div>
-    );
-}
+export { FaceVerificationStep };

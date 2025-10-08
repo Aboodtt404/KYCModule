@@ -8,11 +8,13 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const streamRef = useRef(null);
-    const detectionIntervalRef = useRef(null);
+    const detectionLoopTimeoutRef = useRef(null);
     const abortControllersRef = useRef([]);  // Track ALL active abort controllers
     const isCapturingRef = useRef(false);  // Use ref for immediate updates
     const activeRequestsRef = useRef(0);  // Track number of active requests
     const manualCaptureTimerRef = useRef(null); // Timer for manual fallback
+    const sessionIdRef = useRef(null); // Use ref for session ID to avoid stale closures
+    const isCapturingPhotoRef = useRef(false); // Ref to prevent race conditions on capture
 
     const [isCameraFlipped, setIsCameraFlipped] = useState(false); // Add this state back
     const [isCapturing, setIsCapturing] = useState(false);
@@ -73,11 +75,11 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
-        if (detectionIntervalRef.current) {
-            console.log('🛑 Clearing detection interval...');
-            clearInterval(detectionIntervalRef.current);
-            detectionIntervalRef.current = null;
-            console.log('🛑 Interval cleared ✓');
+        if (detectionLoopTimeoutRef.current) {
+            console.log('🛑 Clearing detection loop timeout...');
+            clearTimeout(detectionLoopTimeoutRef.current);
+            detectionLoopTimeoutRef.current = null;
+            console.log('🛑 Timeout cleared ✓');
         }
         if (manualCaptureTimerRef.current) {
             console.log('🛑 Clearing manual capture timer...');
@@ -105,6 +107,12 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
     // Send frame to backend for detection
     const detectIDCard = async () => {
+        // CRITICAL: Check if a capture is already in progress
+        if (isCapturingPhotoRef.current) {
+            console.log('🚫 SKIPPED: Capture already in progress.');
+            return;
+        }
+
         // CRITICAL: Check if camera is still active (use ref for immediate value)
         if (!isCapturingRef.current) {
             console.log('🚫 SKIPPED: isCapturingRef.current is FALSE - camera stopped');
@@ -145,11 +153,6 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
 
-            // Apply horizontal flip if using front camera
-            if (isCameraFlipped) {
-                context.translate(canvas.width, 0);
-                context.scale(-1, 1);
-            }
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             // Convert canvas to blob (JPEG)
@@ -163,9 +166,13 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             } else {
                 // Send to backend for detection
                 const arrayBuffer = await blob.arrayBuffer();
+                const headers = { "Content-Type": "image/jpeg" };
+                if (sessionIdRef.current) {
+                    headers['X-Session-ID'] = sessionIdRef.current;
+                }
                 const response = await fetch(`${OCR_SERVER_URL}/detect-id-card`, {
                     method: "POST",
-                    headers: { "Content-Type": "image/jpeg" },
+                    headers: headers,
                     body: arrayBuffer,
                     signal: abortController.signal,
                 });
@@ -175,6 +182,10 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                     console.log('❌ Camera stopped, ignoring detection result');
                 } else if (response.ok) {
                     const result = await response.json();
+                    if (result.session_id && !sessionIdRef.current) {
+                        sessionIdRef.current = result.session_id;
+                        console.log('🤝 Session ID established:', sessionIdRef.current);
+                    }
                     console.log('✅ Detection result:', {
                         detected: result.detected,
                         fields: result.field_count,
@@ -185,6 +196,8 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
                     // Auto-capture INSTANTLY when all 5 fields detected
                     if (result.ready_for_capture && !autoCapturing && !showingFields) {
+                        // Use ref to immediately stop further detection calls
+                        isCapturingPhotoRef.current = true;
                         console.log('🎯 ALL REQUIREMENTS MET! Capturing instantly:', {
                             fields: result.field_count,
                             digits: result.id_digits.length,
@@ -195,9 +208,9 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                         setAutoCapturing(true);
 
                         // Stop detection loop immediately
-                        if (detectionIntervalRef.current) {
-                            clearInterval(detectionIntervalRef.current);
-                            detectionIntervalRef.current = null;
+                        if (detectionLoopTimeoutRef.current) {
+                            clearTimeout(detectionLoopTimeoutRef.current);
+                            detectionLoopTimeoutRef.current = null;
                         }
 
                         // Capture immediately - pass detection result directly (state update is async!)
@@ -230,6 +243,21 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             activeRequestsRef.current -= 1;
             console.log('📊 Active requests (after):', activeRequestsRef.current);
             setIsDetecting(false);
+        }
+    };
+
+    // Recursive function to create a smooth detection loop
+    const detectionLoop = async () => {
+        if (!isCapturingRef.current) {
+            console.log('➡️ Detection loop stopped.');
+            return;
+        }
+
+        await detectIDCard();
+
+        // Schedule the next iteration of the loop
+        if (isCapturingRef.current) { // Check again in case it was stopped during the await
+            detectionLoopTimeoutRef.current = setTimeout(detectionLoop, 500);
         }
     };
 
@@ -277,11 +305,6 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        // Apply horizontal flip if using front camera before capture
-        if (isCameraFlipped) {
-            context.translate(canvas.width, 0);
-            context.scale(-1, 1);
-        }
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         canvas.toBlob(
@@ -294,6 +317,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                     setAutoCapturing(false);
                     setShowingFields(false);
                     setDetection(null);
+                    isCapturingPhotoRef.current = false; // Reset capture lock
 
                     onCapture(file);
                     stopCamera();
@@ -308,6 +332,8 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
     // Handle start capture
     const handleStartCapture = async () => {
         console.log('🎬 Starting fresh camera session');
+        sessionIdRef.current = null; // Reset session on new capture
+        isCapturingPhotoRef.current = false; // Reset capture lock
 
         // Reset all states first to ensure clean start
         setDetection(null);
@@ -326,13 +352,9 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
         // Small delay before starting detection to ensure camera is ready
         setTimeout(() => {
-            console.log('🔄 Starting detection interval...');
-            console.log('🔍 isCapturingRef.current =', isCapturingRef.current);
-            // Start detection loop (every 500ms)
-            detectionIntervalRef.current = setInterval(() => {
-                console.log('⏰ Detection interval tick');
-                detectIDCard();
-            }, 500);
+            console.log('🔄 Starting detection loop...');
+            // Start detection loop
+            detectionLoop();
 
             // Start timer for manual capture fallback
             manualCaptureTimerRef.current = setTimeout(() => {
@@ -348,6 +370,8 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
         // Stop camera and clear interval (this sets isCapturingRef.current = false)
         stopCamera();
+        sessionIdRef.current = null; // Clear session ID on stop
+        isCapturingPhotoRef.current = false; // Reset capture lock
 
         // Reset ALL states completely  
         setIsCapturing(false);

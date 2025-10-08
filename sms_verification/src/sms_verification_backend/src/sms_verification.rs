@@ -49,7 +49,16 @@ pub async fn send_sms(to: String) -> Response {
     OTP_STORE.with(|store| {
         store.borrow_mut().insert(to.clone(), (otp.clone(), expires_at));
     });
-    
+
+    let account_sid = "AC845e6ff23edabffadee227a2a525d409";
+    let auth_token = "7bfa91aa179e87d5200a9ae8b45e5c83";
+    let from_number = "+19342601398";
+
+    let url = format!(
+        "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+        account_sid
+    );
+
     let body_data = format!("To={}&From={}&Body={}", to, from_number, otp);
     let auth_header = format!(
         "Basic {}",

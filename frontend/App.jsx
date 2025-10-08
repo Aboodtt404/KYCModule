@@ -5,12 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Login } from "./src/pages/auth/Login";
 import { AdminDashboard } from "./src/pages/admin/AdminDashboard";
 import KYCPage from "./src/pages/user/KYCPage";
-import { DocumentList } from "./src/pages/documents/DocumentList";
 import { FileUpload } from "./src/pages/upload/FileUpload";
-import { ImageProcessor } from "./src/pages/processor/ImageProcessor";
-import { OCRRating } from "./src/pages/rating/OCRRating";
 import { OCRProcessor } from "./src/pages/ocr/OCRProcessor";
-import { ExternalDownload } from "./src/pages/external/ExternalDownload";
 import { KYCSubmissions } from "./src/pages/kyc/KYCSubmissions";
 
 const queryClient = new QueryClient({
@@ -29,13 +25,9 @@ const router = createBrowserRouter(
       path: "/admin",
       element: <AdminDashboard />,
       children: [
-        { index: true, element: <DocumentList /> },
-        { path: "documents", element: <DocumentList /> },
+        { index: true, element: <FileUpload /> },
         { path: "upload", element: <FileUpload /> },
-        { path: "processor", element: <ImageProcessor /> },
-        { path: "rating", element: <OCRRating /> },
         { path: "ocr", element: <OCRProcessor /> },
-        { path: "external", element: <ExternalDownload /> },
         { path: "kyc-submissions", element: <KYCSubmissions /> },
       ],
     },

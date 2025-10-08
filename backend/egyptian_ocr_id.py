@@ -10,58 +10,44 @@ reader = easyocr.Reader(['ar'], gpu=False)
 
 
 def preprocess_image(cropped_image):
-    """
-    Smart preprocessing for OCR that handles high-resolution images better.
-    Resizes images to optimal resolution and applies appropriate preprocessing.
-    """
     height, width = cropped_image.shape[:2]
     print(f"🔍 Original image size: {width}x{height}")
 
-    # Convert to grayscale first
     gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
 
-    # Smart resizing based on image dimensions
     if width > 1500 or height > 1500:
         print("📏 High-resolution image detected, applying smart resizing...")
 
-        # Calculate optimal size (target width around 1000-1200px)
         optimal_width = 1000
         if width > height:
-            # Landscape orientation
             scale = optimal_width / width
             new_width = optimal_width
             new_height = int(height * scale)
         else:
-            # Portrait orientation
             optimal_height = 1000
             scale = optimal_height / height
             new_height = optimal_height
             new_width = int(width * scale)
 
-        # Ensure minimum dimensions for readability
         new_width = max(new_width, 400)
         new_height = max(new_height, 300)
 
         print(
             f"📐 Resizing from {width}x{height} to {new_width}x{new_height} (scale: {scale:.3f})")
 
-        # Use INTER_AREA for downsampling (better for text)
         gray_image = cv2.resize(gray_image, (new_width, new_height),
                                 interpolation=cv2.INTER_AREA)
 
-        # Apply denoising for high-res images
         print("🧹 Applying denoising for high-resolution image...")
         gray_image = cv2.fastNlMeansDenoising(
             gray_image, h=10, templateWindowSize=7, searchWindowSize=21)
 
-        # Enhance contrast for better OCR
         print("🎨 Enhancing contrast...")
         gray_image = cv2.equalizeHist(gray_image)
 
     elif width < 400 or height < 300:
         print("📏 Low-resolution image detected, upscaling...")
 
-        # Upscale small images
         scale = max(400 / width, 300 / height)
         new_width = int(width * scale)
         new_height = int(height * scale)
@@ -69,14 +55,12 @@ def preprocess_image(cropped_image):
         print(
             f"📐 Upscaling from {width}x{height} to {new_width}x{new_height} (scale: {scale:.3f})")
 
-        # Use INTER_CUBIC for upsampling
         gray_image = cv2.resize(gray_image, (new_width, new_height),
                                 interpolation=cv2.INTER_CUBIC)
 
     else:
         print("✅ Image size is optimal for OCR")
 
-    # Final contrast enhancement for all images
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray_image = clahe.apply(gray_image)
 
@@ -467,7 +451,6 @@ def detect_and_process_id_card(image_path):
     num_detections = len(id_card_results[0].boxes) if id_card_results[0].boxes is not None else 0
     print(f"   📊 Total ID card detections: {num_detections}")
 
-    # Validate that an ID card is actually detected
     if num_detections == 0:
         print("   ❌ No ID card detected in the image!")
         raise ValueError("No ID card detected in the image. Please upload a clear photo of an Egyptian National ID card.")
@@ -482,7 +465,6 @@ def detect_and_process_id_card(image_path):
             print(
                 f"   🎯 ID Card detected (conf: {confidence:.3f}) at [{x1}, {y1}, {x2}, {y2}]")
 
-            # Minimum confidence threshold for ID detection
             if confidence < 0.3:
                 print(f"   ⚠️ Confidence too low ({confidence:.3f}), skipping...")
                 continue
@@ -510,7 +492,6 @@ def detect_and_process_id_card(image_path):
             cv2.imwrite(cropped_path, cropped_image)
             print(f"💾 Cropped ID card saved to: {cropped_path}")
             
-            # Process the first valid detection
             break
         
         if id_card_detected:
@@ -523,37 +504,27 @@ def detect_and_process_id_card(image_path):
 
 
 def check_image_quality(image):
-    """
-    Check image quality for ID card detection.
-    Returns quality metrics: blur, brightness, size, and overall quality score.
-    """
     height, width = image.shape[:2]
 
-    # Convert to grayscale for blur detection
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(
         image.shape) == 3 else image
 
-    # 1. Blur Detection using Laplacian variance
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-    blur_score = min(laplacian_var / 100, 1.0)  # Normalize to 0-1
-    is_blurry = laplacian_var < 50  # Threshold for blur detection
+    blur_score = min(laplacian_var / 100, 1.0)
+    is_blurry = laplacian_var < 50
 
-    # 2. Brightness Check
     brightness = np.mean(gray)
     brightness_score = 1.0 if 50 < brightness < 200 else 0.5
     is_too_dark = brightness < 50
     is_too_bright = brightness > 200
 
-    # 3. Size Check (minimum resolution for good OCR)
     min_width, min_height = 400, 300
     size_ok = width >= min_width and height >= min_height
     size_score = 1.0 if size_ok else 0.5
 
-    # 4. Overall Quality Score (0-100)
     quality_score = int(
         (blur_score * 0.5 + brightness_score * 0.3 + size_score * 0.2) * 100)
 
-    # Determine quality level
     if quality_score >= 70 and not is_blurry:
         quality_level = "good"
         feedback = "Perfect! Hold steady."
@@ -595,13 +566,23 @@ def check_image_quality(image):
     }
 
 
-def detect_id_card_quick(image_path):
+def detect_id_card_quick(image_path, session_data=None):
     """
-    Quick ID card detection with field-level detection.
-    Detects individual fields (firstName, lastName, nid, address, serial) 
-    and individual ID number digits in real-time.
-    Returns detection status, field bounding boxes, and quality metrics.
+    Quickly detects fields on an ID card, accumulates the best results over a session,
+    and determines if the card is ready for a final, high-quality capture.
+
+    Args:
+        image_path (str): The path to the image file to be processed.
+        session_data (dict, optional): A dictionary containing data from previous frames in the
+                                     same session. This allows for accumulating results.
+                                     Defaults to None.
+
+    Returns:
+        dict: A dictionary containing detailed information about the detection, including
+              detected fields, image quality metrics, and whether the card is ready for capture.
     """
+    if session_data is None:
+        session_data = {}
     print(f"🔍 Quick field detection for: {image_path}")
 
     image = cv2.imread(image_path)
@@ -616,13 +597,11 @@ def detect_id_card_quick(image_path):
             "field_count": 0
         }
 
-    # Check image quality first
     quality_metrics = check_image_quality(image)
 
     try:
         height, width = image.shape[:2]
 
-        # Step 1: Detect ID card boundary first
         id_card_model = YOLO('models/detect_id_card.pt')
         card_results = id_card_model(image, conf=0.5, verbose=False)
 
@@ -631,14 +610,12 @@ def detect_id_card_quick(image_path):
         crop_offset_x = 0
         crop_offset_y = 0
 
-        # If ID card is detected, crop to it for better field detection
         for result in card_results:
             if result.boxes is not None and len(result.boxes) > 0:
-                box = result.boxes[0]  # Use first detection
+                box = result.boxes[0]
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 card_detected = True
 
-                # Add padding
                 padding = 20
                 x1 = max(0, x1 - padding)
                 y1 = max(0, y1 - padding)
@@ -650,11 +627,10 @@ def detect_id_card_quick(image_path):
                 crop_offset_y = y1
                 break
 
-        # Step 2: Detect individual fields on the ID card
         fields_model = YOLO('models/detect_odjects.pt')
         field_results = fields_model(cropped_image, conf=0.3, verbose=False)
 
-        detected_fields = []
+        current_frame_fields = []
         field_counts = {
             'firstName': 0,
             'lastName': 0,
@@ -671,17 +647,15 @@ def detect_id_card_quick(image_path):
                     confidence = float(box.conf[0].item())
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                    # Adjust coordinates back to original image if cropped
                     x1_orig = x1 + crop_offset_x
                     y1_orig = y1 + crop_offset_y
                     x2_orig = x2 + crop_offset_x
                     y2_orig = y2 + crop_offset_y
 
-                    # Track field counts
                     if class_name in field_counts:
                         field_counts[class_name] += 1
 
-                    detected_fields.append({
+                    current_frame_fields.append({
                         "field": class_name,
                         "confidence": round(confidence, 3),
                         "bbox": {
@@ -698,25 +672,33 @@ def detect_id_card_quick(image_path):
                         }
                     })
 
-        # Step 3: Detect photo region on Egyptian ID (on the LEFT side)
+        # Merge with session data
+        merged_fields = session_data.get('fields', [])
+        for new_field in current_frame_fields:
+            found = False
+            for i, old_field in enumerate(merged_fields):
+                if new_field['field'] == old_field['field']:
+                    found = True
+                    if new_field['confidence'] > old_field['confidence']:
+                        merged_fields[i] = new_field
+                    break
+            if not found:
+                merged_fields.append(new_field)
+
         photo_detected = False
         photo_bbox = None
 
         if card_detected:
-            # Egyptian ID photos are on the LEFT side (left 30% of the card)
             photo_region_x_end = int(
-                cropped_image.shape[1] * 0.30)  # Left 30%
+                cropped_image.shape[1] * 0.30)
             photo_region = cropped_image[:, :photo_region_x_end]
 
-            # Check if there's enough contrast/complexity in photo region (indicating a photo)
             photo_gray = cv2.cvtColor(photo_region, cv2.COLOR_BGR2GRAY)
             photo_variance = np.var(photo_gray)
 
-            # If variance is high, likely contains a photo
-            if photo_variance > 50:  # Lowered threshold from 100 to 50
+            if photo_variance > 50:
                 photo_detected = True
 
-                # Calculate photo bounding box in original image coordinates (LEFT side)
                 photo_bbox = {
                     "x1": int(crop_offset_x),
                     "y1": int(crop_offset_y),
@@ -738,10 +720,15 @@ def detect_id_card_quick(image_path):
                 print(
                     f"   ⚠️ No clear photo detected (variance: {photo_variance:.2f}, threshold: 50)")
 
-        # Step 4: Detect individual ID number digits (if nid field was detected)
+        # Use session photo detection if better
+        if session_data.get('photo', {}).get('detected') and not photo_detected:
+             photo_detected = session_data['photo']['detected']
+             photo_bbox = session_data['photo']['bbox']
+
+
         id_digits = []
         nid_field = next(
-            (f for f in detected_fields if f['field'] == 'nid'), None)
+            (f for f in merged_fields if f['field'] == 'nid'), None)
 
         if nid_field:
             nid_bbox = nid_field['bbox']
@@ -763,7 +750,6 @@ def detect_id_card_quick(image_path):
                             confidence = float(box.conf[0].item())
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                            # Adjust to original image coordinates
                             x1_orig = x1 + nid_bbox['x1']
                             y1_orig = y1 + y1_exp
                             x2_orig = x2 + nid_bbox['x1']
@@ -784,52 +770,51 @@ def detect_id_card_quick(image_path):
                                 }
                             })
 
-                # Sort digits by x position (left to right)
                 id_digits.sort(key=lambda d: d['bbox']['x1'])
             except Exception as e:
                 print(f"⚠️ Digit detection error: {e}")
+        
+        # Merge ID digits with session data
+        session_id_digits = session_data.get('id_digits', [])
+        if len(id_digits) > len(session_id_digits):
+            # Current frame has more digits, use it
+            pass
+        elif len(session_id_digits) > 0:
+            id_digits = session_id_digits
 
-        # Calculate overall detection quality
-        # firstName is optional (model struggles with it), but other 4 fields are required
-        required_fields = ['lastName', 'nid', 'address',
-                           'serial']  # firstName is optional
+
+        required_fields = ['lastName', 'nid', 'address', 'serial']
         optional_fields = ['firstName']
-        detected_field_names = [f['field'] for f in detected_fields]
+        detected_field_names = [f['field'] for f in merged_fields]
 
         required_found = [
             f for f in required_fields if f in detected_field_names]
         optional_found = [
             f for f in optional_fields if f in detected_field_names]
 
-        all_required_present = len(required_found) == len(
-            required_fields)  # All 4 required fields
-        fields_found = len(required_found) + \
-            len(optional_found)  # Total count for display
+        all_required_present = len(required_found) == len(required_fields)
+        has_firstname = 'firstName' in detected_field_names
+        fields_found = len(required_found) + len(optional_found)
 
-        # Average confidence of detected fields
-        avg_confidence = sum(f['confidence'] for f in detected_fields) / \
-            len(detected_fields) if detected_fields else 0
+        avg_confidence = sum(f['confidence'] for f in merged_fields) / \
+            len(merged_fields) if merged_fields else 0
 
-        # Determine if ready for capture
         ready_for_capture = (
-            # Must have ALL 4 REQUIRED fields + 14 digits + photo (firstName optional)
-            len(detected_fields) > 0 and
-            all_required_present and  # lastName, nid, address, serial
-            len(id_digits) == 14 and  # National ID must have exactly 14 digits
-            photo_detected and  # Photo must be visible
+            len(merged_fields) > 0 and
+            all_required_present and
+            len(id_digits) == 14 and
+            photo_detected and
             avg_confidence > 0.4
         )
 
-        # Generate feedback message
-        if not detected_fields:
+        if not merged_fields:
             message = "No ID card detected. Show your ID to camera."
         elif not all_required_present:
-            # Missing required fields
             missing_required = [
                 f for f in required_fields if f not in detected_field_names]
             field_labels = {
                 'lastName': 'Last Name',
-                'nid': 'National ID',
+                'nid': 'National ID (with Birthdate)',
                 'address': 'Address',
                 'serial': 'Serial'
             }
@@ -868,15 +853,15 @@ def detect_id_card_quick(image_path):
         print(f"   ✅ Ready for capture: {ready_for_capture}")
 
         return {
-            "detected": bool(len(detected_fields) > 0),
-            "fields": detected_fields,
+            "detected": bool(len(merged_fields) > 0),
+            "fields": merged_fields,
             "id_digits": id_digits,
             "photo": {
                 "detected": bool(photo_detected),
                 "bbox": photo_bbox if photo_detected else None
             },
             "field_count": int(fields_found),
-            "total_detections": int(len(detected_fields)),
+            "total_detections": int(len(merged_fields)),
             "confidence": round(float(avg_confidence), 3),
             "quality": quality_metrics,
             "ready_for_capture": bool(ready_for_capture),

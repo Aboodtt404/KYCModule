@@ -14,94 +14,109 @@ from PIL import Image
 import cv2
 import numpy as np
 
-# Face recognition imports
+# Use the simpler, more powerful face_recognition library
+import face_recognition
+
+# Add facenet-pytorch for the initial, more accurate face cropping
+from facenet_pytorch import MTCNN
+import torch
+from torch.nn.functional import cosine_similarity
+
+# Initialize MTCNN for the initial face crop from the ID card
+logger = logging.getLogger(__name__)
+logger.info("Initializing MTCNN for face extraction...")
 try:
-    from facenet_pytorch import MTCNN, InceptionResnetV1
-    import torch
-    from torch.nn.functional import cosine_similarity
-    FACE_RECOGNITION_AVAILABLE = True
-
-    # Initialize face recognition models
-    print("🔍 Initializing face recognition models...")
-    mtcnn = MTCNN(image_size=160, margin=0)
-    face_model = InceptionResnetV1(pretrained='vggface2').eval()
-    print("✅ Face recognition models loaded successfully!")
-
-    def get_face_embedding(img):
-        """Extract face embedding from image"""
-        face = mtcnn(img)
-        if face is None:
-            return None
-        with torch.no_grad():
-            return face_model(face.unsqueeze(0))
-
-    def compare_faces(id_image, live_image):
-        """Compare two face images and return similarity score"""
-        id_embedding = get_face_embedding(id_image)
-        live_embedding = get_face_embedding(live_image)
-
-        if id_embedding is None or live_embedding is None:
-            return None, "Face not detected in one of the images"
-
-        similarity = cosine_similarity(id_embedding, live_embedding)
-        similarity_score = similarity.item()
-
-        threshold = 0.7
-        is_match = similarity_score > threshold
-
-        return {
-            "similarity_score": similarity_score,
-            "is_match": is_match,
-            "threshold": threshold,
-            "confidence": "high" if similarity_score > 0.8 else "medium" if similarity_score > 0.6 else "low"
-        }, None
-
-except ImportError as e:
-    print(f"⚠️ Face recognition not available: {e}")
-    print("💡 To enable face recognition, run: pip install torch torchvision facenet-pytorch")
-    FACE_RECOGNITION_AVAILABLE = False
+    mtcnn = MTCNN(image_size=160, margin=0, keep_all=False, device='cpu')
+    logger.info("✅ MTCNN loaded successfully!")
+    FACE_EXTRACTION_AVAILABLE = True
 except Exception as e:
-    print(f"⚠️ Face recognition initialization failed: {e}")
-    FACE_RECOGNITION_AVAILABLE = False
+    logger.error(f"⚠️ Could not initialize MTCNN, face extraction will be disabled: {e}")
+    FACE_EXTRACTION_AVAILABLE = False
+
+import uuid
+
+# A simple in-memory cache for session data.
+# In a production environment, this should be replaced with a more robust solution like Redis.
+SESSION_CACHE = {}
+
+
+def preprocess_for_face_verification(pil_image, is_id_card=False):
+    """Applies preprocessing to enhance images for face verification."""
+    logger.info(f"Preprocessing image, is_id_card={is_id_card}")
+    
+    image_np = np.array(pil_image.convert('RGB'))
+    image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+
+    # 1. Convert to LAB color space for luminance-independent contrast enhancement
+    lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # 2. Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    cl = clahe.apply(l)
+    limg = cv2.merge((cl, a, b))
+    
+    # 3. Convert back to BGR
+    enhanced_bgr = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    
+    final_image_bgr = enhanced_bgr
+    
+    if is_id_card:
+        # 4. For ID cards, apply a sharpening filter to accentuate features
+        kernel = np.array([[0, -1, 0],
+                           [-1, 5,-1],
+                           [0, -1, 0]])
+        sharpened_bgr = cv2.filter2D(enhanced_bgr, -1, kernel)
+        final_image_bgr = sharpened_bgr
+
+    # Convert back to RGB for facenet and return as a PIL Image
+    final_image_rgb = cv2.cvtColor(final_image_bgr, cv2.COLOR_BGR2RGB)
+    
+    return Image.fromarray(final_image_rgb)
 
 
 def extract_face_from_id(image_path):
-    """Extract face from ID card image using YOLO face detection"""
+    """Extracts a padded face from an ID card image to provide a better visual crop."""
+    if not FACE_EXTRACTION_AVAILABLE:
+        return None, "MTCNN model not available for face extraction."
+    
     try:
-        # Load the image
-        image = cv2.imread(image_path)
-        if image is None:
-            return None, "Could not load image"
+        image = Image.open(image_path).convert('RGB')
+        image_np = np.array(image)
 
-        # Load YOLO face detection model (you might need to train this or use a pre-trained one)
-        # For now, we'll use MTCNN to detect face
-        if FACE_RECOGNITION_AVAILABLE:
-            # Convert BGR to RGB for MTCNN
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(rgb_image)
+        # Detect face using MTCNN
+        boxes, _ = mtcnn.detect(image)
 
-            # Detect face and get bounding box
-            face_tensor = mtcnn.detect(pil_image)
-            if face_tensor[0] is not None and len(face_tensor[0]) > 0:
-                # Get the first detected face
-                bbox = face_tensor[0][0]  # [x1, y1, x2, y2]
-                x1, y1, x2, y2 = bbox.astype(int)
+        if boxes is None or len(boxes) == 0:
+            return None, "No face detected in the ID image for cropping."
 
-                # Crop face from image
-                face_crop = image[y1:y2, x1:x2]
+        # Get the bounding box of the first detected face
+        box = boxes[0]
+        x1, y1, x2, y2 = [int(c) for c in box]
 
-                # Convert to base64 for transmission
-                _, buffer = cv2.imencode('.jpg', face_crop)
-                face_base64 = base64.b64encode(buffer).decode('utf-8')
+        # Add 30% padding to each side to include hair, ears, etc.
+        width = x2 - x1
+        height = y2 - y1
+        padding_x = int(width * 0.30)
+        padding_y = int(height * 0.30)
 
-                return face_base64, None
-            else:
-                return None, "No face detected in ID image"
-        else:
-            return None, "Face recognition not available"
+        x1_padded = max(0, x1 - padding_x)
+        y1_padded = max(0, y1 - padding_y)
+        x2_padded = min(image_np.shape[1], x2 + padding_x)
+        y2_padded = min(image_np.shape[0], y2 + padding_y)
+        
+        face_crop_np = image_np[y1_padded:y2_padded, x1_padded:x2_padded]
+
+        # Convert the cropped face back to a Base64 string for the frontend
+        _, buffer = cv2.imencode('.jpg', cv2.cvtColor(face_crop_np, cv2.COLOR_RGB2BGR))
+        face_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        logger.info("Successfully extracted padded face from ID.")
+        return face_base64, None
 
     except Exception as e:
-        return None, f"Error extracting face: {str(e)}"
+        logger.error(f"Error extracting face from ID: {e}")
+        return None, f"Error during face extraction: {str(e)}"
 
 
 logging.basicConfig(level=logging.INFO)
@@ -112,7 +127,7 @@ CORS(app, resources={
     r"/*": {
         "origins": "*",
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type", "X-Session-ID", "X-Submission-ID"]
     }
 })
 
@@ -254,7 +269,13 @@ def detect_id_card():
         if not request.data:
             return jsonify({"error": "No image data provided"}), 400
 
-        logger.info(f"ID detection request: {len(request.data)} bytes")
+        session_id = request.headers.get('X-Session-ID')
+        if not session_id:
+            session_id = str(uuid.uuid4())
+
+        session_data = SESSION_CACHE.get(session_id, {})
+        
+        logger.info(f"ID detection request: {len(request.data)} bytes, Session: {session_id}")
 
         if len(request.data) < 100:
             return jsonify({"error": "Data too small to be a valid image"}), 400
@@ -266,7 +287,11 @@ def detect_id_card():
 
         try:
             # Run quick detection
-            result = detect_id_card_quick(temp_file_path)
+            result = detect_id_card_quick(temp_file_path, session_data)
+
+            # Update session cache
+            if 'fields' in result:
+                SESSION_CACHE[session_id] = result
 
             logger.info(
                 f"Detection: {result['detected']}, "
@@ -274,6 +299,8 @@ def detect_id_card():
                 f"Quality: {result.get('quality', {}).get('quality_level', 'unknown')}"
             )
 
+            # Add session ID to response for the client
+            result['session_id'] = session_id
             return jsonify(result)
 
         finally:
@@ -312,9 +339,8 @@ def process_egyptian_id():
 
             processing_time = time.time() - start_time
 
-            # Extract face from ID card for verification
-            face_image_base64, face_error = extract_face_from_id(
-                temp_file_path)
+            # Extract a padded face from the ID card to send to the frontend for display
+            face_image_base64, face_error = extract_face_from_id(temp_file_path)
 
             # Extract just the filename from the debug image path
             debug_image_filename = os.path.basename(
@@ -369,9 +395,12 @@ def process_egyptian_id():
 
 @app.route('/verify-face', methods=['POST'])
 def verify_face():
-    """Verify face similarity between ID image and live selfie"""
+    """
+    Verifies face similarity between an ID image and a live selfie.
+    This new implementation uses the 'face_recognition' library.
+    """
     try:
-        if not FACE_RECOGNITION_AVAILABLE:
+        if not FACE_EXTRACTION_AVAILABLE:
             return jsonify({"error": "Face recognition not available"}), 503
 
         data = request.get_json()
@@ -387,35 +416,61 @@ def verify_face():
         try:
             id_image_data = base64.b64decode(data['id_image'])
             live_image_data = base64.b64decode(data['live_image'])
+            
+            id_np_arr = np.frombuffer(id_image_data, np.uint8)
+            live_np_arr = np.frombuffer(live_image_data, np.uint8)
 
-            id_image = Image.open(io.BytesIO(id_image_data)).convert('RGB')
-            live_image = Image.open(io.BytesIO(live_image_data)).convert('RGB')
+            id_image = cv2.imdecode(id_np_arr, cv2.IMREAD_COLOR)
+            live_image = cv2.imdecode(live_np_arr, cv2.IMREAD_COLOR)
 
-            logger.info(
-                f"Images decoded successfully - ID: {id_image.size}, Live: {live_image.size}")
-
+            if id_image is None or live_image is None:
+                raise ValueError("Could not decode one or both images.")
         except Exception as e:
             logger.error(f"Image decoding error: {e}")
             return jsonify({"error": f"Invalid image data: {str(e)}"}), 400
 
-        # Compare faces
-        result, error = compare_faces(id_image, live_image)
+        # Find face locations and encodings
+        id_face_locations = face_recognition.face_locations(id_image)
+        live_face_locations = face_recognition.face_locations(live_image)
 
-        if error:
-            logger.error(f"Face comparison error: {error}")
-            return jsonify({"error": error}), 400
+        if not id_face_locations:
+            return jsonify({"error": "No face found in the ID image."}), 400
+        if not live_face_locations:
+            return jsonify({"error": "No face found in the live selfie."}), 400
 
-        logger.info(
-            f"Face verification completed - Similarity: {result['similarity_score']:.3f}, Match: {result['is_match']}")
+        id_face_encoding = face_recognition.face_encodings(id_image, known_face_locations=id_face_locations)[0]
+        live_face_encoding = face_recognition.face_encodings(live_image, known_face_locations=live_face_locations)[0]
+
+        # Compare faces and get the distance (lower is better)
+        face_distances = face_recognition.face_distance([id_face_encoding], live_face_encoding)
+        face_distance = face_distances[0]
+
+        # Convert distance to a similarity score using a non-linear function
+        # A typical threshold for face_distance is 0.6.
+        # We use a logistic function to map the distance to a 0-100 score
+        # where a distance of ~0.6 maps to the threshold.
+        # k affects the steepness of the curve. A higher k means a sharper drop-off.
+        k = 10 
+        midpoint = 0.6
+        similarity = 100 / (1 + np.exp(k * (face_distance - midpoint)))
+        
+        threshold = 60  # Required similarity score
+        is_match = similarity >= threshold
+
+        logger.info(f"Face verification complete. Distance: {face_distance:.2f}, Similarity: {similarity:.2f}%, Match: {is_match}")
 
         return jsonify({
             "success": True,
-            "verification_result": result,
-            "request_timestamp": request_timestamp
+            "verification_result": {
+                "is_match": bool(is_match),
+                "similarity_score": float(round(similarity, 2)),
+                "distance": float(round(face_distance, 2)),
+                "threshold": int(threshold)
+            }
         })
 
     except Exception as e:
-        logger.error(f"Face verification error: {e}")
+        logger.error(f"An unexpected error occurred during face verification: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -466,7 +521,7 @@ if __name__ == '__main__':
     print("  🛂 Passport OCR: http://localhost:5000/passport")
     print("  🖼️ Debug Images: http://localhost:5000/debug-image/<filename>")
     print("  ℹ️ Info: http://localhost:5000/info")
-    if FACE_RECOGNITION_AVAILABLE:
+    if FACE_EXTRACTION_AVAILABLE:
         print("  👤 Face Verification: http://localhost:5000/verify-face")
     else:
         print(

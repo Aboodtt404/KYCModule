@@ -2,16 +2,12 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, } from "../../components/ui/tooltip";
-import { FileText, Upload, Image, Star, Download, ScanText, Menu, Moon, Sun, Users, } from "lucide-react";
+import { Upload, ScanText, Menu, Moon, Sun, Users, } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 const tabs = [
-    { id: "documents", label: "Documents", icon: FileText, to: "/admin/documents" },
+    { id: "upload", label: "Upload Documents", icon: Upload, to: "/admin/upload" },
+    { id: "ocr", label: "Test OCR Pipeline", icon: ScanText, to: "/admin/ocr" },
     { id: "kyc-submissions", label: "KYC Submissions", icon: Users, to: "/admin/kyc-submissions" },
-    { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
-    { id: "processor", label: "Image Processor", icon: Image, to: "/admin/processor" },
-    { id: "rating", label: "OCR Rating", icon: Star, to: "/admin/rating" },
-    { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
-    { id: "external", label: "External Download", icon: Download, to: "/admin/external" },
 ];
 const ContentWrapper = ({ children }) => (<motion.div key={Math.random()} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6 transition-all min-h-[400px] text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700">
     {children}
