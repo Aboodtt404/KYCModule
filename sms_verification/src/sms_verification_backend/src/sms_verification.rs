@@ -118,8 +118,4 @@ pub fn debug_print_otps() -> Vec<(String, String, u64)> {
 #[update]
 pub fn get_verified_phones() -> Vec<String> {
     VERIFIED_PHONES.with(|set| set.borrow().iter().cloned().collect())
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 1786274 (edit frontend ui)
