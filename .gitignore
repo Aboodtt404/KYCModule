@@ -33,6 +33,7 @@ Thumbs.db
 # Python
 .venv
 backend/venv
+__pycache__/
 
 # Dataset to train the model
 /dataset
@@ -41,3 +42,6 @@ ocr-kybra-canister/.kybra
 ocr-kybra-canister/venv
 venv/
 frontend/backup_src_ts
+
+# Motoko
+.mops/
