@@ -30,11 +30,10 @@ const router = createBrowserRouter(
       path: "/admin",
       element: <AdminDashboard />,
       children: [
-        { index: true, element: <FileUpload /> },
+        { index: true, element: <KYCSubmissions /> },
         { path: "upload", element: <FileUpload /> },
-        
         { path: "ocr", element: <OCRProcessor /> },
-     
+        { path: "kyc-submissions", element: <KYCSubmissions /> },
       ],
     },
     { path: "/user", element: <KYCPage /> },
