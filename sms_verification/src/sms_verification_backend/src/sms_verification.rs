@@ -50,12 +50,6 @@ pub async fn send_sms(to: String) -> Response {
         store.borrow_mut().insert(to.clone(), (otp.clone(), expires_at));
     });
 
-    let body_data = format!("To={}&From={}&Body={}", to, from_number, otp);
-    let auth_header = format!(
-        "Basic {}",
-        general_purpose::STANDARD.encode(format!("{}:{}", account_sid, auth_token))
-    );
-
     let request = CanisterHttpRequestArgument {
         url,
         method: HttpMethod::POST,
