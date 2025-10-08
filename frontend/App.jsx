@@ -8,6 +8,10 @@ import KYCPage from "./src/pages/user/KYCPage";
 import { FileUpload } from "./src/pages/upload/FileUpload";
 import { OCRProcessor } from "./src/pages/ocr/OCRProcessor";
 import { KYCSubmissions } from "./src/pages/kyc/KYCSubmissions";
+import { ImageProcessor } from "./src/pages/processor/ImageProcessor";
+import { OCRRating } from "./src/pages/rating/OCRRating";
+import { ExternalDownload } from "./src/pages/external/ExternalDownload";
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,7 +31,10 @@ const router = createBrowserRouter(
       children: [
         { index: true, element: <FileUpload /> },
         { path: "upload", element: <FileUpload /> },
+        { path: "processor", element: <ImageProcessor /> },
+        { path: "rating", element: <OCRRating /> },
         { path: "ocr", element: <OCRProcessor /> },
+        { path: "external", element: <ExternalDownload /> },
         { path: "kyc-submissions", element: <KYCSubmissions /> },
       ],
     },

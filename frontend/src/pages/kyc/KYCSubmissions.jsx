@@ -65,11 +65,11 @@ export function KYCSubmissions() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
             <Users className="w-7 h-7" />
             KYC Submissions
           </h2>
-          <p className="text-gray-600 dark:text-gray-300">
+          <p className="text-gray-600 dark:text-gray-400">
             {parsedSubmissions.length} total submission{parsedSubmissions.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -83,72 +83,72 @@ export function KYCSubmissions() {
 
       {/* Submissions List */}
       {parsedSubmissions.length === 0 ? (
-        <div className="bg-white dark:bg-glass rounded-lg shadow-sm border border-gray-200 dark:border-white/10 p-12 text-center">
+        <div className="p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No KYC submissions yet</h3>
-          <p className="text-gray-600 dark:text-gray-300">Submissions will appear here once users complete verification</p>
+          <h3 className="text-lg font-medium mb-2">No KYC submissions yet</h3>
+          <p className="text-gray-400">Submissions will appear here once users complete verification</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-glass rounded-lg shadow-sm border border-gray-200 dark:border-white/10 overflow-hidden">
+        <div className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-white/10">
-              <thead className="bg-gray-50 dark:bg-white/5">
+            <table className="min-w-full divide-y dark:divide-white/10">
+              <thead className="bg-white/5">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Submission ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Phone
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Full Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     National ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-transparent divide-y divide-gray-200 dark:divide-white/10">
+              <tbody className="divide-y dark:divide-white/10">
                 {parsedSubmissions.map((submission, index) => (
                   <tr
                     key={submission.id || index}
-                    className="hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
+                    className="hover:bg-white/5 cursor-pointer"
                     onClick={() => setSelectedSubmission(submission)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-mono text-gray-900 dark:text-gray-100 truncate max-w-[150px] block">
+                      <span className="text-sm font-mono truncate max-w-[150px] block">
                         {submission.submissionId || submission.id}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {submission.phone || 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {submission.ocrData?.full_name || 'N/A'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500 dark:text-gray-300">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-400">
                       {submission.ocrData?.national_id || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(submission.status)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {submission.timestamp ? new Date(submission.timestamp).toLocaleDateString() : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => setSelectedSubmission(submission)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                          className="text-blue-400 hover:text-blue-300"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
@@ -156,7 +156,7 @@ export function KYCSubmissions() {
                         <button
                           onClick={() => handleDelete(submission.submissionId || submission.id)}
                           disabled={deleteSubmission.isPending}
-                          className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 disabled:opacity-50"
+                          className="text-red-400 hover:text-red-300 disabled:opacity-50"
                           title="Delete"
                         >
                           {deleteSubmission.isPending ? (

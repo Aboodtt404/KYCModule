@@ -35,12 +35,12 @@ export default function ReviewStep({ userData, onNext }) {
     };
 
     const displayFields = [
-        { key: 'full_name', label: 'Full Name' },
-        { key: 'national_id', label: 'National ID' },
-        { key: 'birth_date', label: 'Birth Date' },
-        { key: 'address', label: 'Address' },
-        { key: 'governorate', label: 'Governorate' },
-        { key: 'gender', label: 'Gender' },
+        { key: 'full_name', label: 'Full Name', editable: true },
+        { key: 'national_id', label: 'National ID', editable: false },
+        { key: 'birth_date', label: 'Birth Date', editable: false },
+        { key: 'address', label: 'Address', editable: true },
+        { key: 'governorate', label: 'Governorate', editable: true },
+        { key: 'gender', label: 'Gender', editable: true },
     ];
 
     const age = calculateAge(editableData.birth_date);
@@ -54,7 +54,7 @@ export default function ReviewStep({ userData, onNext }) {
 
             {/* Editable Form */}
             <div className="space-y-4">
-                {displayFields.map(({ key, label }) => (
+                {displayFields.map(({ key, label, editable }) => (
                     <div key={key}>
                         <Label htmlFor={key} className="text-sm font-medium text-gray-400">
                             {label}
@@ -64,8 +64,9 @@ export default function ReviewStep({ userData, onNext }) {
                                 id={key}
                                 name={key}
                                 value={editableData[key] || ''}
-                                onChange={handleInputChange}
-                                className={`mt-1 w-full bg-white/10 border-white/20`}
+                                onChange={editable ? handleInputChange : undefined}
+                                readOnly={!editable}
+                                className={`mt-1 w-full bg-white/10 border-white/20 ${!editable ? 'text-gray-400 cursor-not-allowed' : ''}`}
                             />
                             {key === 'birth_date' && age !== null && (
                                 <div className="mt-1 flex-shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300">
@@ -76,18 +77,6 @@ export default function ReviewStep({ userData, onNext }) {
                     </div>
                 ))}
             </div>
-
-            {/* Extracted Face Image (Read-only) */}
-            {editableData.face_image && (
-                <div className="mt-4 pt-4 border-t border-gray-600">
-                    <h4 className="text-sm font-medium text-gray-400 mb-2">Extracted Face Photo</h4>
-                    <img
-                        src={`data:image/jpeg;base64,${editableData.face_image}`}
-                        alt="Extracted face from ID"
-                        className="w-28 h-28 object-cover rounded-lg border-2 border-white/20"
-                    />
-                </div>
-            )}
 
             {/* Submit */}
             <div className="pt-4">

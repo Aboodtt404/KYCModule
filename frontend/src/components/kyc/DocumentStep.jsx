@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import GlassCard from "./GlassCard";
 import UploadBox from "./UploadBox";
 import ThreeHero from "./ThreeHero";
@@ -14,6 +14,15 @@ export default function DocumentStep({ submissionId, onNext, onUploaded }) {
   const [showCamera, setShowCamera] = useState(false);
   const [captureMode, setCaptureMode] = useState(null); // 'camera' or 'upload'
   const [validationError, setValidationError] = useState(null);
+
+  // Cleanup effect to ensure camera is off when component unmounts
+  useEffect(() => {
+    return () => {
+      if (showCamera) {
+        setShowCamera(false);
+      }
+    };
+  }, [showCamera]);
 
   function handleFile(f) {
     setFile(f);
@@ -149,39 +158,17 @@ export default function DocumentStep({ submissionId, onNext, onUploaded }) {
 
         {/* Capture Options - Only show camera for ID cards */}
         {type === "id" && !file && (
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="mt-6">
             <button
               onClick={() => setShowCamera(true)}
-              className="flex flex-col items-center gap-3 p-6 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
+              className="w-full flex flex-col items-center gap-3 p-6 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
             >
               <Camera className="w-10 h-10 text-white" />
               <div className="text-center">
                 <p className="font-semibold text-white">Scan with Camera</p>
-                <p className="text-xs text-white/80 mt-1">Recommended - Auto-detect & capture</p>
+                <p className="text-xs text-white/80 mt-1">Recommended for auto-detection and capture</p>
               </div>
             </button>
-
-            <button
-              onClick={() => document.getElementById('file-upload-fallback')?.click()}
-              className="flex flex-col items-center gap-3 p-6 rounded-xl bg-white/10 hover:bg-white/20 transition-all duration-200"
-            >
-              <Upload className="w-10 h-10 text-white" />
-              <div className="text-center">
-                <p className="font-semibold text-white">Upload Image</p>
-                <p className="text-xs text-gray-400 mt-1">Choose from device</p>
-              </div>
-            </button>
-
-            <input
-              id="file-upload-fallback"
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-              }}
-            />
           </div>
         )}
 
