@@ -1,87 +1,167 @@
-// src/pages/admin/AdminDashboard.tsx
+"use client";
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent, } from "../../components/ui/tooltip";
-import { FileText, Upload, Image, Star, Download, ScanText, Menu, Moon, Sun, Users, } from "lucide-react";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "../../components/ui/tooltip";
+import {
+  FileText,
+  Upload,
+  Image,
+  Star,
+  Download,
+  ScanText,
+  Menu,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+
 const tabs = [
-    { id: "documents", label: "Documents", icon: FileText, to: "/admin/documents" },
-    { id: "kyc-submissions", label: "KYC Submissions", icon: Users, to: "/admin/kyc-submissions" },
-    { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
-    { id: "processor", label: "Image Processor", icon: Image, to: "/admin/processor" },
-    { id: "rating", label: "OCR Rating", icon: Star, to: "/admin/rating" },
-    { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
-    { id: "external", label: "External Download", icon: Download, to: "/admin/external" },
+  { id: "documents", label: "Documents", icon: FileText, to: "/admin/documents" },
+  { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
+
+
+  { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
+
 ];
-const ContentWrapper = ({ children }) => (<motion.div key={Math.random()} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6 transition-all min-h-[400px] text-gray-900 dark:text-white border border-gray-200 dark:border-slate-700">
+
+// Card wrapper
+const ContentWrapper = ({ children }) => (
+  <motion.div
+    key={Math.random()}
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ duration: 0.3 }}
+    className="content-card"
+  >
     {children}
-  </motion.div>);
+  </motion.div>
+);
+
 export function AdminDashboard() {
-    // sidebar / theme local UI state kept
-    const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [darkMode, setDarkMode] = useState(false);
-    const location = useLocation();
-    const currentTitle = (() => {
-        const parts = location.pathname.split("/").filter(Boolean);
-        if (parts.length <= 1)
-            return "documents";
-        return parts[parts.length - 1].replace("-", " ");
-    })();
-    return (<div className={`${darkMode ? "dark" : ""}`}>
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex text-gray-900 dark:text-white">
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [darkMode, setDarkMode] = useState(true);
+  const location = useLocation();
+
+  const currentTitle = (() => {
+    const parts = location.pathname.split("/").filter(Boolean);
+    return parts.length <= 1
+      ? "documents"
+      : parts[parts.length - 1].replace("-", " ");
+  })();
+
+  return (
+    <div className={darkMode ? "dark" : ""}>
+      <div className="min-h-screen flex bg-gray-900 text-white font-inter">
         {/* Sidebar */}
-        <div className={`${sidebarOpen ? "w-64" : "w-20"} bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shadow-lg flex flex-col transition-all duration-300`}>
-          <div className="p-6 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-            <h1 className={`font-bold text-lg text-gray-900 dark:text-white transition-all ${sidebarOpen ? "block" : "hidden"}`}>
+        <aside
+          className={`${
+            sidebarOpen ? "w-64" : "w-20"
+          } flex flex-col shadow-md transition-all duration-300 border-r border-border bg-gray-900`}
+        >
+          {/* Sidebar header */}
+          <div className="flex items-center justify-between p-6 border-b border-border">
+            <h1
+              className={`font-bold text-lg transition-all ${
+                sidebarOpen ? "block text-white" : "hidden"
+              }`}
+            >
               Admin Dashboard
             </h1>
-            <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Toggle sidebar">
-              <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300"/>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle sidebar"
+              className="p-2 rounded-lg hover:bg-gray-800"
+            >
+              <Menu className="w-5 h-5 text-indigo-500/90" />
             </button>
           </div>
 
-          <nav className="mt-4 flex-1">
+          {/* Nav links */}
+          <nav className="flex-1 mt-4">
             <TooltipProvider>
               {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (<Tooltip key={tab.id}>
+                const Icon = tab.icon;
+                const isActive =
+                  location.pathname === tab.to ||
+                  location.pathname.startsWith(tab.to + "/");
+
+                return (
+                  <Tooltip key={tab.id}>
                     <TooltipTrigger asChild>
-                      <NavLink to={tab.to} className={({ isActive }) => `w-full flex items-center px-6 py-3 mb-1 rounded-r-full transition-colors border-l-4 ${isActive
-                    ? "bg-indigo-50 dark:bg-indigo-900/30 border-indigo-600 text-indigo-700 dark:text-indigo-400 font-semibold"
-                    : "border-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-700"}`}>
-                        <Icon className="w-5 h-5"/>
-                        {sidebarOpen && <span className="ml-3">{tab.label}</span>}
+                      <NavLink
+                        to={tab.to}
+                        className={`nav-item ${
+                          isActive ? "nav-row-active" : ""
+                        }`}
+                      >
+                        {/* Icon */}
+                        <span
+                          className={`flex items-center justify-center w-8 h-8 rounded-lg mr-3 ${
+                            isActive ? "nav-icon-active" : ""
+                          }`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </span>
+
+                        {/* Text */}
+                        {sidebarOpen && <span>{tab.label}</span>}
                       </NavLink>
                     </TooltipTrigger>
-                    {!sidebarOpen && <TooltipContent side="right">{tab.label}</TooltipContent>}
-                  </Tooltip>);
-        })}
+
+                    {!sidebarOpen && (
+                      <TooltipContent side="right">{tab.label}</TooltipContent>
+                    )}
+                  </Tooltip>
+                );
+              })}
             </TooltipProvider>
           </nav>
-        </div>
+        </aside>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col">
-          <header className="px-8 py-4 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm flex justify-between items-center sticky top-0 z-10">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white capitalize">
-              {currentTitle}
-            </h2>
+        <main className="flex-1 flex flex-col">
+          {/* Header */}
+          <header className="sticky top-0 z-10 flex justify-between items-center px-8 py-4 border-b border-border bg-gray-900 shadow-sm">
+            <h2 className="text-xl font-semibold capitalize">{currentTitle}</h2>
             <div className="flex items-center gap-4">
-              <button onClick={() => setDarkMode(!darkMode)} className={`w-16 h-8 rounded-full flex items-center px-1 transition-colors duration-200 ${darkMode ? "bg-indigo-900" : "bg-gray-300"}`} aria-label="Toggle theme">
-                <motion.div initial={false} animate={{ x: darkMode ? 32 : 0 }} transition={{ duration: 0.2, ease: "easeInOut" }} className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center">
-                  {darkMode ? <Moon className="w-4 h-4 text-indigo-600"/> : <Sun className="w-4 h-4 text-yellow-500"/>}
+              {/* Dark mode toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label="Toggle theme"
+                className={`w-16 h-8 rounded-full flex items-center px-1 transition-colors duration-200 ${
+                  darkMode ? "bg-indigo-600" : "bg-indigo-500 hover:bg-indigo-400"
+                }`}
+              >
+                <motion.div
+                  initial={false}
+                  animate={{ x: darkMode ? 32 : 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center"
+                >
+                  {darkMode ? (
+                    <Moon className="w-4 h-4 text-indigo-600" />
+                  ) : (
+                    <Sun className="w-4 h-4 text-yellow-500" />
+                  )}
                 </motion.div>
               </button>
             </div>
           </header>
 
-          <main className="flex-1 p-8 bg-gray-50 dark:bg-gray-900">
+          {/* Body */}
+          <section className="flex-1 p-8 bg-gray-900 transition-colors">
             <ContentWrapper>
-              {/* nested admin routes will be rendered here */}
               <Outlet />
             </ContentWrapper>
-          </main>
-        </div>
+          </section>
+        </main>
       </div>
-    </div>);
+    </div>
+  );
 }

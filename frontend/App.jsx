@@ -13,6 +13,7 @@ import { OCRProcessor } from "./src/pages/ocr/OCRProcessor";
 import { ExternalDownload } from "./src/pages/external/ExternalDownload";
 import { KYCSubmissions } from "./src/pages/kyc/KYCSubmissions";
 
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -32,11 +33,9 @@ const router = createBrowserRouter(
         { index: true, element: <DocumentList /> },
         { path: "documents", element: <DocumentList /> },
         { path: "upload", element: <FileUpload /> },
-        { path: "processor", element: <ImageProcessor /> },
-        { path: "rating", element: <OCRRating /> },
+        
         { path: "ocr", element: <OCRProcessor /> },
-        { path: "external", element: <ExternalDownload /> },
-        { path: "kyc-submissions", element: <KYCSubmissions /> },
+     
       ],
     },
     { path: "/user", element: <KYCPage /> },
