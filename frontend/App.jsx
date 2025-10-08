@@ -13,6 +13,7 @@ import { OCRRating } from "./src/pages/rating/OCRRating";
 import { ExternalDownload } from "./src/pages/external/ExternalDownload";
 
 
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -31,11 +32,9 @@ const router = createBrowserRouter(
       children: [
         { index: true, element: <FileUpload /> },
         { path: "upload", element: <FileUpload /> },
-        { path: "processor", element: <ImageProcessor /> },
-        { path: "rating", element: <OCRRating /> },
+        
         { path: "ocr", element: <OCRProcessor /> },
-        { path: "external", element: <ExternalDownload /> },
-        { path: "kyc-submissions", element: <KYCSubmissions /> },
+     
       ],
     },
     { path: "/user", element: <KYCPage /> },
