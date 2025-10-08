@@ -17,26 +17,14 @@ import {
   Menu,
   Moon,
   Sun,
-<<<<<<< HEAD
   Users,
-=======
->>>>>>> 205b05269b8446aa414731f224206560d601e822
 } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 const tabs = [
-<<<<<<< HEAD
     { id: "kyc-submissions", label: "KYC Submissions", icon: Users, to: "/admin/kyc-submissions" },
     { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
     { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
-=======
-  { id: "documents", label: "Documents", icon: FileText, to: "/admin/documents" },
-  { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
-
-
-  { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
-
->>>>>>> 205b05269b8446aa414731f224206560d601e822
 ];
 
 // Card wrapper
@@ -61,11 +49,7 @@ export function AdminDashboard() {
   const currentTitle = (() => {
     const parts = location.pathname.split("/").filter(Boolean);
     return parts.length <= 1
-<<<<<<< HEAD
       ? "kyc submissions"
-=======
-      ? "documents"
->>>>>>> 205b05269b8446aa414731f224206560d601e822
       : parts[parts.length - 1].replace("-", " ");
   })();
 
