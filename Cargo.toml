@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "sms_verification/src/sms_verification_backend"
+    "sms_verification/src/sms_verification_backend",
+    "rust_backend"
 ]
 resolver = "2"
 

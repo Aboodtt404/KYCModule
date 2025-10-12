@@ -1,9 +1,9 @@
 {
   "canisters": {
-    "backend": {
-      "main": "backend/app.mo",
-      "type": "motoko",
-      "args": "--enhanced-orthogonal-persistence"
+    "rust_backend": {
+      "type": "rust",
+      "package": "rust_backend",
+      "candid": "rust_backend/rust_backend.did"
     },
     "sms_verification_backend": {
       "candid": "sms_verification/src/sms_verification_backend/sms_verification_backend.did",
@@ -12,7 +12,7 @@
     },
     "frontend": {
       "dependencies": [
-        "backend",
+        "rust_backend",
         "sms_verification_backend"
       ],
       "frontend": {
@@ -33,6 +33,9 @@
   "workspace": {
     "sms_verification_backend": {
       "root": "sms_verification"
+    },
+    "rust_backend": {
+      "root": "rust_backend"
     }
   }
 }
