@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useDocuments, useOCRRatings, useRateOCR } from "../../../useQueries";
+import { useDocuments, useOCRRatings, useRateOCR } from "../../hooks/useQueries";
 import { useFileList } from "../../components/shared/FileList";
 import { Star, Image, Loader2 } from "lucide-react";
 export function OCRRating() {

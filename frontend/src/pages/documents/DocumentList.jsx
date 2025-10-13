@@ -8,9 +8,9 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import { useDocuments, useDeleteDocument } from "../../../useQueries";
+import { useDocuments, useDeleteDocument } from "../../hooks/useQueries";
 import { useFileList } from "../../components/shared/FileList";
-import { formatFileSize } from "../../../utils/formatFileSize";
+import { formatFileSize } from "../../utils/formatFileSize";
 
 const getFileIcon = (mimeType) =>
   mimeType.startsWith("image/") ? (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useActor } from '../../../useActor';
+import { useActor } from '../../hooks/useActor';
 const CHUNK_SIZE = 2000000;
 export const useFileUpload = () => {
     const { actor } = useActor();

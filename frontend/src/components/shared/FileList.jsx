@@ -1,5 +1,5 @@
-import { useActor } from '../../../useActor';
-import { canisterId } from '../../../../src/declarations/backend';
+import { useActor } from '../../hooks/useActor';
+import { canisterId } from 'declarations/rust_backend';
 const network = 'local'; // Default to local for development
 async function loadConfig() {
     try {

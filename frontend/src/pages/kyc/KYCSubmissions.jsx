@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Users, Trash2, Eye, CheckCircle, XCircle, Clock, Loader2, X } from 'lucide-react';
-import { useKYCSubmissions, useDeleteKYCSubmission } from '../../../useQueries';
+import { useKYCSubmissions, useDeleteKYCSubmission } from '../../hooks/useQueries';
 
 export function KYCSubmissions() {
   const { data: submissions, isLoading, refetch } = useKYCSubmissions();

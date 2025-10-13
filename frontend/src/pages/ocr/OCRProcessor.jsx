@@ -6,9 +6,9 @@ import {
   usePassportOCR,
   useEgyptianIdResults,
   usePassportResults,
-} from "../../../useQueries";
+} from "../../hooks/useQueries";
 import { useFileList } from "../../components/shared/FileList";
-import { useImageCompression } from "../../../hooks/useImageCompression";
+import { useImageCompression } from "../../hooks/useImageCompression";
 import {
   Image,
   Loader2,

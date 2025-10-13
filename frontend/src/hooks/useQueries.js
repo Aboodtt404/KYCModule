@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useActor } from './useActor';
-import { useFileList } from './src/components/shared/FileList';
+import { useActor } from '@/hooks/useActor';
+import { useFileList } from '@/components/shared/FileList';
 
 export function useDocuments() {
   const { actor, isFetching } = useActor();
@@ -221,7 +221,7 @@ export function useSubmitKYC() {
     mutationFn: async ({ submissionId, kycData }) => {
       if (!actor) throw new Error('Actor not available');
       const jsonData = JSON.stringify(kycData);
-      await actor.submitKYC(submissionId, jsonData);
+      await actor.submit_kyc(submissionId, jsonData);
       return { submissionId, kycData };
     },
     onSuccess: () => {
@@ -237,7 +237,7 @@ export function useKYCSubmissions() {
     queryKey: ['kycSubmissions'],
     queryFn: async () => {
       if (!actor) return [];
-      const submissions = await actor.getAllKYCSubmissions();
+      const submissions = await actor.get_all_kyc_submissions();
       return submissions || [];
     },
     enabled: !!actor && !isFetching,
@@ -251,7 +251,7 @@ export function useDeleteKYCSubmission() {
   return useMutation({
     mutationFn: async (submissionId) => {
       if (!actor) throw new Error('Actor not available');
-      await actor.deleteKYCSubmission(submissionId);
+      await actor.delete_kyc_submission(submissionId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kycSubmissions'] });

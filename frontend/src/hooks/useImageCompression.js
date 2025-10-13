@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { compressImage, needsCompression, getCompressionRecommendations, createCompressedFile } from '../utils/imageCompression';
+import { compressImage, needsCompression, getCompressionRecommendations, createCompressedFile } from '../../utils/imageCompression';
 /**
  * Hook for image compression functionality
  * @param options - Compression options

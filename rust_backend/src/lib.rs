@@ -10,7 +10,7 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap, BoundedStorable,
 };
 
-const MAX_STRING_SIZE: u32 = 256;
+const MAX_STRING_SIZE: u32 = 65536;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, PartialOrd, Eq, Ord)]
 struct BoundedString(String);

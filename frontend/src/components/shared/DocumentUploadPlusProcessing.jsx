@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { useVerifyKYC } from '../hooks/useQueries';
+import { useVerifyKYC } from '../../hooks/useQueries';
 import { extractStructuredData } from '../utils/dataExtraction';
 import { enhanceImage } from '../utils/imageEnhancement';
 import { Upload, FileImage, CheckCircle, AlertCircle, Settings } from 'lucide-react';

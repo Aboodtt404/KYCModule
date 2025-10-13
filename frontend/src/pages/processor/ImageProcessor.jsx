@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useFileList } from '../../components/shared/FileList';
 import { useFileUpload } from '../../components/shared/FileUploadd';
-import { useDocuments } from '../../../useQueries';
+import { useDocuments } from '../../hooks/useQueries';
 import { Image, Download, Upload, Loader2, Sliders, RotateCcw } from 'lucide-react';
 const enhancements = [
     { type: 'brightness', value: 0, label: 'Brightness', min: -100, max: 100, step: 5, default: 0 },

@@ -18,11 +18,22 @@ function calculateAge(birthDate) {
 }
 
 export default function ReviewStep({ userData, onNext }) {
-    const [editableData, setEditableData] = useState(userData.ocrData || {});
+    const [editableData, setEditableData] = useState(() => {
+        const initialData = userData.ocrData || {};
+        return {
+            ...initialData,
+            full_name: '', // Start with an empty name field
+            address: '',   // Start with an empty address field
+        };
+    });
 
-    // Sync state if userData changes from parent
+    // Sync state if userData changes from parent, but preserve the blank fields
     useEffect(() => {
-        setEditableData(userData.ocrData || {});
+        setEditableData((prev) => ({
+            ...userData.ocrData,
+            full_name: prev.full_name || '', // Keep user's input or stay blank
+            address: prev.address || '',     // Keep user's input or stay blank
+        }));
     }, [userData.ocrData]);
 
     const handleInputChange = (e) => {

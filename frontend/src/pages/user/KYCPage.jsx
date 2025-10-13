@@ -8,7 +8,7 @@ import { FaceVerificationStep } from "@/components/kyc/FaceVerificationStep";
 import ReviewStep from "@/components/kyc/ReviewStep";
 import SuccessStep from "@/components/kyc/SuccessStep";
 import LogoHero from "@/components/kyc/ThreeHero";
-import { useSubmitKYC } from "../../../useQueries";
+import { useSubmitKYC } from "../../hooks/useQueries";
 
 const TOTAL_STEPS = 6; // Welcome → OTP → Document → Face → Review → Success
 
