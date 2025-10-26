@@ -26,6 +26,7 @@ export default function ReviewStep({ userData, onNext }) {
             address: '',   // Start with an empty address field
         };
     });
+    const [errors, setErrors] = useState({});
 
     // Sync state if userData changes from parent, but preserve the blank fields
     useEffect(() => {
@@ -36,25 +37,41 @@ export default function ReviewStep({ userData, onNext }) {
         }));
     }, [userData.ocrData]);
 
+    const validate = () => {
+        const newErrors = {};
+        if (!editableData.full_name) newErrors.full_name = "Full name is required.";
+        if (!editableData.address) newErrors.address = "Address is required.";
+        if (!editableData.governorate) newErrors.governorate = "Governorate is required.";
+        if (!editableData.gender) newErrors.gender = "Gender is required.";
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setEditableData((prev) => ({ ...prev, [name]: value }));
+        if (errors[name]) {
+            setErrors((prev) => ({ ...prev, [name]: null }));
+        }
     };
 
     const handleSaveChanges = () => {
-        onNext(editableData); // Pass the final, edited data to the parent for submission
+        if (validate()) {
+            onNext(editableData); // Pass the final, edited data to the parent for submission
+        }
     };
 
     const displayFields = [
-        { key: 'full_name', label: 'Full Name', editable: true },
+        { key: 'full_name', label: 'Full Name', editable: true, required: true },
         { key: 'national_id', label: 'National ID', editable: false },
         { key: 'birth_date', label: 'Birth Date', editable: false },
-        { key: 'address', label: 'Address', editable: true },
-        { key: 'governorate', label: 'Governorate', editable: true },
-        { key: 'gender', label: 'Gender', editable: true },
+        { key: 'address', label: 'Address', editable: true, required: true },
+        { key: 'governorate', label: 'Governorate', editable: true, required: true },
+        { key: 'gender', label: 'Gender', editable: true, required: true },
     ];
 
     const age = calculateAge(editableData.birth_date);
+    const isFormValid = Object.values(errors).every(x => x === null);
 
     return (
         <GlassCard className="space-y-6">
@@ -65,10 +82,10 @@ export default function ReviewStep({ userData, onNext }) {
 
             {/* Editable Form */}
             <div className="space-y-4">
-                {displayFields.map(({ key, label, editable }) => (
+                {displayFields.map(({ key, label, editable, required }) => (
                     <div key={key}>
                         <Label htmlFor={key} className="text-sm font-medium text-gray-400">
-                            {label}
+                            {label} {required && <span className="text-red-500">*</span>}
                         </Label>
                         <div className="flex items-center gap-2">
                             <Input
@@ -77,7 +94,7 @@ export default function ReviewStep({ userData, onNext }) {
                                 value={editableData[key] || ''}
                                 onChange={editable ? handleInputChange : undefined}
                                 readOnly={!editable}
-                                className={`mt-1 w-full bg-white/10 border-white/20 ${!editable ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                                className={`mt-1 w-full bg-white/10 border-white/20 ${!editable ? 'text-gray-400 cursor-not-allowed' : ''} ${errors[key] ? 'border-red-500' : ''}`}
                             />
                             {key === 'birth_date' && age !== null && (
                                 <div className="mt-1 flex-shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300">
@@ -85,13 +102,14 @@ export default function ReviewStep({ userData, onNext }) {
                                 </div>
                             )}
                         </div>
+                        {errors[key] && <p className="mt-1 text-sm text-red-500">{errors[key]}</p>}
                     </div>
                 ))}
             </div>
 
             {/* Submit */}
             <div className="pt-4">
-                <Button onClick={handleSaveChanges} className="w-full h-12 text-lg">
+                <Button onClick={handleSaveChanges} className="w-full h-12 text-lg" disabled={!isFormValid}>
                     Save & Continue
                 </Button>
             </div>

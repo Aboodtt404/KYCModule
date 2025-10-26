@@ -23,7 +23,7 @@ export function useOCRRatings() {
     queryKey: ['ocrRatings'],
     queryFn: async () => {
       if (!actor) return [];
-      return await actor.getAllOcrRatings();
+      return await actor.get_all_ocr_ratings();
     },
     enabled: !!actor && !isFetching,
   });
@@ -36,7 +36,7 @@ export function useRateOCR() {
   return useMutation({
     mutationFn: async ({ docId, rating }) => {
       if (!actor) throw new Error('Backend not available');
-      return await actor.rateOcrQuality(docId, rating);
+      return await actor.rate_ocr_quality(docId, rating);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ocrRatings'] });
@@ -51,7 +51,7 @@ export function useGetOCRRating(docId) {
     queryKey: ['ocrRating', docId?.toString()],
     queryFn: async () => {
       if (!actor) return null;
-      const rating = await actor.getOcrRating(docId);
+      const rating = await actor.get_ocr_rating(docId);
       return typeof rating === 'string' ? BigInt(rating) : rating;
     },
     enabled: !!actor && !isFetching && !!docId,
@@ -131,7 +131,7 @@ export function useEgyptianIDOCR() {
       const path = `egyptian-id-${Date.now()}.jpg`;
       await actor.upload(path, 'image/jpeg', uint8Array, true);
 
-      const result = await actor.getEgyptianIdOcr(path);
+      const result = await actor.get_egyptian_id_ocr_and_save(path);
       return JSON.parse(result);
     },
   });
@@ -150,7 +150,7 @@ export function usePassportOCR() {
       const path = `passport-${Date.now()}.jpg`;
       await actor.upload(path, 'image/jpeg', uint8Array, true);
 
-      const result = await actor.getPassportOcr(path);
+      const result = await actor.get_passport_ocr_and_save(path);
       return JSON.parse(result);
     },
   });
@@ -163,7 +163,7 @@ export function useEgyptianIdResults() {
     queryKey: ['egyptianIdResults'],
     queryFn: async () => {
       if (!actor) return [];
-      const results = await actor.getAllEgyptianIdResults();
+      const results = await actor.get_all_egyptian_id_results();
       return results.map(([path, data]) => [path, data]);
     },
     enabled: !!actor && !isFetching,
@@ -177,7 +177,7 @@ export function usePassportResults() {
     queryKey: ['passportResults'],
     queryFn: async () => {
       if (!actor) return [];
-      const results = await actor.getAllPassportResults();
+      const results = await actor.get_all_passport_results();
       return results.map(([path, data]) => [path, data]);
     },
     enabled: !!actor && !isFetching,
@@ -191,7 +191,7 @@ export function useGetEgyptianIdResult(path) {
     queryKey: ['egyptianIdResult', path],
     queryFn: async () => {
       if (!actor) return null;
-      const result = await actor.getEgyptianIdResult(path);
+      const result = await actor.get_egyptian_id_result(path);
       return result || null;
     },
     enabled: !!actor && !isFetching && !!path,
@@ -205,7 +205,7 @@ export function useGetPassportResult(path) {
     queryKey: ['passportResult', path],
     queryFn: async () => {
       if (!actor) return null;
-      const result = await actor.getPassportResult(path);
+      const result = await actor.get_passport_result(path);
       return result || null;
     },
     enabled: !!actor && !isFetching && !!path,

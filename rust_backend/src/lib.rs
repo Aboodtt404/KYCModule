@@ -10,6 +10,15 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap, BoundedStorable,
 };
 
+#[derive(Deserialize)]
+struct KycData {
+    full_name: String,
+    address: String,
+    governorate: String,
+    gender: String,
+    national_id: String,
+}
+
 const MAX_STRING_SIZE: u32 = 65536;
 
 #[derive(Clone, Debug, CandidType, Deserialize, PartialEq, PartialOrd, Eq, Ord)]
@@ -131,6 +140,31 @@ fn add_document(path: String, mime_type: String, chunk: Vec<u8>, complete: bool)
 
 #[update]
 fn submit_kyc(submission_id: String, kyc_data: String) {
+    let parsed_data: KycData = serde_json::from_str(&kyc_data).expect("Failed to parse KYC data");
+
+    if parsed_data.full_name.is_empty() {
+        panic!("Full name is required.");
+    }
+    if parsed_data.address.is_empty() {
+        panic!("Address is required.");
+    }
+    if parsed_data.governorate.is_empty() {
+        panic!("Governorate is required.");
+    }
+    if parsed_data.gender.is_empty() {
+        panic!("Gender is required.");
+    }
+
+    KYC_SUBMISSIONS.with(|submissions| {
+        let submissions_map = submissions.borrow();
+        for (_, existing_data) in submissions_map.iter() {
+            let existing_parsed: KycData = serde_json::from_str(&existing_data.0).expect("Failed to parse existing KYC data");
+            if existing_parsed.national_id == parsed_data.national_id {
+                panic!("This National ID has already been submitted.");
+            }
+        }
+    });
+
     KYC_SUBMISSIONS.with(|submissions| {
         submissions.borrow_mut().insert(BoundedString(submission_id), BoundedString(kyc_data));
     });

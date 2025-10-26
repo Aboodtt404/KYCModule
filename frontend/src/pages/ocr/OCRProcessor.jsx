@@ -42,11 +42,10 @@ export function OCRProcessor() {
   const [compressing, setCompressing] = useState(false);
   const [compressionInfo, setCompressionInfo] = useState(null);
 
-  const imageFiles = documents?.filter((doc) =>
-    doc.mimeType.startsWith("image/")
-  ) || [];
+  const imageFiles =
+    documents?.filter((doc) => doc && doc.mimeType && doc.mimeType.startsWith("image/")) || [];
 
-  const { compressImageFile, compressionResult, needsCompressionCheck } =
+  const { compressImageFile, needsCompressionCheck } =
     useImageCompression({
       maxSizeKB: 500,
       autoCompress: true,
@@ -90,9 +89,7 @@ export function OCRProcessor() {
         setCompressing(true);
         try {
           const originalSize = imageBlob.size;
-          const compressedFile = await compressImageFile(
-            new File([imageBlob], "img.jpg", { type: imageBlob.type })
-          );
+          const compressedFile = await compressImageFile(imageBlob);
           imageBlob = compressedFile;
           setCompressionInfo({
             originalSize,
