@@ -6,14 +6,16 @@ import ThreeHero from "./ThreeHero";
 import { Button } from "@/components/ui/button";
 import { Loader2, Camera, Upload } from "lucide-react";
 import { IDCameraCapture } from "./IDCameraCapture";
+import { useCheckDuplicateId } from "../../hooks/useQueries";
 
-export default function DocumentStep({ submissionId, onNext, onUploaded }) {
+export default function DocumentStep({ submissionId, onNext, onUploaded, onReset }) {
   const [type, setType] = useState("id");
   const [file, setFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [captureMode, setCaptureMode] = useState(null); // 'camera' or 'upload'
   const [validationError, setValidationError] = useState(null);
+  const checkDuplicateId = useCheckDuplicateId();
 
   // Cleanup effect to ensure camera is off when component unmounts
   useEffect(() => {
@@ -108,6 +110,20 @@ export default function DocumentStep({ submissionId, onNext, onUploaded }) {
           );
           setIsProcessing(false);
           return;
+        }
+
+        if (ocrData.national_id && ocrData.national_id !== "Unknown") {
+          const isDuplicate = await checkDuplicateId.mutateAsync(ocrData.national_id);
+          if (isDuplicate) {
+            setValidationError(
+              "This National ID has already been submitted. Please wait for verification."
+            );
+            setTimeout(() => {
+              onReset();
+            }, 3000); // Redirect after 3 seconds
+            setIsProcessing(false);
+            return;
+          }
         }
 
         // All critical fields are valid, proceed

@@ -48,25 +48,20 @@ export default function KYCPage() {
     // Submit KYC data when reaching success step
     const handleFinalSubmit = (finalUserData) => {
         if (!submissionComplete && finalUserData.faceVerified) {
+            // Ensure ocrData is an object before destructuring
+            const ocrData = finalUserData.ocrData || {};
+
             // Filter ocrData to only include desired fields for submission
-            const ocrDataForSubmission = (({
-                full_name,
-                national_id,
-                birth_date,
-                address,
-                governorate,
-                gender,
-                face_image
-            }) => ({
-                full_name,
-                national_id,
-                birth_date,
-                age: calculateAge(birth_date), // Calculate and add age
-                address,
-                governorate,
-                gender,
-                face_image
-            }))(finalUserData.ocrData);
+            const ocrDataForSubmission = {
+                full_name: ocrData.full_name || "",
+                national_id: ocrData.national_id,
+                birth_date: ocrData.birth_date,
+                age: calculateAge(ocrData.birth_date), // Calculate and add age
+                address: ocrData.address || "",
+                governorate: ocrData.governorate,
+                gender: ocrData.gender,
+                face_image: ocrData.face_image
+            };
 
             const kycData = {
                 submissionId,
@@ -97,6 +92,18 @@ export default function KYCPage() {
     };
     const handleBack = () => {
         setStep((prev) => Math.max(prev - 1, 1));
+    };
+    const handleReset = () => {
+        setStep(1);
+        setUserData({
+            phone: "",
+            documentFile: null,
+            ocrData: null,
+            faceImage: null,
+            faceVerified: false,
+        });
+        setSubmissionId(null);
+        setSubmissionComplete(false);
     };
     const handleOtpVerified = (phoneNumber) => {
         setUserData((prev) => ({ ...prev, phone: phoneNumber }));
@@ -159,6 +166,7 @@ export default function KYCPage() {
                         onUploaded={(file) =>
                             setUserData((prev) => ({ ...prev, documentFile: file }))
                         }
+                        onReset={handleReset}
                     />
                 );
 

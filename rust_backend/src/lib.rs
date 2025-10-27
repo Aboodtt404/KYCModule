@@ -10,13 +10,19 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap, BoundedStorable,
 };
 
-#[derive(Deserialize)]
-struct KycData {
+#[derive(Deserialize, Debug)]
+struct OcrData {
     full_name: String,
     address: String,
     governorate: String,
     gender: String,
     national_id: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct KycSubmissionPayload {
+    #[serde(rename = "ocrData")]
+    ocr_data: OcrData,
 }
 
 const MAX_STRING_SIZE: u32 = 65536;
@@ -140,27 +146,31 @@ fn add_document(path: String, mime_type: String, chunk: Vec<u8>, complete: bool)
 
 #[update]
 fn submit_kyc(submission_id: String, kyc_data: String) {
-    let parsed_data: KycData = serde_json::from_str(&kyc_data).expect("Failed to parse KYC data");
+    let parsed_payload: KycSubmissionPayload = serde_json::from_str(&kyc_data)
+        .unwrap_or_else(|e| panic!("Failed to parse KYC data: {}", e));
 
-    if parsed_data.full_name.is_empty() {
+    let ocr_data = &parsed_payload.ocr_data;
+
+    if ocr_data.full_name.is_empty() {
         panic!("Full name is required.");
     }
-    if parsed_data.address.is_empty() {
+    if ocr_data.address.is_empty() {
         panic!("Address is required.");
     }
-    if parsed_data.governorate.is_empty() {
+    if ocr_data.governorate.is_empty() {
         panic!("Governorate is required.");
     }
-    if parsed_data.gender.is_empty() {
+    if ocr_data.gender.is_empty() {
         panic!("Gender is required.");
     }
 
     KYC_SUBMISSIONS.with(|submissions| {
         let submissions_map = submissions.borrow();
-        for (_, existing_data) in submissions_map.iter() {
-            let existing_parsed: KycData = serde_json::from_str(&existing_data.0).expect("Failed to parse existing KYC data");
-            if existing_parsed.national_id == parsed_data.national_id {
-                panic!("This National ID has already been submitted.");
+        for (_, existing_data_str) in submissions_map.iter() {
+            if let Ok(existing_payload) = serde_json::from_str::<KycSubmissionPayload>(&existing_data_str.0) {
+                if existing_payload.ocr_data.national_id == ocr_data.national_id {
+                    panic!("This National ID has already been submitted.");
+                }
             }
         }
     });
@@ -168,6 +178,21 @@ fn submit_kyc(submission_id: String, kyc_data: String) {
     KYC_SUBMISSIONS.with(|submissions| {
         submissions.borrow_mut().insert(BoundedString(submission_id), BoundedString(kyc_data));
     });
+}
+
+#[query]
+fn national_id_exists(national_id: String) -> bool {
+    KYC_SUBMISSIONS.with(|submissions| {
+        let submissions_map = submissions.borrow();
+        for (_, kyc_data_str) in submissions_map.iter() {
+            if let Ok(payload) = serde_json::from_str::<KycSubmissionPayload>(&kyc_data_str.0) {
+                if payload.ocr_data.national_id == national_id {
+                    return true; // Found a match
+                }
+            }
+        }
+        false // No match found
+    })
 }
 
 #[query]

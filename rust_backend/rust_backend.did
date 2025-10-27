@@ -22,4 +22,5 @@ service : {
   "get_all_passport_results": () -> (vec record { text; text; }) query;
   "delete_egyptian_id_result": (text) -> ();
   "delete_passport_result": (text) -> ();
+  "national_id_exists": (text) -> (bool) query;
 }

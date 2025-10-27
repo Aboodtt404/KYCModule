@@ -258,3 +258,14 @@ export function useDeleteKYCSubmission() {
     },
   });
 }
+
+export function useCheckDuplicateId() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (nationalId) => {
+      if (!actor) throw new Error('Actor not available');
+      return await actor.national_id_exists(nationalId);
+    },
+  });
+}
