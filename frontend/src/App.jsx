@@ -2,15 +2,15 @@ import React from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { Login } from "./src/pages/auth/Login";
-import { AdminDashboard } from "./src/pages/admin/AdminDashboard";
-import KYCPage from "./src/pages/user/KYCPage";
-import { FileUpload } from "./src/pages/upload/FileUpload";
-import { OCRProcessor } from "./src/pages/ocr/OCRProcessor";
-import { KYCSubmissions } from "./src/pages/kyc/KYCSubmissions";
-import { ImageProcessor } from "./src/pages/processor/ImageProcessor";
-import { OCRRating } from "./src/pages/rating/OCRRating";
-import { ExternalDownload } from "./src/pages/external/ExternalDownload";
+import { Login } from "./pages/auth/Login";
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import KYCPage from "./pages/user/KYCPage";
+import { FileUpload } from "./pages/upload/FileUpload";
+import { OCRProcessor } from "./pages/ocr/OCRProcessor";
+import { KYCSubmissions } from "./pages/kyc/KYCSubmissions";
+import { ImageProcessor } from "./pages/processor/ImageProcessor";
+import { OCRRating } from "./pages/rating/OCRRating";
+import { ExternalDownload } from "./pages/external/ExternalDownload";
 
 
 
