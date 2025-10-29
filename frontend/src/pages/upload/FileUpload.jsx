@@ -1,17 +1,13 @@
 import React, { useState, useRef } from "react";
-import { useFileUpload } from "../../components/shared/FileUploadd";
-import { Upload, File, CheckCircle, AlertCircle } from "lucide-react";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { Upload, File, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 export function FileUpload() {
-  const { uploadFile } = useFileUpload();
+  const { handleFileSelect, isUploading, error } = useFileUpload();
   const [dragActive, setDragActive] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("idle");
-  const [errorMessage, setErrorMessage] = useState("");
   const fileInputRef = useRef(null);
 
-
-  
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -38,31 +34,16 @@ export function FileUpload() {
   };
 
   const handleFiles = async (files) => {
-    const file = files[0];
-    if (!file) return;
+    if (!files || files.length === 0) return;
 
     setUploadStatus("uploading");
-    setUploadProgress(0);
-    setErrorMessage("");
-
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-
-      await uploadFile(
-        file.name,
-        file.type || "application/octet-stream",
-        uint8Array,
-        (progress) => setUploadProgress(progress)
-      );
-
+      await handleFileSelect(files);
       setUploadStatus("success");
-      setTimeout(() => setUploadStatus("idle"), 2500);
-    } catch (error) {
+      setTimeout(() => setUploadStatus("idle"), 3000); // Reset after 3s
+    } catch (err) {
+      console.error("Upload component error:", err);
       setUploadStatus("error");
-      setErrorMessage(
-        error instanceof Error ? error.message : "Upload failed"
-      );
     }
   };
 
@@ -72,28 +53,26 @@ export function FileUpload() {
 
   const resetUpload = () => {
     setUploadStatus("idle");
-    setUploadProgress(0);
-    setErrorMessage("");
   };
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <h2 className="text-2xl font-bold text-white">
           Upload Documents
         </h2>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-gray-400">
           Upload images, documents, and other files to your collection
         </p>
       </div>
 
-      <div className=" bg-slate-800/60  dark:backdrop-blur-md border border-gray-200 dark:border-white/10 rounded-2xl shadow-sm p-6 transition-all">
+      <div className="bg-slate-800/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-sm p-6 transition-all">
         {uploadStatus === "idle" && (
           <div
             className={`relative border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
               dragActive
-                ? "border-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                : "border-gray-300 dark:border-gray-600 hover:border-indigo-400 dark:hover:border-indigo-300"
+                ? "border-indigo-400 bg-indigo-500/10"
+                : "border-gray-600 hover:border-indigo-400"
             }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -106,35 +85,28 @@ export function FileUpload() {
               type="file"
               className="hidden"
               onChange={handleChange}
+              multiple
               accept="*/*"
             />
 
-            <Upload className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Drag & drop your file here
+            <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-semibold text-white">
+              Drag & drop your files here
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-sm text-gray-400 mt-1">
               or click to browse files from your device
             </p>
           </div>
         )}
 
-        {uploadStatus === "uploading" && (
+        {isUploading && uploadStatus === 'uploading' && (
           <div className="text-center py-8">
-            <File className="mx-auto h-12 w-12 text-indigo-600 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <Loader2 className="mx-auto h-12 w-12 text-indigo-400 animate-spin mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-4">
               Uploading...
             </h3>
-
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-3 overflow-hidden">
-              <div
-                className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              {Math.round(uploadProgress)}% complete
+            <p className="text-sm text-gray-400">
+              Please wait while your files are being uploaded.
             </p>
           </div>
         )}
@@ -142,35 +114,35 @@ export function FileUpload() {
         {uploadStatus === "success" && (
           <div className="text-center py-8">
             <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-white">
               Upload Successful!
             </h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-4">
-              Your file has been uploaded successfully
+            <p className="text-gray-400 mb-4">
+              Your files have been added to the library.
             </p>
 
             <button
               onClick={resetUpload}
-              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors"
+              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
             >
-              Upload Another File
+              Upload More Files
             </button>
           </div>
         )}
 
-        {uploadStatus === "error" && (
+        {(uploadStatus === "error" || error) && (
           <div className="text-center py-8">
             <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-white">
               Upload Failed
             </h3>
-            <p className="text-red-600 dark:text-red-400 mb-4">
-              {errorMessage}
+            <p className="text-red-400 mb-4">
+              {error?.message || "An unknown error occurred."}
             </p>
 
             <button
               onClick={resetUpload}
-              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors"
+              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
             >
               Try Again
             </button>

@@ -22,29 +22,21 @@ export const useFileList = () => {
             throw new Error('Backend is not available');
         }
         const files = await actor.list();
-        return files.map(file => ({
-            ...file,
-            size: Number(file.size) // Convert bigint to number
+        console.log("[useFileList] Raw files from canister:", files);
+
+        const transformedFiles = files.map(file => ({
+            path: file.path,
+            mimeType: file.mime_type,
+            size: Number(file.size)
         }));
-    };
-    const sanitizeUrl = (path) => {
-        return path
-            .trim() // Remove leading/trailing whitespace first
-            .replace(/\s+/g, '-') // Replace all whitespace sequences with single hyphen
-            .replace(/[^a-zA-Z0-9\-_./]/g, '') // Remove invalid characters
-            .replace(/-+/g, '-') // Replace multiple consecutive hyphens with single hyphen
-            .replace(/\.\./g, '') // Remove path traversal attempts
-            .replace(/^[-\/]+/, '') // Remove leading hyphens and slashes
-            .replace(/\/+/g, '/') // Normalize multiple slashes to single slash
-            .replace(/[-\/]+$/, ''); // Remove trailing hyphens and slashes
-    };
-    const validateUrl = (path) => {
-        const validPattern = /^(?!.*\.\.)(?!\/)(?!.*\s)[a-zA-Z0-9\-_.\/]+(?<!\/)$/;
-        return validPattern.test(path);
+
+        console.log("[useFileList] Transformed files:", transformedFiles);
+        return transformedFiles;
     };
     const getFileUrl = async (metadata) => {
-        const sanitizedPath = sanitizeUrl(metadata.path);
-        validateUrl(metadata.path);
+        // URL-encode the path to handle spaces and special characters
+        const encodedPath = encodeURIComponent(metadata.path);
+        
         const config = await loadConfig();
         let backendCanisterId = canisterId;
         if (config.backend_canister_id !== 'undefined') {
@@ -53,7 +45,7 @@ export const useFileList = () => {
         const rawBackendUrl = network === 'local'
             ? `http://${backendCanisterId}.raw.localhost:4943/`
             : `https://${backendCanisterId}.raw.icp0.io/`;
-        return `${rawBackendUrl}${sanitizedPath}`;
+        return `${rawBackendUrl}${encodedPath}`;
     };
     return { getFileList, getFileUrl };
 };

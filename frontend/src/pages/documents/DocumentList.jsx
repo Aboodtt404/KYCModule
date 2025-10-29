@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   FileText,
   Image,
@@ -130,6 +130,7 @@ export function DocumentList() {
           )}
         </button>
       </div>
+
 
       {/* Empty State */}
       {!documents || documents.length === 0 ? (

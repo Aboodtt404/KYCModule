@@ -10,6 +10,7 @@ export function useDocuments() {
     queryKey: ['documents'],
     queryFn: async () => {
       if (!actor) return [];
+      console.log('[useDocuments] Refetching documents from canister...');
       return await getFileList();
     },
     enabled: !!actor && !isFetching,

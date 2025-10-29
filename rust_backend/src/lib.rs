@@ -1,74 +1,100 @@
 
-use candid::{CandidType, Decode, Deserialize, Encode};
-use ic_cdk_macros::{query, update};
+use candid::{CandidType, Decode, Deserialize as CandidDeserialize, Encode};
+use ic_cdk_macros::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    storable::Storable,
-    DefaultMemoryImpl, StableBTreeMap, BoundedStorable,
+    storable::Bound,
+    DefaultMemoryImpl, StableBTreeMap, Storable,
 };
+use serde::{Deserialize, Serialize};
+use serde_json;
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
+struct KycData {
+    #[serde(rename = "submissionId")]
+    submission_id: String,
+    timestamp: String,
+    phone: String,
+    #[serde(rename = "documentFile")]
+    document_file: String,
+    #[serde(rename = "ocrData")]
+    ocr_data: OcrData,
+    #[serde(rename = "faceVerified")]
+    face_verified: bool,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct OcrData {
     full_name: String,
+    national_id: String,
+    birth_date: String,
+    age: u32,
     address: String,
     governorate: String,
     gender: String,
-    national_id: String,
+    face_image: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Deserialize)]
 struct KycSubmissionPayload {
-    #[serde(rename = "ocrData")]
-    ocr_data: OcrData,
+    #[serde(rename = "kycData")]
+    kyc_data: KycData,
 }
 
 const MAX_STRING_SIZE: u32 = 65536;
+const MAX_FILE_METADATA_SIZE: u32 = 1024; // 1 KiB
 
-#[derive(Clone, Debug, CandidType, Deserialize, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(
+    Clone, Debug, Default, CandidType, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord,
+)]
 struct BoundedString(String);
 
 impl Storable for BoundedString {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.0.as_bytes().to_vec())
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.0.as_bytes())
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        BoundedString(String::from_utf8(bytes.to_vec()).unwrap())
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self(String::from_utf8(bytes.into_owned()).expect("UTF-8 conversion failed"))
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: MAX_STRING_SIZE,
+        is_fixed_size: false,
+    };
 }
 
-impl BoundedStorable for BoundedString {
-    const MAX_SIZE: u32 = MAX_STRING_SIZE;
-    const IS_FIXED_SIZE: bool = false;
-}
+#[derive(Clone, Debug, Default, CandidType, Deserialize, Serialize)]
+struct MimeType(String);
 
-type Memory = VirtualMemory<DefaultMemoryImpl>;
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, Default, CandidType, Deserialize, Serialize)]
 struct FileMetadata {
     path: BoundedString,
-    mime_type: BoundedString,
+    mime_type: MimeType,
     size: u64,
     completed: bool,
 }
 
 impl Storable for FileMetadata {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(Encode!(self).unwrap())
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(Encode!(self).expect("Serialization failed"))
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Decode!(bytes.as_ref(), Self).unwrap()
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Decode!(bytes.as_ref(), Self).expect("Deserialization failed")
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: MAX_FILE_METADATA_SIZE,
+        is_fixed_size: false,
+    };
 }
 
-impl BoundedStorable for FileMetadata {
-    const MAX_SIZE: u32 = 2 * MAX_STRING_SIZE + 8 + 1;
-    const IS_FIXED_SIZE: bool = false;
-}
+type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 type FileChunk = Vec<u8>;
 
@@ -77,9 +103,7 @@ thread_local! {
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
     static FILE_METADATA: RefCell<StableBTreeMap<BoundedString, FileMetadata, Memory>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
-        )
+        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))))
     );
 
     static FILE_CHUNKS: RefCell<HashMap<String, Vec<Vec<u8>>>> = RefCell::new(HashMap::new());
@@ -103,9 +127,7 @@ thread_local! {
     );
 
     static KYC_SUBMISSIONS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5))),
-        )
+        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))))
     );
 
     static NEXT_DOC_ID: RefCell<u64> = RefCell::new(0);
@@ -145,53 +167,52 @@ fn add_document(path: String, mime_type: String, chunk: Vec<u8>, complete: bool)
 }
 
 #[update]
-fn submit_kyc(submission_id: String, kyc_data: String) {
-    let parsed_payload: KycSubmissionPayload = serde_json::from_str(&kyc_data)
-        .unwrap_or_else(|e| panic!("Failed to parse KYC data: {}", e));
+fn submit_kyc(submission_id: String, kyc_data_json: String) -> Result<(), String> {
+    let parsed_payload: KycSubmissionPayload =
+        serde_json::from_str(&kyc_data_json).map_err(|e| format!("Failed to parse KYC data: {}", e))?;
 
-    let ocr_data = &parsed_payload.ocr_data;
+    let ocr_data = &parsed_payload.kyc_data.ocr_data;
 
+    // Backend validation
     if ocr_data.full_name.is_empty() {
-        panic!("Full name is required.");
+        return Err("Full name is required.".to_string());
     }
     if ocr_data.address.is_empty() {
-        panic!("Address is required.");
+        return Err("Address is required.".to_string());
     }
     if ocr_data.governorate.is_empty() {
-        panic!("Governorate is required.");
+        return Err("Governorate is required.".to_string());
     }
     if ocr_data.gender.is_empty() {
-        panic!("Gender is required.");
+        return Err("Gender is required.".to_string());
     }
 
-    KYC_SUBMISSIONS.with(|submissions| {
-        let submissions_map = submissions.borrow();
-        for (_, existing_data_str) in submissions_map.iter() {
-            if let Ok(existing_payload) = serde_json::from_str::<KycSubmissionPayload>(&existing_data_str.0) {
-                if existing_payload.ocr_data.national_id == ocr_data.national_id {
-                    panic!("This National ID has already been submitted.");
-                }
-            }
-        }
-    });
+    // Check for duplicate National ID
+    if national_id_exists(ocr_data.national_id.clone()) {
+        return Err("This National ID has already been submitted.".to_string());
+    }
 
-    KYC_SUBMISSIONS.with(|submissions| {
-        submissions.borrow_mut().insert(BoundedString(submission_id), BoundedString(kyc_data));
+    KYC_SUBMISSIONS.with(|p| {
+        p.borrow_mut().insert(
+            BoundedString(submission_id),
+            BoundedString(kyc_data_json),
+        )
     });
+    Ok(())
 }
 
 #[query]
 fn national_id_exists(national_id: String) -> bool {
-    KYC_SUBMISSIONS.with(|submissions| {
-        let submissions_map = submissions.borrow();
-        for (_, kyc_data_str) in submissions_map.iter() {
-            if let Ok(payload) = serde_json::from_str::<KycSubmissionPayload>(&kyc_data_str.0) {
-                if payload.ocr_data.national_id == national_id {
-                    return true; // Found a match
+    KYC_SUBMISSIONS.with(|submissions_ref| {
+        let submissions = submissions_ref.borrow();
+        for (_, kyc_data_json) in submissions.iter() {
+            if let Ok(payload) = serde_json::from_str::<KycSubmissionPayload>(&kyc_data_json.0) {
+                if payload.kyc_data.ocr_data.national_id == national_id {
+                    return true;
                 }
             }
         }
-        false // No match found
+        false
     })
 }
 
@@ -288,6 +309,9 @@ fn delete_passport_result(path: String) {
 
 #[update]
 fn upload(path: String, mime_type: String, chunk: Vec<u8>, complete: bool) {
+    ic_cdk::println!("📤 upload called - path: {}, mime_type: {}, chunk_size: {}, complete: {}", 
+        path, mime_type, chunk.len(), complete);
+    
     FILE_CHUNKS.with(|chunks_ref| {
         let mut chunks = chunks_ref.borrow_mut();
         chunks.entry(path.clone()).or_default().push(chunk);
@@ -298,15 +322,20 @@ fn upload(path: String, mime_type: String, chunk: Vec<u8>, complete: bool) {
         let size = FILE_CHUNKS.with(|chunks_ref| {
             chunks_ref.borrow().get(&path).map_or(0, |c| c.iter().map(|v| v.len() as u64).sum())
         });
+        
+        ic_cdk::println!("💾 Storing file metadata - path: {}, size: {} bytes", path, size);
+        
         FILE_METADATA.with(|metadata_ref| {
             let mut metadata = metadata_ref.borrow_mut();
             metadata.insert(bounded_path.clone(), FileMetadata {
                 path: bounded_path,
-                mime_type: BoundedString(mime_type),
+                mime_type: MimeType(mime_type),
                 size,
                 completed: true,
             });
         });
+        
+        ic_cdk::println!("✅ File upload complete for: {}", path);
     }
 }
 
@@ -328,31 +357,22 @@ fn delete(path: String) {
     });
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct HttpRequest {
-    method: String,
+#[derive(Clone, Debug, CandidType, CandidDeserialize)]
+struct CanisterHttpRequestArgument {
     url: String,
+    method: String,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, CandidDeserialize)]
 struct HttpResponse {
     status_code: u16,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
-    streaming_strategy: Option<StreamingStrategy>,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-enum StreamingStrategy {
-    Callback {
-        callback: candid::Func,
-        token: StreamingToken,
-    },
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, CandidDeserialize)]
 struct OcrRequest {
     path: String,
 }
@@ -441,7 +461,7 @@ struct StreamingToken {}
 
 
 #[query]
-fn http_request(request: HttpRequest) -> HttpResponse {
+fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
     let path = request.url.clone();
     if path.starts_with("/api/") {
         handle_api_request(request)
@@ -450,35 +470,48 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
-fn serve_static_file(request: HttpRequest) -> HttpResponse {
-    let path = request.url;
-    let bounded_path = BoundedString(path.clone());
+fn serve_static_file(request: CanisterHttpRequestArgument) -> HttpResponse {
+    let raw_path = request.url.strip_prefix('/').unwrap_or(&request.url);
+    let decoded_path = urlencoding::decode(raw_path).unwrap_or_else(|_| std::borrow::Cow::from(raw_path)).to_string();
+
+    ic_cdk::println!("🔍 serve_static_file - raw_path: {}, decoded_path: {}", raw_path, decoded_path);
+
+    let bounded_path = BoundedString(decoded_path.clone());
     
     FILE_METADATA.with(|metadata_ref| {
         let metadata = metadata_ref.borrow();
+        
+        // Debug: List all stored files
+        ic_cdk::println!("📁 Files in storage:");
+        for (key, _) in metadata.iter() {
+            ic_cdk::println!("  - {}", key.0);
+        }
+        
         if let Some(meta) = metadata.get(&bounded_path) {
+            ic_cdk::println!("✅ File found in metadata");
             let chunks: Vec<u8> = FILE_CHUNKS.with(|chunks_ref| {
-                chunks_ref.borrow().get(&path).cloned().unwrap_or_default().into_iter().flatten().collect()
+                chunks_ref.borrow().get(&decoded_path).cloned().unwrap_or_default().into_iter().flatten().collect()
             });
+
+            ic_cdk::println!("📦 Chunk size: {} bytes", chunks.len());
 
             HttpResponse {
                 status_code: 200,
                 headers: vec![("Content-Type".to_string(), meta.mime_type.0.clone())],
                 body: chunks,
-                streaming_strategy: None,
             }
         } else {
+            ic_cdk::println!("❌ File NOT found in metadata for path: {}", decoded_path);
             HttpResponse {
                 status_code: 404,
                 headers: vec![],
                 body: "Not Found".as_bytes().to_vec(),
-                streaming_strategy: None,
             }
         }
     })
 }
 
-fn handle_api_request(request: HttpRequest) -> HttpResponse {
+fn handle_api_request(request: CanisterHttpRequestArgument) -> HttpResponse {
     if request.url == "/api/process-document" {
         handle_process_document()
     } else {
@@ -486,7 +519,6 @@ fn handle_api_request(request: HttpRequest) -> HttpResponse {
             status_code: 404,
             headers: vec![("Content-Type".to_string(), "application/json".to_string())],
             body: "{\"error\":\"Not Found\"}".as_bytes().to_vec(),
-            streaming_strategy: None,
         }
     }
 }
@@ -496,6 +528,5 @@ fn handle_process_document() -> HttpResponse {
         status_code: 200,
         headers: vec![("Content-Type".to_string(), "application/json".to_string())],
         body: "{\"success\":true,\"data\":{\"name\":\"Sample Name\",\"idNumber\":\"123456789\",\"birthDate\":\"1990-01-01\"}}".as_bytes().to_vec(),
-        streaming_strategy: None,
     }
 }
