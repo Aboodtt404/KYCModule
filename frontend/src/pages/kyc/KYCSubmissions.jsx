@@ -13,7 +13,12 @@ export function KYCSubmissions() {
     return submissions.map(([id, jsonData]) => {
       try {
         const data = JSON.parse(jsonData);
-        return { id, ...data };
+        // The backend stores data wrapped in { kycData: {...} }, so unwrap it
+        if (data.kycData) {
+          return { id, submissionId: id, ...data.kycData };
+        }
+        // Fallback for old format (if any)
+        return { id, submissionId: id, ...data };
       } catch (e) {
         console.error('Failed to parse submission:', e);
         return { id, error: true, rawData: jsonData };

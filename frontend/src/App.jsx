@@ -9,7 +9,6 @@ import { FileUpload } from "./pages/upload/FileUpload";
 import { OCRProcessor } from "./pages/ocr/OCRProcessor";
 import { KYCSubmissions } from "./pages/kyc/KYCSubmissions";
 import { ImageProcessor } from "./pages/processor/ImageProcessor";
-import { OCRRating } from "./pages/rating/OCRRating";
 import { ExternalDownload } from "./pages/external/ExternalDownload";
 
 

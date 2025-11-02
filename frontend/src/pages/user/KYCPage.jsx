@@ -73,7 +73,10 @@ export default function KYCPage() {
                 status: "pending_review"
             };
 
-            submitKYC.mutate({ submissionId, kycData }, {
+            // Wrap in kycData object to match backend structure
+            const payload = { kycData };
+
+            submitKYC.mutate({ submissionId, kycData: payload }, {
                 onSuccess: () => {
                     console.log("✅ KYC submission successful");
                     setSubmissionComplete(true);
@@ -81,7 +84,7 @@ export default function KYCPage() {
                 },
                 onError: (error) => {
                     console.error("❌ KYC submission failed:", error);
-                    // Optionally, show an error message to the user
+                    alert(`KYC submission failed: ${error.message || error}`);
                 }
             });
         }

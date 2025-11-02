@@ -6,9 +6,6 @@ service : {
   "get_ocr_health": () -> (text);
   "get_egyptian_id_ocr": (text) -> (text);
   "get_passport_ocr": (text) -> (text);
-  "rate_ocr_quality": (nat64, nat64) -> ();
-  "get_ocr_rating": (nat64) -> (opt nat64) query;
-  "get_all_ocr_ratings": () -> (vec record { nat64; nat64; }) query;
   "add_document": (text, text, vec nat8, bool) -> (nat64);
   "submit_kyc": (text, text) -> ();
   "get_kyc_submission": (text) -> (opt text) query;

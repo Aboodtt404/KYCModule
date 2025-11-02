@@ -108,12 +108,6 @@ thread_local! {
 
     static FILE_CHUNKS: RefCell<HashMap<String, Vec<Vec<u8>>>> = RefCell::new(HashMap::new());
 
-    static OCR_RATINGS: RefCell<StableBTreeMap<u64, u64, Memory>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))),
-        )
-    );
-
     static EGYPTIAN_ID_RESULTS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
@@ -127,31 +121,10 @@ thread_local! {
     );
 
     static KYC_SUBMISSIONS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
-        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2))))
+        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5))))
     );
 
     static NEXT_DOC_ID: RefCell<u64> = RefCell::new(0);
-}
-
-#[update]
-fn rate_ocr_quality(doc_id: u64, rating: u64) {
-    OCR_RATINGS.with(|ratings| {
-        ratings.borrow_mut().insert(doc_id, rating);
-    });
-}
-
-#[query]
-fn get_ocr_rating(doc_id: u64) -> Option<u64> {
-    OCR_RATINGS.with(|ratings| {
-        ratings.borrow().get(&doc_id)
-    })
-}
-
-#[query]
-fn get_all_ocr_ratings() -> Vec<(u64, u64)> {
-    OCR_RATINGS.with(|ratings| {
-        ratings.borrow().iter().collect()
-    })
 }
 
 #[update]

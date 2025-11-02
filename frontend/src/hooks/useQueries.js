@@ -17,48 +17,6 @@ export function useDocuments() {
   });
 }
 
-export function useOCRRatings() {
-  const { actor, isFetching } = useActor();
-
-  return useQuery({
-    queryKey: ['ocrRatings'],
-    queryFn: async () => {
-      if (!actor) return [];
-      return await actor.get_all_ocr_ratings();
-    },
-    enabled: !!actor && !isFetching,
-  });
-}
-
-export function useRateOCR() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ docId, rating }) => {
-      if (!actor) throw new Error('Backend not available');
-      return await actor.rate_ocr_quality(docId, rating);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocrRatings'] });
-    },
-  });
-}
-
-export function useGetOCRRating(docId) {
-  const { actor, isFetching } = useActor();
-
-  return useQuery({
-    queryKey: ['ocrRating', docId?.toString()],
-    queryFn: async () => {
-      if (!actor) return null;
-      const rating = await actor.get_ocr_rating(docId);
-      return typeof rating === 'string' ? BigInt(rating) : rating;
-    },
-    enabled: !!actor && !isFetching && !!docId,
-  });
-}
-
 export function useDeleteDocument() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -221,8 +179,11 @@ export function useSubmitKYC() {
   return useMutation({
     mutationFn: async ({ submissionId, kycData }) => {
       if (!actor) throw new Error('Actor not available');
+      // kycData is already wrapped in { kycData: {...} } from the frontend
       const jsonData = JSON.stringify(kycData);
-      await actor.submit_kyc(submissionId, jsonData);
+      console.log('Submitting KYC:', jsonData);
+      const result = await actor.submit_kyc(submissionId, jsonData);
+      console.log('KYC submission result:', result);
       return { submissionId, kycData };
     },
     onSuccess: () => {
@@ -238,10 +199,14 @@ export function useKYCSubmissions() {
     queryKey: ['kycSubmissions'],
     queryFn: async () => {
       if (!actor) return [];
+      console.log('[useKYCSubmissions] Fetching submissions from canister...');
       const submissions = await actor.get_all_kyc_submissions();
+      console.log('[useKYCSubmissions] Received submissions:', submissions);
       return submissions || [];
     },
     enabled: !!actor && !isFetching,
+    refetchOnWindowFocus: true,
+    refetchInterval: 10000, // Refetch every 10 seconds
   });
 }
 

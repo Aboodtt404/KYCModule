@@ -34,19 +34,32 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
 
   const stopCamera = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      const stream = videoRef.current.srcObject;
+      stream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
       videoRef.current.srcObject = null;
+      videoRef.current.src = '';
     }
   }, []);
 
+  // Stop camera when step changes away from "camera"
   useEffect(() => {
     if (step === "camera") {
       startCamera();
     } else {
+      // Stop camera immediately when leaving camera step
       stopCamera();
     }
-    return stopCamera;
   }, [step, startCamera, stopCamera]);
+
+  // Ensure camera is stopped on component unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const handleCapture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -58,6 +71,8 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg");
       setCapturedImage(dataUrl);
+      // Stop camera immediately after capture
+      stopCamera();
       setStep("preview");
     }
   };
@@ -76,6 +91,9 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
       const result = await verifyFace(idImageBase64, liveImageBase64);
       setVerificationResult(result.verification_result);
 
+      // Ensure camera is stopped before moving to next step
+      stopCamera();
+      
       if (result.verification_result.is_match) {
         setStep("success");
         setTimeout(onVerified, 2000); // Auto-proceed after 2 seconds
@@ -84,12 +102,16 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
       }
     } catch (err) {
       console.error("Face verification error:", err);
+      // Ensure camera is stopped even on error
+      stopCamera();
       setError(err.message || "Face verification failed. Please try again.");
       setStep("failed");
     }
   };
   
   const handleRetry = () => {
+    // Ensure camera is stopped before retrying
+    stopCamera();
     setCapturedImage(null);
     setVerificationResult(null);
     setError(null);
@@ -282,16 +304,6 @@ const ResultScreen = ({ isSuccess, result, error, onRetry }) => (
     <h2 className="text-2xl font-bold">
       {isSuccess ? "Verification Successful!" : "Verification Failed"}
     </h2>
-    {result && (
-      <p className="text-sm text-gray-400">
-        Similarity Score:{" "}
-        <span className="font-bold text-white">
-          {(result.similarity_score * 100).toFixed(2)}%
-        </span>
-        <br />
-        (Required: {(result.threshold * 100).toFixed(2)}%)
-      </p>
-    )}
     {error && <p className="text-red-400">{error}</p>}
     {!isSuccess && (
       <button

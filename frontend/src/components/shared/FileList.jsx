@@ -34,7 +34,6 @@ export const useFileList = () => {
         return transformedFiles;
     };
     const getFileUrl = async (metadata) => {
-        // URL-encode the path to handle spaces and special characters
         const encodedPath = encodeURIComponent(metadata.path);
         
         const config = await loadConfig();
