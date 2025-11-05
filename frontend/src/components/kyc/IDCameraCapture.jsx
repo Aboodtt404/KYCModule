@@ -1,618 +1,328 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { Camera, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-
-const OCR_SERVER_URL = "http://194.31.150.154:5000";
+import { Camera, X, Check } from "lucide-react";
 
 export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
+    const [mode, setMode] = useState('camera'); // 'camera' or 'preview'
+    const [preview, setPreview] = useState(null);
+    const [capturedBlob, setCapturedBlob] = useState(null);
+    const [cameraReady, setCameraReady] = useState(false);
+    const [error, setError] = useState(null);
+    
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const streamRef = useRef(null);
-    const detectionLoopTimeoutRef = useRef(null);
-    const abortControllersRef = useRef([]);  // Track ALL active abort controllers
-    const isCapturingRef = useRef(false);  // Use ref for immediate updates
-    const activeRequestsRef = useRef(0);  // Track number of active requests
-    const manualCaptureTimerRef = useRef(null); // Timer for manual fallback
-    const sessionIdRef = useRef(null); // Use ref for session ID to avoid stale closures
-    const isCapturingPhotoRef = useRef(false); // Ref to prevent race conditions on capture
+    const hasStartedCamera = useRef(false); // Simplified single guard
 
-    const [isCameraFlipped, setIsCameraFlipped] = useState(false); // Add this state back
-    const [isCapturing, setIsCapturing] = useState(false);
-    const [error, setError] = useState(null);
-    const [detection, setDetection] = useState(null);
-    const [isDetecting, setIsDetecting] = useState(false);
-    const [autoCapturing, setAutoCapturing] = useState(false);
-    const [showingFields, setShowingFields] = useState(false);
-    const [showManualCapture, setShowManualCapture] = useState(false); // State for fallback button
-
-    // Start camera
+    // Start camera - ONLY CALLED ONCE
     const startCamera = async () => {
+        if (hasStartedCamera.current || streamRef.current) {
+            console.log('❌ BLOCKED: Camera start rejected. hasStartedCamera:', hasStartedCamera.current, 'streamRef:', !!streamRef.current);
+            return;
+        }
+        console.log('🎥 [ID] Starting camera - FIRST AND ONLY TIME');
+        hasStartedCamera.current = true;
+        setError(null);
+        setCameraReady(false);
+
         try {
-            setError(null);
+            // iOS-friendly constraints - simplified for better compatibility
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
-                    facingMode: { ideal: "environment" }, // Prefer back camera, but allow fallback
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
+                    facingMode: "environment", // Simplified for iOS
+                    width: { ideal: 1920, max: 4096 },
+                    height: { ideal: 1080, max: 4096 },
                 },
                 audio: false,
             });
+            
             streamRef.current = stream;
+            
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
-            }
-
-            // Check which camera is being used and set flip state
-            const track = stream.getVideoTracks()[0];
-            if (track) {
-                const settings = track.getSettings();
-                if (settings.facingMode === 'user') {
-                    console.log('🤳 Front camera detected, will flip canvas for processing.');
-                    setIsCameraFlipped(true);
-                } else {
-                    console.log('📸 Back camera detected, no flip needed.');
-                    setIsCameraFlipped(false);
-                }
+                
+                // iOS Safari needs both loadedmetadata and canplay events
+                const handleVideoReady = async () => {
+                    try {
+                        // Small delay helps iOS Safari initialize properly
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                        await videoRef.current.play();
+                        setCameraReady(true);
+                        console.log('✅ [ID] Camera ready and playing');
+                    } catch (err) {
+                        console.error('[ID] Error playing video:', err);
+                        setCameraReady(true); // Still set ready to allow capture attempt
+                    }
+                };
+                
+                videoRef.current.onloadedmetadata = handleVideoReady;
+                // Fallback for iOS which sometimes only fires canplay
+                videoRef.current.oncanplay = () => {
+                    if (!cameraReady) {
+                        console.log('📱 iOS fallback: canplay event fired');
+                        setCameraReady(true);
+                    }
+                };
             }
         } catch (err) {
-            console.error("Camera error:", err);
-            setError("Unable to access camera. Please check permissions.");
-            setIsCapturing(false);
+            console.error("❌ [ID] Camera error:", err);
+            hasStartedCamera.current = false; // Allow retry on error
+            setError(err.message || "Camera access denied");
+            setTimeout(() => { onCancel(); }, 2000);
         }
     };
 
     // Stop camera
     const stopCamera = () => {
-        console.log('🛑 ============ STOP CAMERA CALLED ============');
-        console.log('🛑 Active requests before stop:', activeRequestsRef.current);
-
-        // Set this FIRST so in-flight requests see it immediately
-        isCapturingRef.current = false;
-        console.log('🛑 Set isCapturingRef.current = FALSE');
-
         if (streamRef.current) {
-            console.log('🛑 Stopping camera stream...');
+            console.log('🛑 [ID] Stopping camera...');
             streamRef.current.getTracks().forEach((track) => track.stop());
             streamRef.current = null;
         }
-        if (detectionLoopTimeoutRef.current) {
-            console.log('🛑 Clearing detection loop timeout...');
-            clearTimeout(detectionLoopTimeoutRef.current);
-            detectionLoopTimeoutRef.current = null;
-            console.log('🛑 Timeout cleared ✓');
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
         }
-        if (manualCaptureTimerRef.current) {
-            console.log('🛑 Clearing manual capture timer...');
-            clearTimeout(manualCaptureTimerRef.current);
-            manualCaptureTimerRef.current = null;
-        }
-
-        // Abort ALL in-flight requests immediately
-        if (abortControllersRef.current.length > 0) {
-            console.log(`🛑 Aborting ${abortControllersRef.current.length} in-flight requests...`);
-            abortControllersRef.current.forEach((controller, index) => {
-                try {
-                    controller.abort();
-                    console.log(`   ✓ Aborted request ${index + 1}`);
-                } catch (err) {
-                    console.log(`   ⚠️ Abort error for request ${index + 1}:`, err.message);
-                }
-            });
-            abortControllersRef.current = [];  // Clear the array
-            console.log('🛑 All requests aborted ✓');
-        }
-
-        console.log('🛑 ============ STOP COMPLETE ============');
+        setCameraReady(false);
+        hasStartedCamera.current = false; // Reset for next time component is used
     };
 
-    // Send frame to backend for detection
-    const detectIDCard = async () => {
-        // CRITICAL: Check if a capture is already in progress
-        if (isCapturingPhotoRef.current) {
-            console.log('🚫 SKIPPED: Capture already in progress.');
-            return;
-        }
-
-        // CRITICAL: Check if camera is still active (use ref for immediate value)
-        if (!isCapturingRef.current) {
-            console.log('🚫 SKIPPED: isCapturingRef.current is FALSE - camera stopped');
-            return;
-        }
-
-        if (!videoRef.current || autoCapturing) {
-            return; // Silent skip for these conditions
-        }
-
-        // CRITICAL: Don't send new requests if one is already in progress
-        if (activeRequestsRef.current > 0) {
-            console.log('⏳ Waiting for previous request to complete... (Active: ' + activeRequestsRef.current + ')');
-            return;
-        }
-
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-
-        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-            console.log('⏳ Video not ready yet');
-            return;
-        }
-
-        console.log('🎥 Starting detection request...');
-        activeRequestsRef.current += 1;
-        console.log('📊 Active requests:', activeRequestsRef.current);
-        setIsDetecting(true);
-
-        // Create new AbortController for this request and add to array
-        let abortController = new AbortController();
-        abortControllersRef.current.push(abortController);
-
-        try {
-
-            // Draw video frame to canvas
-            const context = canvas.getContext("2d");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Convert canvas to blob (JPEG)
-            const blob = await new Promise((resolve) => {
-                canvas.toBlob(resolve, "image/jpeg", 0.8);
-            });
-
-            if (!blob || !isCapturingRef.current) {
-                // Don't return early - let finally block handle cleanup
-                console.log('⚠️ Blob creation failed or camera stopped');
-            } else {
-                // Send to backend for detection
-                const arrayBuffer = await blob.arrayBuffer();
-                const headers = { "Content-Type": "image/jpeg" };
-                if (sessionIdRef.current) {
-                    headers['X-Session-ID'] = sessionIdRef.current;
-                }
-                const response = await fetch(`${OCR_SERVER_URL}/detect-id-card`, {
-                    method: "POST",
-                    headers: headers,
-                    body: arrayBuffer,
-                    signal: abortController.signal,
-                });
-
-                // Check if still capturing before processing response
-                if (!isCapturingRef.current) {
-                    console.log('❌ Camera stopped, ignoring detection result');
-                } else if (response.ok) {
-                    const result = await response.json();
-                    if (result.session_id && !sessionIdRef.current) {
-                        sessionIdRef.current = result.session_id;
-                        console.log('🤝 Session ID established:', sessionIdRef.current);
-                    }
-                    console.log('✅ Detection result:', {
-                        detected: result.detected,
-                        fields: result.field_count,
-                        ready: result.ready_for_capture,
-                        message: result.message
-                    });
-                    setDetection(result);
-
-                    // Auto-capture INSTANTLY when all 5 fields detected
-                    if (result.ready_for_capture && !autoCapturing && !showingFields) {
-                        // Use ref to immediately stop further detection calls
-                        isCapturingPhotoRef.current = true;
-                        console.log('🎯 ALL REQUIREMENTS MET! Capturing instantly:', {
-                            fields: result.field_count,
-                            digits: result.id_digits.length,
-                            photo: result.photo?.detected,
-                            fieldSummary: result.field_summary
-                        });
-                        setShowingFields(true);
-                        setAutoCapturing(true);
-
-                        // Stop detection loop immediately
-                        if (detectionLoopTimeoutRef.current) {
-                            clearTimeout(detectionLoopTimeoutRef.current);
-                            detectionLoopTimeoutRef.current = null;
-                        }
-
-                        // Capture immediately - pass detection result directly (state update is async!)
-                        setTimeout(() => {
-                            capturePhoto(result);  // Pass result directly instead of relying on state
-                        }, 100);
-                    }
-                }
-            }
-        } catch (err) {
-            // Ignore abort errors (expected when canceling)
-            if (err.name === 'AbortError') {
-                console.log('🚫 Detection request aborted');
-            } else {
-                console.error("❌ Detection error:", err);
-                if (isCapturingRef.current) {
-                    setDetection({
-                        detected: false,
-                        message: "Detection failed. Check connection.",
-                    });
-                }
-            }
-        } finally {
-            // Remove this controller from the array
-            const index = abortControllersRef.current.indexOf(abortController);
-            if (index > -1) {
-                abortControllersRef.current.splice(index, 1);
-            }
-
-            activeRequestsRef.current -= 1;
-            console.log('📊 Active requests (after):', activeRequestsRef.current);
-            setIsDetecting(false);
-        }
-    };
-
-    // Recursive function to create a smooth detection loop
-    const detectionLoop = async () => {
-        if (!isCapturingRef.current) {
-            console.log('➡️ Detection loop stopped.');
-            return;
-        }
-
-        await detectIDCard();
-
-        // Schedule the next iteration of the loop
-        if (isCapturingRef.current) { // Check again in case it was stopped during the await
-            detectionLoopTimeoutRef.current = setTimeout(detectionLoop, 500);
-        }
-    };
-
-    // Capture final photo
-    const capturePhoto = (detectionData = null, isManual = false) => {
-        // Stop the manual capture timer since a capture is being attempted
-        if (manualCaptureTimerRef.current) {
-            clearTimeout(manualCaptureTimerRef.current);
-        }
-
-        // Use passed detection data or fall back to state (for manual captures)
-        const currentDetection = detectionData || detection;
-
-        // For AUTO-CAPTURE: requirements are strict
-        if (!isManual && (!currentDetection || !currentDetection.ready_for_capture)) {
-            console.warn('Auto-capture aborted - missing requirements:', {
-                detected: currentDetection?.detected,
-                readyForCapture: currentDetection?.ready_for_capture,
-            });
-            setAutoCapturing(false);
-            setShowingFields(false);
-            return;
-        }
-
-        // For MANUAL-CAPTURE: requirements are looser, just need an ID in the frame
-        if (isManual && (!currentDetection || !currentDetection.detected)) {
-            console.warn('Manual capture aborted - no ID card detected.');
-            setError("No ID card visible. Please position the card in the frame before capturing.");
-            // Briefly show error then clear it
-            setTimeout(() => setError(null), 3000);
-            return;
-        }
-
-        console.log(`📸 Capturing photo (Manual: ${isManual}) - all requirements met!`, {
-            fields: currentDetection.field_count,
-            digits: currentDetection.id_digits.length,
-            photo: currentDetection.photo?.detected
-        });
-
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        canvas.toBlob(
-            (blob) => {
-                if (blob) {
-                    const file = new File([blob], "id-card.jpg", { type: "image/jpeg" });
-                    console.log('✅ Photo captured successfully, closing camera');
-
-                    // Clean up states before closing
-                    setAutoCapturing(false);
-                    setShowingFields(false);
-                    setDetection(null);
-                    isCapturingPhotoRef.current = false; // Reset capture lock
-
-                    onCapture(file);
-                    stopCamera();
-                    setIsCapturing(false);
-                }
-            },
-            "image/jpeg",
-            0.95
-        );
-    };
-
-    // Handle start capture
-    const handleStartCapture = async () => {
-        console.log('🎬 Starting fresh camera session');
-        sessionIdRef.current = null; // Reset session on new capture
-        isCapturingPhotoRef.current = false; // Reset capture lock
-
-        // Reset all states first to ensure clean start
-        setDetection(null);
-        setAutoCapturing(false);
-        setShowingFields(false);
-        setIsDetecting(false);
-        setError(null);
-
-        // Set BOTH state and ref immediately
-        setIsCapturing(true);
-        isCapturingRef.current = true;
-        console.log('✅ Set isCapturing to true (state + ref)');
-
-        await startCamera();
-        console.log('✅ Camera started');
-
-        // Small delay before starting detection to ensure camera is ready
-        setTimeout(() => {
-            console.log('🔄 Starting detection loop...');
-            // Start detection loop
-            detectionLoop();
-
-            // Start timer for manual capture fallback
-            manualCaptureTimerRef.current = setTimeout(() => {
-                console.log('⏳ Timer expired, showing manual capture button.');
-                setShowManualCapture(true);
-            }, 10000); // 10 seconds
-        }, 500);
-    };
-
-    // Handle stop capture
-    const handleStopCapture = () => {
-        console.log('🛑 Stopping camera and resetting all states');
-
-        // Stop camera and clear interval (this sets isCapturingRef.current = false)
-        stopCamera();
-        sessionIdRef.current = null; // Clear session ID on stop
-        isCapturingPhotoRef.current = false; // Reset capture lock
-
-        // Reset ALL states completely  
-        setIsCapturing(false);
-        // Note: isCapturingRef.current already set to false in stopCamera()
-        setDetection(null);
-        setAutoCapturing(false);
-        setShowingFields(false);
-        setIsDetecting(false);
-        setError(null);
-        setShowManualCapture(false); // Reset manual capture state
-        setIsCameraFlipped(false); // Reset flip state
-    };
-
-    // Main effect for handling component visibility
+    // Unified effect to manage camera based on the `isOpen` prop
     useEffect(() => {
-        // When the component is opened, start the capture process
         if (isOpen) {
-            handleStartCapture();
+            startCamera();
         }
 
-        // Return a cleanup function that will be called whenever isOpen changes
-        // or when the component unmounts. This is the key to fixing the leak.
+        // The cleanup function will be called when the component unmounts OR when `isOpen` becomes false.
+        // This ensures the camera is always stopped when the component is hidden or closed.
         return () => {
-            console.log('🛑 Cleanup effect triggered (isOpen changed or unmount)');
-            // Ensure the camera is off when the component is not open/visible
-            if (isCapturingRef.current) {
+            if (streamRef.current) {
                 stopCamera();
             }
         };
-    }, [isOpen]); // This effect is now tied to the component's visibility
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
+    // Capture photo from video
+    const handleCaptureFromCamera = () => {
+        if (!videoRef.current || !canvasRef.current || !cameraReady) {
+            console.log('Camera not ready');
+            return;
+        }
+
+        console.log('Capturing photo...');
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            if (blob) {
+                console.log('Photo captured, blob size:', blob.size);
+                setCapturedBlob(blob);
+                const previewUrl = URL.createObjectURL(blob);
+                setPreview(previewUrl);
+                // DON'T stop camera here - keep it running
+                setMode('preview');
+            }
+        }, "image/jpeg", 0.95);
+    };
+
+    // Confirm and return captured image
+    const handleConfirm = () => {
+        if (capturedBlob) {
+            console.log('Confirming capture...');
+            const file = new File([capturedBlob], `id-card-${Date.now()}.jpg`, { 
+                type: "image/jpeg" 
+            });
+            stopCamera(); // Stop camera before closing
+            onCapture(file);
+        }
+    };
+
+    const handleRetake = () => {
+        console.log('Retaking photo...');
+        if (preview) {
+            URL.revokeObjectURL(preview);
+        }
+        setPreview(null);
+        setCapturedBlob(null);
+        setMode('camera');
+        // Camera is still running, just switch back to camera view
+    };
+
+    const handleCancel = () => {
+        console.log('Cancelling...');
+        if (preview) {
+            URL.revokeObjectURL(preview);
+        }
+        stopCamera();
+        setPreview(null);
+        setCapturedBlob(null);
+        onCancel();
+    };
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        Scan Your ID Card
-                    </h3>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            console.log('❌ User clicked X - canceling');
-                            handleStopCapture();
-                            onCancel();
-                        }}
-                        disabled={autoCapturing}
-                    >
-                        <X className="w-4 h-4" />
-                    </Button>
-                </div>
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 bg-black/50 backdrop-blur-sm">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    {mode === 'camera' && (
+                        <>
+                            <Camera className="w-4 h-4" />
+                            <span>Capture ID Card</span>
+                        </>
+                    )}
+                    {mode === 'preview' && (
+                        <>
+                            <Check className="w-4 h-4" />
+                            <span>Review Image</span>
+                        </>
+                    )}
+                </h3>
+                <button 
+                    onClick={handleCancel} 
+                    className="p-2 text-white hover:bg-white/10 rounded-full transition"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
 
-                {/* Error Message */}
-                {error && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
-                        <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-                    </div>
-                )}
-
-                {!isCapturing ? (
-                    /* Pre-capture state */
-                    <div className="text-center py-8">
-                        <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                            <Camera className="w-16 h-16 text-white" />
-                        </div>
-                        <h4 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                            Ready to Scan
-                        </h4>
-                        <p className="text-gray-600 dark:text-gray-300 mb-6">
-                            Show your ID card to the camera.
-                            <br />
-                            We'll detect it and capture automatically when clear.
-                        </p>
-                        <Button onClick={handleStartCapture} className="w-full" size="lg">
-                            <Camera className="w-5 h-5 mr-2" />
-                            Start Camera
-                        </Button>
-                    </div>
-                ) : (
-                    /* Camera active */
-                    <div className="space-y-4">
-                        {/* Video Preview with Overlay */}
-                        <div className="relative bg-black rounded-lg overflow-hidden">
-                            <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full h-96 object-cover"
-                            />
-
-                            {/* Capturing Flash Overlay */}
-                            {autoCapturing && (
-                                <div className="absolute inset-0 bg-white animate-pulse"></div>
-                            )}
-
-                            {/* Scanning Indicator - Only show when no ID detected */}
-                            {!detection?.detected && !autoCapturing && (
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="bg-black/70 backdrop-blur-sm px-6 py-4 rounded-2xl">
-                                        <div className="flex items-center gap-3">
-                                            <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
-                                            <p className="text-white text-lg font-medium">
-                                                Scanning for ID card...
-                                            </p>
-                                            {showManualCapture && <p className="text-gray-300 text-sm">(Or use manual capture below)</p>}
-                                        </div>
-                                    </div>
+            {/* Camera Mode - Fullscreen */}
+            {mode === 'camera' && (
+                <div className="flex-1 relative flex flex-col">
+                    <div className="flex-1 relative bg-black">
+                        <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            webkit-playsinline="true"
+                            x-webkit-airplay="allow"
+                            className="w-full h-full object-cover"
+                            style={{ WebkitTransform: 'translateZ(0)' }}
+                        />
+                        <canvas ref={canvasRef} className="hidden" />
+                        
+                        {/* ID Card Frame Overlay */}
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
+                            {/* Semi-transparent overlay outside the frame */}
+                            <div className="absolute inset-0 bg-black/40"></div>
+                            
+                            {/* ID Card Frame - Credit card aspect ratio */}
+                            <div className="relative w-full max-w-md aspect-[85.6/53.98] z-10">
+                                {/* Frame border */}
+                                <div className="absolute inset-0 border-3 border-white rounded-2xl shadow-lg"></div>
+                                
+                                {/* Corner markers */}
+                                <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-2xl"></div>
+                                <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-2xl"></div>
+                                <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-2xl"></div>
+                                <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-2xl"></div>
+                                
+                                {/* Instruction text */}
+                                <div className="absolute -bottom-16 left-0 right-0 text-center">
+                                    <p className="text-white font-semibold text-sm mb-1">
+                                        Position ID Card in Frame
+                                    </p>
+                                    <p className="text-white/80 text-xs">
+                                        Ensure good lighting • Keep card flat
+                                    </p>
                                 </div>
-                            )}
-
-                        </div>
-
-                        {/* Status Bar - User Friendly */}
-                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 rounded-lg p-4 border border-blue-100 dark:border-gray-700">
-                            <div className="space-y-3">
-                                {/* Main Status */}
-                                <div className="flex items-center gap-3">
-                                    {autoCapturing ? (
-                                        <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0 animate-pulse" />
-                                    ) : isDetecting ? (
-                                        <Loader2 className="w-6 h-6 text-blue-500 animate-spin flex-shrink-0" />
-                                    ) : detection?.ready_for_capture ? (
-                                        <CheckCircle className="w-6 h-6 text-green-500 flex-shrink-0" />
-                                    ) : detection?.detected ? (
-                                        <AlertCircle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
-                                    ) : (
-                                        <Camera className="w-6 h-6 text-gray-400 flex-shrink-0" />
-                                    )}
-
-                                    <div className="flex-1">
-                                        <p className="text-base font-semibold text-gray-900 dark:text-white">
-                                            {autoCapturing
-                                                ? "Capturing perfect shot..."
-                                                : detection?.message || "Initializing camera..."}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Detection Details */}
-                                {detection?.detected && !autoCapturing && (
-                                    <div className="space-y-2">
-                                        {/* Fields Detected */}
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-gray-600 dark:text-gray-400">Fields Detected:</span>
-                                            <span className={`font-bold ${detection.field_count === 5 ? 'text-green-600' : 'text-yellow-600'}`}>
-                                                {detection.field_count}/5
-                                            </span>
-                                        </div>
-
-                                        {/* Field List */}
-                                        {detection?.field_summary && (
-                                            <div className="flex flex-wrap gap-2">
-                                                {Object.entries(detection.field_summary).map(([field, count]) => {
-                                                    const fieldLabels = {
-                                                        firstName: "First Name",
-                                                        lastName: "Last Name",
-                                                        nid: "National ID",
-                                                        address: "Address",
-                                                        serial: "Serial"
-                                                    };
-                                                    return count > 0 && (
-                                                        <div
-                                                            key={field}
-                                                            className="flex items-center gap-1 px-3 py-1 bg-white dark:bg-gray-800 rounded-full border border-gray-200 dark:border-gray-600"
-                                                        >
-                                                            <CheckCircle className="w-3 h-3 text-green-500" />
-                                                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                                                {fieldLabels[field] || field}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-
-                                        {/* ID Digits - Highlighted with count */}
-                                        {detection.id_digits && detection.id_digits.length > 0 && (
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="text-gray-600 dark:text-gray-400">National ID:</span>
-                                                    <span className={`font-bold ${detection.id_digits.length === 14 ? 'text-green-600' : 'text-orange-600'}`}>
-                                                        {detection.id_digits.length}/14 digits
-                                                    </span>
-                                                </div>
-                                                <div className="text-center">
-                                                    <span className="font-mono font-bold text-lg text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded">
-                                                        {detection.id_digits.map(d => d.digit).join('')}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Image Quality */}
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-gray-600 dark:text-gray-400">Image Quality:</span>
-                                            <span className={`font-bold ${detection.quality.quality_score >= 70 ? 'text-green-600' :
-                                                detection.quality.quality_score >= 50 ? 'text-yellow-600' :
-                                                    'text-red-600'
-                                                }`}>
-                                                {detection.quality.quality_score}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
 
-                        {/* Button Group */}
-                        <div className="flex items-center gap-3 mt-4">
-                            {showManualCapture && !autoCapturing && (
-                                <Button
-                                    onClick={() => capturePhoto(null, true)}
-                                    className="flex-1 h-12 text-lg font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+                        {/* Loading indicator */}
+                        {!cameraReady && !error && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+                                <div className="text-center px-4">
+                                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400 mx-auto mb-3"></div>
+                                    <p className="text-white text-sm font-medium">Initializing camera...</p>
+                                    <p className="text-white/60 text-xs mt-2">This should only take a moment</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Error display */}
+                        {error && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+                                <div className="text-center px-4">
+                                    <div className="text-red-400 text-5xl mb-3">⚠️</div>
+                                    <p className="text-white text-sm font-medium mb-2">Camera Error</p>
+                                    <p className="text-white/70 text-xs">{error}</p>
+                                    <p className="text-white/50 text-xs mt-3">Closing in 2 seconds...</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                        {/* Capture Button - Bottom Fixed with iOS-safe area */}
+                        <div className="p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+                            <div className="flex gap-3 max-w-md mx-auto">
+                                <button
+                                    type="button"
+                                    onClick={handleCancel}
+                                    onTouchEnd={(e) => { e.preventDefault(); handleCancel(); }}
+                                    className="px-6 py-3 bg-white/10 active:bg-white/30 text-white rounded-full font-medium transition text-sm touch-manipulation"
+                                    style={{ WebkitTapHighlightColor: 'transparent' }}
                                 >
-                                    <Camera className="w-5 h-5 mr-2" />
-                                    Capture Manually
-                                </Button>
-                            )}
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    console.log('🚫 User clicked Cancel button');
-                                    handleStopCapture();
-                                    onCancel();
-                                }}
-                                disabled={autoCapturing}
-                                className={showManualCapture ? "h-12" : "w-full h-12"} // Full width if it's the only button
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCaptureFromCamera}
+                                    onTouchEnd={(e) => {
+                                        if (cameraReady) {
+                                            e.preventDefault();
+                                            handleCaptureFromCamera();
+                                        }
+                                    }}
+                                    disabled={!cameraReady}
+                                    className="flex-1 px-6 py-4 bg-emerald-500 active:bg-emerald-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation"
+                                    style={{ WebkitTapHighlightColor: 'transparent' }}
+                                >
+                                    <Camera className="w-5 h-5" />
+                                    Capture
+                                </button>
+                            </div>
+                        </div>
+                </div>
+            )}
+
+            {/* Preview Mode - Fullscreen */}
+            {mode === 'preview' && preview && (
+                <div className="flex-1 flex flex-col bg-black">
+                    <div className="flex-1 relative flex items-center justify-center p-4">
+                        <img
+                            src={preview}
+                            alt="Preview"
+                            className="max-w-full max-h-full object-contain rounded-lg"
+                        />
+                    </div>
+
+                    {/* Action Buttons - Bottom Fixed */}
+                    <div className="p-4 bg-black/50 backdrop-blur-sm">
+                        <div className="flex gap-3 max-w-md mx-auto">
+                            <button
+                                onClick={handleRetake}
+                                className="flex-1 px-6 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition"
                             >
-                                {autoCapturing ? "Capturing..." : "Cancel"}
-                            </Button>
+                                Retake
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
+                            >
+                                <Check className="w-5 h-5" />
+                                Use This
+                            </button>
                         </div>
                     </div>
-                )}
-
-                {/* Hidden canvas for frame capture */}
-                <canvas ref={canvasRef} className="hidden" />
-            </div>
+                </div>
+            )}
         </div>
     );
 }

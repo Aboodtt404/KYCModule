@@ -64,10 +64,11 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
 
     try {
       const arrayBuffer = await file.arrayBuffer();
+      const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
       const ocrEndpoint =
         type === "id"
-          ? "http://194.31.150.154:5000/egyptian-id"
-          : "http://194.31.150.154:5000/passport";
+          ? `${OCR_SERVER_URL}/egyptian-id`
+          : `${OCR_SERVER_URL}/passport`;
 
       const response = await fetch(ocrEndpoint, {
         method: "POST",
@@ -76,9 +77,14 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
           "X-Submission-ID": submissionId, // Pass submission ID
         },
         body: arrayBuffer,
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       });
 
-      if (!response.ok) throw new Error(`OCR server error ${response.status}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OCR server error ${response.status}: ${errorText || 'Server returned an error'}`);
+      }
+      
       const result = await response.json();
 
       if (result.success && result.extracted_data) {
@@ -133,37 +139,59 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
       }
     } catch (error) {
       console.error("OCR error:", error);
-      setValidationError(
-        `Failed to process ${type === "id" ? "ID" : "passport"}. Please ensure the image is clear and try again.`
-      );
+      
+      // Provide specific error messages based on error type
+      let errorMessage = `Failed to process ${type === "id" ? "ID" : "passport"}. `;
+      
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        errorMessage += "Request timed out. The server may be slow or unresponsive. Please try again.";
+      } else if (error.message?.includes('Failed to fetch')) {
+        // Check if it's a certificate error
+        if (window.location.protocol === 'https:') {
+          errorMessage += "SSL Certificate error. Please visit the OCR server URL directly in your browser and accept the security certificate, then try again.";
+        } else {
+          errorMessage += "Cannot connect to the OCR server. Please check if the server is running and try again.";
+        }
+      } else if (error.message?.includes('ERR_CONNECTION_RESET') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+        errorMessage += "Cannot connect to the OCR server. Please check if the server is running and try again.";
+      } else if (error.message?.includes('network')) {
+        errorMessage += "Network error. Please check your internet connection and try again.";
+      } else {
+        errorMessage += error.message || "Please ensure the image is clear and try again.";
+      }
+      
+      setValidationError(errorMessage);
     } finally {
       setIsProcessing(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <ThreeHero className="h-36 sm:h-52" />
-      <GlassCard className="p-6">
+    <div className="space-y-3">
+      {/* Remove ThreeHero on mobile for better space usage */}
+      <div className="hidden sm:block">
+        <ThreeHero className="h-36 md:h-52" />
+      </div>
+      <GlassCard className="p-3 sm:p-6">
         {/* Validation Error Display */}
         {validationError && (
-          <div className="mb-4 p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-200">
-            <p className="font-semibold">⚠️ Validation Failed</p>
-            <p className="text-sm mt-1">{validationError}</p>
+          <div className="mb-3 p-2.5 bg-red-500/20 border border-red-500 rounded-lg text-red-200">
+            <p className="font-semibold text-xs">⚠️ Validation Failed</p>
+            <p className="text-[11px] mt-0.5">{validationError}</p>
           </div>
         )}
 
         {/* Document Type Selector */}
-        <div className="flex gap-3 justify-center flex-col sm:flex-row">
+        <div className="flex gap-2 justify-center">
           {[
             { key: "id", label: "🪪 National ID" },
             { key: "passport", label: "🛂 Passport" },
           ].map((doc) => (
             <button
               key={doc.key}
-              className={`p-3 rounded-xl w-full sm:w-auto transition ${type === doc.key
-                ? "bg-emerald-500 text-black font-semibold"
-                : "bg-white/10 hover:bg-white/20"
+              className={`flex-1 p-2.5 rounded-lg transition text-sm font-medium ${type === doc.key
+                ? "bg-emerald-500 text-black font-semibold shadow-lg"
+                : "bg-white/10 hover:bg-white/20 text-white"
                 }`}
               onClick={() => setType(doc.key)}
             >
@@ -172,103 +200,92 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
           ))}
         </div>
 
-        {/* Capture Options - Only show camera for ID cards */}
-        {type === "id" && !file && (
-          <div className="mt-6">
+        {/* Camera Capture Button - Unified */}
+        {!file && (
+          <div className="mt-4">
             <button
               onClick={() => setShowCamera(true)}
-              className="w-full flex flex-col items-center gap-3 p-6 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-200 transform hover:scale-105"
+              className={`w-full py-5 rounded-xl text-base font-bold bg-gradient-to-br shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-3 ${
+                type === "id"
+                  ? "from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                  : "from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+              } text-white`}
             >
-              <Camera className="w-10 h-10 text-white" />
-              <div className="text-center">
-                <p className="font-semibold text-white">Scan with Camera</p>
-                <p className="text-xs text-white/80 mt-1">Recommended for auto-detection and capture</p>
+              <Camera className="w-7 h-7" />
+              <div className="text-left">
+                <div>Capture {type === "id" ? "ID Card" : "Passport"}</div>
+                <div className="text-[11px] font-normal text-white/90">Tap to open camera</div>
               </div>
             </button>
           </div>
         )}
 
-        {/* Upload for Passport */}
-        {type === "passport" && !file && (
-          <div className="mt-6">
-            <UploadBox
-              label="Upload Passport"
-              onFile={handleFile}
-            />
-          </div>
-        )}
-
         {/* File details + process button */}
         {file && (
-          <div className="mt-6 space-y-4">
-            {/* Preview */}
-            <div className="bg-white/5 rounded-lg p-4">
+          <div className="mt-4 space-y-3">
+            {/* Preview - Compact */}
+            <div className="bg-white/5 rounded-lg p-2.5">
               <img
                 src={URL.createObjectURL(file)}
                 alt="Preview"
-                className="w-full h-48 object-contain rounded-lg mb-3"
+                className="w-full h-36 object-contain rounded-lg mb-2"
               />
-              <div className="flex items-center justify-between text-sm text-gray-200">
+              <div className="flex items-center justify-between text-[11px] text-gray-200">
                 <span className="truncate max-w-[70%]">{file.name}</span>
                 <span className="text-gray-400">
                   {(file.size / 1000).toFixed(1)} KB
                 </span>
               </div>
-              {captureMode === 'camera' && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-green-400">
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-green-400">
                   <Camera className="w-3 h-3" />
                   <span>Captured with camera</span>
                 </div>
-              )}
             </div>
 
-            {/* Actions */}
+            {/* Actions - Mobile Optimized */}
             <div className="flex gap-2">
-              <Button
+              <button
                 onClick={handleProcessDocument}
-                className="flex-1"
                 disabled={isProcessing}
+                className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-600 text-white rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg"
               >
                 {isProcessing ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Processing...
-                  </span>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing...</span>
+                  </>
                 ) : (
                   "Process Document"
                 )}
-              </Button>
-              <Button
-                variant="outline"
+              </button>
+              <button
                 onClick={() => {
-                  // Clean up preview URL to avoid memory leaks
                   if (file) {
                     URL.revokeObjectURL(URL.createObjectURL(file));
                   }
                   setFile(null);
                   setCaptureMode(null);
-                  setShowCamera(false); // Ensure camera modal is closed
+                  setShowCamera(false);
                 }}
                 disabled={isProcessing}
+                className="px-5 py-4 bg-white/10 hover:bg-white/20 disabled:bg-gray-600 text-white rounded-lg font-medium text-sm transition"
               >
-                Change
-              </Button>
+                Retake
+              </button>
             </div>
           </div>
         )}
       </GlassCard>
 
-      {/* Camera Modal */}
-      {showCamera && (
-        <IDCameraCapture
-          key={`camera-${Date.now()}`} // Force remount for clean state
-          isOpen={showCamera}
-          onCapture={handleCameraCapture}
-          onCancel={() => {
-            console.log('📵 Closing camera modal');
-            setShowCamera(false);
-          }}
-        />
-      )}
+      {/* Camera Modal - Simplified to rely on isOpen */}
+      <IDCameraCapture
+        isOpen={showCamera}
+        onCapture={handleCameraCapture}
+        onCancel={() => {
+          console.log('📵 Closing camera modal');
+          setShowCamera(false);
+        }}
+      />
     </div>
   );
 }

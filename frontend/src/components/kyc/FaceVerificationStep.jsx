@@ -1,173 +1,133 @@
 "use client";
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Loader2, Camera, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { verifyFace } from "../../services/faceVerification";
 
+const createCameraManager = () => ({
+    stream: null, isStarting: false, isStarted: false, videoElement: null,
+    async start(videoElement, { onReady, onError }) {
+        if (this.isStarted || this.isStarting) { return; }
+        this.isStarting = true; this.videoElement = videoElement;
+        try {
+            // iOS-friendly constraints
+            this.stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "user",
+                    width: { ideal: 1920, max: 4096 }, 
+                    height: { ideal: 1080, max: 4096 } 
+                }, 
+                audio: false 
+            });
+            if (!this.videoElement) { this.stop(); return; }
+            this.videoElement.srcObject = this.stream;
+            this.videoElement.onloadedmetadata = async () => {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    await this.videoElement.play();
+                    this.isStarted = true; this.isStarting = false; onReady();
+                } catch (playErr) { onError(playErr.message || "Failed to play video."); this.stop(); }
+            };
+            // iOS fallback
+            this.videoElement.oncanplay = () => {
+                if (!this.isStarted) {
+                    this.isStarted = true; this.isStarting = false; onReady();
+                }
+            };
+        } catch (err) { this.isStarting = false; onError(err.message || "Camera access denied."); this.stop(); }
+    },
+    stop() {
+        if (this.stream) { this.stream.getTracks().forEach(track => track.stop()); }
+        if (this.videoElement) { this.videoElement.srcObject = null; }
+        this.stream = null; this.isStarted = false; this.isStarting = false; this.videoElement = null;
+    },
+});
+
 const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
-  const [step, setStep] = useState("instruction"); // instruction, camera, preview, verifying, success, failed
-  const [error, setError] = useState(null);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [verificationResult, setVerificationResult] = useState(null);
+    const [step, setStep] = useState("instruction");
+    const [error, setError] = useState(null);
+    const [capturedImage, setCapturedImage] = useState(null);
+    const [verificationResult, setVerificationResult] = useState(null);
+    const [cameraReady, setCameraReady] = useState(false);
+    const videoRef = useRef(null);
+    const canvasRef = useRef(null);
+    const cameraManager = useRef(null);
+    if (!cameraManager.current) { cameraManager.current = createCameraManager(); }
 
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+    useEffect(() => {
+        const manager = cameraManager.current;
+        const handleCameraReady = () => { setCameraReady(true); setError(null); };
+        const handleCameraError = (errMsg) => { setError(errMsg); setCameraReady(false); setTimeout(() => setStep("failed"), 2000); };
+        
+        if (step === "camera" && videoRef.current) {
+            manager.start(videoRef.current, { onReady: handleCameraReady, onError: handleCameraError });
+        }
+        
+        return () => { manager.stop(); setCameraReady(false); };
+    }, [step]);
 
-  const startCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: "user",
-        },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error("Camera access error:", err);
-      setError("Could not access the camera. Please check your browser permissions.");
-      setStep("failed");
-    }
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject;
-      stream.getTracks().forEach((track) => {
-        track.stop();
-        track.enabled = false;
-      });
-      videoRef.current.srcObject = null;
-      videoRef.current.src = '';
-    }
-  }, []);
-
-  // Stop camera when step changes away from "camera"
-  useEffect(() => {
-    if (step === "camera") {
-      startCamera();
-    } else {
-      // Stop camera immediately when leaving camera step
-      stopCamera();
-    }
-  }, [step, startCamera, stopCamera]);
-
-  // Ensure camera is stopped on component unmount
-  useEffect(() => {
-    return () => {
-      stopCamera();
+    const handleCapture = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext("2d");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL("image/jpeg");
+            setCapturedImage(dataUrl);
+            cameraManager.current.stop();
+            setStep("preview");
+        }
     };
-  }, [stopCamera]);
 
-  const handleCapture = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext("2d");
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg");
-      setCapturedImage(dataUrl);
-      // Stop camera immediately after capture
-      stopCamera();
-      setStep("preview");
-    }
-  };
+    const handleVerify = async () => {
+        if (!capturedImage || !idFaceImage) return;
+        setStep("verifying");
+        setError(null);
+        try {
+            const liveImageBase64 = capturedImage.split(",")[1] || capturedImage;
+            const idImageBase64 = idFaceImage.split(",")[1] || idFaceImage;
+            const result = await verifyFace(idImageBase64, liveImageBase64);
+            setVerificationResult(result.verification_result);
+            cameraManager.current.stop();
+            if (result.verification_result.is_match) {
+                setStep("success");
+                setTimeout(onVerified, 2000);
+            } else { setStep("failed"); }
+        } catch (err) {
+            cameraManager.current.stop();
+            setError(err.message || "Face verification failed.");
+            setStep("failed");
+        }
+    };
+    
+    const handleRetry = () => {
+        cameraManager.current.stop();
+        setCapturedImage(null);
+        setVerificationResult(null);
+        setError(null);
+        setStep("instruction");
+    };
 
-  const handleVerify = async () => {
-    if (!capturedImage || !idFaceImage) return;
+    const renderContent = () => {
+        switch (step) {
+            case "instruction": return <InstructionScreen onStart={() => setStep("camera")} idFaceImage={idFaceImage} />;
+            case "camera": return <CameraScreen videoRef={videoRef} onCapture={handleCapture} onCancel={handleRetry} cameraReady={cameraReady} error={error} />;
+            case "preview": return <PreviewScreen image={capturedImage} onConfirm={handleVerify} onRetry={() => setStep("camera")} />;
+            case "verifying": return <LoadingScreen text="Verifying..." />;
+            case "success": return <ResultScreen isSuccess={true} result={verificationResult} />;
+            case "failed": return <ResultScreen isSuccess={false} result={verificationResult} error={error} onRetry={handleRetry} />;
+            default: return <div>Invalid step</div>;
+        }
+    };
 
-    setStep("verifying");
-    setError(null);
-
-    try {
-      // Ensure both images are raw base64 strings
-      const liveImageBase64 = capturedImage.split(",")[1] || capturedImage;
-      const idImageBase64 = idFaceImage.split(",")[1] || idFaceImage;
-
-      const result = await verifyFace(idImageBase64, liveImageBase64);
-      setVerificationResult(result.verification_result);
-
-      // Ensure camera is stopped before moving to next step
-      stopCamera();
-      
-      if (result.verification_result.is_match) {
-        setStep("success");
-        setTimeout(onVerified, 2000); // Auto-proceed after 2 seconds
-      } else {
-        setStep("failed");
-      }
-    } catch (err) {
-      console.error("Face verification error:", err);
-      // Ensure camera is stopped even on error
-      stopCamera();
-      setError(err.message || "Face verification failed. Please try again.");
-      setStep("failed");
-    }
-  };
-  
-  const handleRetry = () => {
-    // Ensure camera is stopped before retrying
-    stopCamera();
-    setCapturedImage(null);
-    setVerificationResult(null);
-    setError(null);
-    setStep("instruction");
-  };
-
-  const renderContent = () => {
-    switch (step) {
-      case "instruction":
-        return (
-          <InstructionScreen
-            onStart={() => setStep("camera")}
-            idFaceImage={idFaceImage}
-          />
-        );
-      case "camera":
-        return (
-          <CameraScreen
-            videoRef={videoRef}
-            onCapture={handleCapture}
-            onCancel={handleRetry}
-          />
-        );
-      case "preview":
-        return (
-          <PreviewScreen
-            image={capturedImage}
-            onConfirm={handleVerify}
-            onRetry={() => setStep("camera")}
-          />
-        );
-      case "verifying":
-        return <LoadingScreen text="Verifying..." />;
-      case "success":
-        return <ResultScreen isSuccess={true} result={verificationResult} />;
-      case "failed":
-        return (
-          <ResultScreen
-            isSuccess={false}
-            result={verificationResult}
-            error={error}
-            onRetry={handleRetry}
-          />
-        );
-      default:
-        return <div>Invalid step</div>;
-    }
-  };
-
-  return (
-    <div className="w-full max-w-2xl mx-auto p-4 bg-white/10 rounded-2xl">
-      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
-      {/* A canvas for capturing the image, hidden from view */}
-      <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
-    </div>
-  );
+    return (
+        <div className="w-full max-w-2xl mx-auto p-4 bg-white/10 rounded-2xl">
+            <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
+            <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
+        </div>
+    );
 };
 
 // --- Child Components for each step ---
@@ -215,31 +175,110 @@ const InstructionScreen = ({ onStart, idFaceImage }) => (
   </motion.div>
 );
 
-const CameraScreen = ({ videoRef, onCapture, onCancel }) => (
+const CameraScreen = ({ videoRef, onCapture, onCancel, cameraReady, error }) => (
   <motion.div
     key="camera"
-    initial={{ opacity: 0, scale: 0.9 }}
-    animate={{ opacity: 1, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.9 }}
-    className="space-y-4"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="fixed inset-0 bg-black z-[100] flex flex-col"
   >
-    <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden">
-      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-      <div className="absolute inset-0 border-8 border-white/50 rounded-lg" />
+    {/* Header */}
+    <div className="flex items-center justify-between p-3 bg-black/50 backdrop-blur-sm">
+      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+        <Camera className="w-4 h-4" />
+        <span>Take a Selfie</span>
+      </h3>
+      <button 
+        onClick={onCancel} 
+        className="p-2 text-white hover:bg-white/10 rounded-full transition"
+      >
+        <X className="w-5 h-5" />
+      </button>
     </div>
-    <div className="flex gap-4">
-        <button
-          onClick={onCancel}
-          className="w-full py-3 rounded-xl bg-gray-600 text-white font-semibold transition hover:bg-gray-700"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onCapture}
-          className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold transition hover:bg-blue-700"
-        >
-          Capture
-        </button>
+
+    {/* Camera View - Fullscreen */}
+    <div className="flex-1 relative flex flex-col">
+      <div className="flex-1 relative bg-black">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+        />
+        
+        {/* Face Frame Overlay */}
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
+          {/* Semi-transparent overlay outside the frame */}
+          <div className="absolute inset-0 bg-black/40"></div>
+          
+          {/* Face Frame - Circular */}
+          <div className="relative w-full max-w-xs aspect-square z-10">
+            {/* Circular frame border */}
+            <div className="absolute inset-0 border-4 border-white rounded-full shadow-lg"></div>
+            
+            {/* Corner markers adapted to circle */}
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-12 h-6 border-t-4 border-emerald-400 rounded-t-full"></div>
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-6 border-b-4 border-emerald-400 rounded-b-full"></div>
+            <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-6 h-12 border-l-4 border-emerald-400 rounded-l-full"></div>
+            <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-6 h-12 border-r-4 border-emerald-400 rounded-r-full"></div>
+            
+            {/* Instruction text */}
+            <div className="absolute -bottom-20 left-0 right-0 text-center">
+              <p className="text-white font-semibold text-sm mb-1">
+                Position Your Face in Frame
+              </p>
+              <p className="text-white/80 text-xs">
+                Look directly at camera • Good lighting
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        {!cameraReady && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+            <div className="text-center px-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400 mx-auto mb-3"></div>
+              <p className="text-white text-sm font-medium">Initializing camera...</p>
+              <p className="text-white/60 text-xs mt-2">This should only take a moment</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error display */}
+        {error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+            <div className="text-center px-4">
+              <div className="text-red-400 text-5xl mb-3">⚠️</div>
+              <p className="text-white text-sm font-medium mb-2">Camera Error</p>
+              <p className="text-white/70 text-xs">{error}</p>
+              <p className="text-white/50 text-xs mt-3">Closing in 2 seconds...</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Capture Button - Bottom Fixed */}
+      <div className="p-4 bg-black/50 backdrop-blur-sm">
+        <div className="flex gap-3 max-w-md mx-auto">
+          <button
+            onClick={onCancel}
+            className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onCapture}
+            disabled={!cameraReady}
+            className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
+          >
+            <Camera className="w-5 h-5" />
+            Capture
+          </button>
+        </div>
+      </div>
     </div>
   </motion.div>
 );
@@ -250,23 +289,45 @@ const PreviewScreen = ({ image, onConfirm, onRetry }) => (
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className="space-y-4"
+    className="fixed inset-0 bg-black z-[100] flex flex-col"
   >
-    <h3 className="text-xl font-semibold text-center text-white">Is this picture clear?</h3>
-    <img src={image} alt="Captured selfie" className="w-full aspect-video object-cover rounded-lg" />
-    <div className="flex gap-4">
-      <button
-        onClick={onRetry}
-        className="w-full py-3 rounded-xl bg-gray-600 text-white font-semibold transition hover:bg-gray-700"
-      >
-        Retake
-      </button>
-      <button
-        onClick={onConfirm}
-        className="w-full py-3 rounded-xl bg-emerald-500 text-black font-semibold transition hover:bg-emerald-600"
-      >
-        Yes, looks good
-      </button>
+    {/* Header */}
+    <div className="flex items-center justify-between p-3 bg-black/50 backdrop-blur-sm">
+      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+        <Check className="w-4 h-4" />
+        <span>Review Selfie</span>
+      </h3>
+    </div>
+
+    {/* Preview Image - Fullscreen */}
+    <div className="flex-1 flex flex-col bg-black">
+      <div className="flex-1 relative flex flex-col items-center justify-center p-4">
+        <p className="text-white text-base font-medium mb-3">Is this picture clear?</p>
+        <img 
+          src={image} 
+          alt="Captured selfie" 
+          className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-2xl"
+        />
+      </div>
+
+      {/* Action Buttons - Bottom Fixed */}
+      <div className="p-4 bg-black/50 backdrop-blur-sm">
+        <div className="flex gap-3 max-w-md mx-auto">
+          <button
+            onClick={onRetry}
+            className="flex-1 px-6 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition"
+          >
+            Retake
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
+          >
+            <Check className="w-5 h-5" />
+            Yes, looks good
+          </button>
+        </div>
+      </div>
     </div>
   </motion.div>
 );

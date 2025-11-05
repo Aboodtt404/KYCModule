@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 export function OCRProcessor() {
+  const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
   const { data: documents } = useDocuments();
   const { getFileUrl } = useFileList();
   const ocrMutation = useOCR();
@@ -745,7 +746,7 @@ export function OCRProcessor() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {debugInfo.preprocessed_image_path && (
                   <a
-                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.preprocessed_image_path}`}
+                    href={`${OCR_SERVER_URL}/debug-image/${debugInfo.preprocessed_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-slate-700 rounded-lg hover:bg-slate-900 transition"
@@ -764,7 +765,7 @@ export function OCRProcessor() {
 
                 {debugInfo.debug_image_path && (
                   <a
-                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.debug_image_path}`}
+                    href={`${OCR_SERVER_URL}/debug-image/${debugInfo.debug_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-slate-700 rounded-lg hover:bg-slate-900 transition"
@@ -781,7 +782,7 @@ export function OCRProcessor() {
 
                 {debugInfo.cropped_image_path && (
                   <a
-                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.cropped_image_path}`}
+                    href={`${OCR_SERVER_URL}/debug-image/${debugInfo.cropped_image_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-slate-700 rounded-lg hover:bg-slate-900 transition"
@@ -796,7 +797,7 @@ export function OCRProcessor() {
 
                 {debugInfo.yolo_output_path && (
                   <a
-                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.yolo_output_path}`}
+                    href={`${OCR_SERVER_URL}/debug-image/${debugInfo.yolo_output_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-slate-700 rounded-lg hover:bg-slate-900 transition"
@@ -811,7 +812,7 @@ export function OCRProcessor() {
 
                 {debugInfo.mrz_roi_path && (
                   <a
-                    href={`http://194.31.150.154:5000/debug-image/${debugInfo.mrz_roi_path}`}
+                    href={`${OCR_SERVER_URL}/debug-image/${debugInfo.mrz_roi_path}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block p-4 border border-slate-700 rounded-lg hover:bg-slate-900 transition"

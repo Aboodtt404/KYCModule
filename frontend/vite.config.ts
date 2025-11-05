@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
 
   const processEnv = {};
   for (const key in env) {
-    if (key.startsWith('CANISTER_') || key.startsWith('DFX_')) {
+    if (key.startsWith('CANISTER_') || key.startsWith('DFX_') || key.startsWith('VITE_')) {
       processEnv[`process.env.${key}`] = JSON.stringify(env[key]);
     }
   }

@@ -45,7 +45,7 @@ struct KycSubmissionPayload {
     kyc_data: KycData,
 }
 
-const MAX_STRING_SIZE: u32 = 65536;
+const MAX_STRING_SIZE: u32 = 262144; // 256 KiB - Increased to accommodate base64 images
 const MAX_FILE_METADATA_SIZE: u32 = 1024; // 1 KiB
 
 #[derive(
@@ -122,6 +122,11 @@ thread_local! {
 
     static KYC_SUBMISSIONS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
         StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5))))
+    );
+    
+    // Verification sessions for mobile handoff
+    static VERIFICATION_SESSIONS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
+        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(6))))
     );
 
     static NEXT_DOC_ID: RefCell<u64> = RefCell::new(0);
@@ -502,4 +507,150 @@ fn handle_process_document() -> HttpResponse {
         headers: vec![("Content-Type".to_string(), "application/json".to_string())],
         body: "{\"success\":true,\"data\":{\"name\":\"Sample Name\",\"idNumber\":\"123456789\",\"birthDate\":\"1990-01-01\"}}".as_bytes().to_vec(),
     }
+}
+
+// ===========================
+// Verification Session APIs
+// ===========================
+
+#[derive(CandidType, Deserialize, Serialize, Clone)]
+struct VerificationSession {
+    session_id: String,
+    status: String, // "waiting", "in_progress", "completed"
+    created_at: u64,
+    completed_at: Option<u64>,
+    data: Option<String>, // JSON string of KYC data
+}
+
+/// Create or update a verification session
+#[update]
+fn create_verification_session(session_id: String) -> Result<(), String> {
+    let session = VerificationSession {
+        session_id: session_id.clone(),
+        status: "waiting".to_string(),
+        created_at: ic_cdk::api::time(),
+        completed_at: None,
+        data: None,
+    };
+    
+    let session_json = serde_json::to_string(&session)
+        .map_err(|e| format!("Failed to serialize session: {}", e))?;
+    
+    VERIFICATION_SESSIONS.with(|sessions| {
+        sessions.borrow_mut().insert(
+            BoundedString(session_id),
+            BoundedString(session_json),
+        );
+    });
+    
+    Ok(())
+}
+
+/// Get verification session status
+#[query]
+fn get_verification_status(session_id: String) -> Option<String> {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        sessions.borrow().get(&BoundedString(session_id)).map(|s| s.0)
+    })
+}
+
+/// Validate if session exists and is valid for NEW access
+/// Returns false if session is already in use, expired, or doesn't exist
+#[query]
+fn verify_session(session_id: String) -> bool {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        if let Some(session_json) = sessions.borrow().get(&BoundedString(session_id)) {
+            if let Ok(session) = serde_json::from_str::<VerificationSession>(&session_json.0) {
+                // Check if session is expired (24 hours)
+                let current_time = ic_cdk::api::time();
+                let expiry_time = 24 * 60 * 60 * 1_000_000_000; // 24 hours in nanoseconds
+                let is_expired = current_time - session.created_at >= expiry_time;
+                
+                if is_expired {
+                    return false;
+                }
+                
+                // Session is only valid for NEW access if status is "waiting"
+                // Reject if already in_progress or completed (prevents multiple users)
+                return session.status == "waiting";
+            }
+        }
+        false
+    })
+}
+
+/// Mark verification as in progress
+#[update]
+fn mark_verification_in_progress(session_id: String) -> Result<(), String> {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        let mut sessions_mut = sessions.borrow_mut();
+        
+        if let Some(session_json) = sessions_mut.get(&BoundedString(session_id.clone())) {
+            let mut session: VerificationSession = serde_json::from_str(&session_json.0)
+                .map_err(|e| format!("Failed to parse session: {}", e))?;
+            
+            session.status = "in_progress".to_string();
+            
+            let updated_json = serde_json::to_string(&session)
+                .map_err(|e| format!("Failed to serialize session: {}", e))?;
+            
+            sessions_mut.insert(
+                BoundedString(session_id),
+                BoundedString(updated_json),
+            );
+            
+            Ok(())
+        } else {
+            Err("Session not found".to_string())
+        }
+    })
+}
+
+/// Complete verification with data
+#[update]
+fn complete_verification(session_id: String, kyc_data: String) -> Result<(), String> {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        let mut sessions_mut = sessions.borrow_mut();
+        
+        if let Some(session_json) = sessions_mut.get(&BoundedString(session_id.clone())) {
+            let mut session: VerificationSession = serde_json::from_str(&session_json.0)
+                .map_err(|e| format!("Failed to parse session: {}", e))?;
+            
+            session.status = "completed".to_string();
+            session.completed_at = Some(ic_cdk::api::time());
+            session.data = Some(kyc_data);
+            
+            let updated_json = serde_json::to_string(&session)
+                .map_err(|e| format!("Failed to serialize session: {}", e))?;
+            
+            sessions_mut.insert(
+                BoundedString(session_id),
+                BoundedString(updated_json),
+            );
+            
+            Ok(())
+        } else {
+            Err("Session not found".to_string())
+        }
+    })
+}
+
+/// Get all verification sessions (for debugging)
+#[query]
+fn get_all_verification_sessions() -> Vec<(String, String)> {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        sessions
+            .borrow()
+            .iter()
+            .map(|(k, v)| (k.0.clone(), v.0.clone()))
+            .collect()
+    })
+}
+
+/// Delete a verification session
+#[update]
+fn delete_verification_session(session_id: String) {
+    VERIFICATION_SESSIONS.with(|sessions| {
+        sessions.borrow_mut().remove(&BoundedString(session_id));
+    });
 }

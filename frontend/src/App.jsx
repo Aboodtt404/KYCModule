@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Login } from "./pages/auth/Login";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import KYCPage from "./pages/user/KYCPage";
+import MobileVerifyPage from "./pages/user/MobileVerifyPage";
+import MobileSuccessPage from "./pages/user/MobileSuccessPage";
 import { FileUpload } from "./pages/upload/FileUpload";
 import { OCRProcessor } from "./pages/ocr/OCRProcessor";
 import { KYCSubmissions } from "./pages/kyc/KYCSubmissions";
@@ -36,6 +38,8 @@ const router = createBrowserRouter(
       ],
     },
     { path: "/user", element: <KYCPage /> },
+    { path: "/mobile-verify/:sessionId", element: <MobileVerifyPage /> },
+    { path: "/mobile-verify/:sessionId/success", element: <MobileSuccessPage /> },
     { path: "*", element: <Login /> },
   ],
   

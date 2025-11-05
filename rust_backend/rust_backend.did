@@ -20,4 +20,11 @@ service : {
   "delete_egyptian_id_result": (text) -> ();
   "delete_passport_result": (text) -> ();
   "national_id_exists": (text) -> (bool) query;
+  "create_verification_session": (text) -> (variant { Ok; Err: text });
+  "get_verification_status": (text) -> (opt text) query;
+  "verify_session": (text) -> (bool) query;
+  "mark_verification_in_progress": (text) -> (variant { Ok; Err: text });
+  "complete_verification": (text, text) -> (variant { Ok; Err: text });
+  "get_all_verification_sessions": () -> (vec record { text; text; }) query;
+  "delete_verification_session": (text) -> ();
 }

@@ -51,7 +51,8 @@ export function useOCR() {
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       try {
-        const response = await fetch('http://194.31.150.154:5000/ocr', {
+        const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
+        const response = await fetch(`${OCR_SERVER_URL}/ocr`, {
           method: 'POST',
           body: imageData,
           headers: {
@@ -232,6 +233,86 @@ export function useCheckDuplicateId() {
     mutationFn: async (nationalId) => {
       if (!actor) throw new Error('Actor not available');
       return await actor.national_id_exists(nationalId);
+    },
+  });
+}
+
+// ===========================
+// Verification Session Hooks
+// ===========================
+
+export function useCreateVerificationSession() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (sessionId) => {
+      if (!actor) throw new Error('Actor not available');
+      const result = await actor.create_verification_session(sessionId);
+      if ('Err' in result) {
+        throw new Error(result.Err);
+      }
+      return sessionId;
+    },
+  });
+}
+
+export function useVerificationStatus(sessionId) {
+  const { actor } = useActor();
+
+  return useQuery({
+    queryKey: ['verificationStatus', sessionId],
+    queryFn: async () => {
+      if (!actor || !sessionId) return null;
+      const statusJson = await actor.get_verification_status(sessionId);
+      if (statusJson && statusJson.length > 0) {
+        return JSON.parse(statusJson[0]);
+      }
+      return null;
+    },
+    enabled: !!actor && !!sessionId,
+    refetchInterval: 2000, // Automatically refetch every 2 seconds
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useVerifySession() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (sessionId) => {
+      if (!actor) return false;
+      return await actor.verify_session(sessionId);
+    },
+  });
+}
+
+export function useMarkVerificationInProgress() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async (sessionId) => {
+      if (!actor) throw new Error('Actor not available');
+      const result = await actor.mark_verification_in_progress(sessionId);
+      if ('Err' in result) {
+        throw new Error(result.Err);
+      }
+      return true;
+    },
+  });
+}
+
+export function useCompleteVerification() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, kycData }) => {
+      if (!actor) throw new Error('Actor not available');
+      const jsonData = JSON.stringify(kycData);
+      const result = await actor.complete_verification(sessionId, jsonData);
+      if ('Err' in result) {
+        throw new Error(result.Err);
+      }
+      return true;
     },
   });
 }

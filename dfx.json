@@ -30,6 +30,12 @@
       "packtool": "mops sources"
     }
   },
+  "networks": {
+    "local": {
+      "bind": "0.0.0.0:4943",
+      "type": "persistent"
+    }
+  },
   "workspace": {
     "sms_verification_backend": {
       "root": "sms_verification"

@@ -7,8 +7,11 @@ import DocumentStep from "@/components/kyc/DocumentStep";
 import { FaceVerificationStep } from "@/components/kyc/FaceVerificationStep";
 import ReviewStep from "@/components/kyc/ReviewStep";
 import SuccessStep from "@/components/kyc/SuccessStep";
+import MobileTransferComplete from "@/components/kyc/MobileTransferComplete";
 import LogoHero from "@/components/kyc/ThreeHero";
-import { useSubmitKYC } from "../../hooks/useQueries";
+import QRHandoff from "@/components/kyc/QRHandoff";
+import { useSubmitKYC, useCreateVerificationSession } from "../../hooks/useQueries";
+import { v4 as uuidv4 } from 'uuid';
 
 const TOTAL_STEPS = 6; // Welcome → OTP → Document → Face → Review → Success
 
@@ -32,9 +35,12 @@ function calculateAge(birthDate) {
     return age;
 }
 
-export default function KYCPage() {
-    const [step, setStep] = useState(1);
-    const [submissionId, setSubmissionId] = useState(null);
+export default function KYCPage({ mobileMode = false, sessionId = null, onComplete = null }) {
+    const [step, setStep] = useState(mobileMode ? 1 : 0); // 0 = handoff choice, 1 = start
+    const [submissionId, setSubmissionId] = useState(sessionId || null);
+    const [showQRHandoff, setShowQRHandoff] = useState(false);
+    const [handoffSessionId, setHandoffSessionId] = useState(null);
+    const [mobileTransferComplete, setMobileTransferComplete] = useState(false);
     const [userData, setUserData] = useState({
         phone: "",
         documentFile: null,
@@ -44,6 +50,7 @@ export default function KYCPage() {
     });
     const [submissionComplete, setSubmissionComplete] = useState(false);
     const submitKYC = useSubmitKYC();
+    const createSession = useCreateVerificationSession();
 
     // Submit KYC data when reaching success step
     const handleFinalSubmit = (finalUserData) => {
@@ -124,11 +131,24 @@ export default function KYCPage() {
         handleNext();
     };
     const handleFaceVerified = () => {
-        setUserData((prev) => ({
-            ...prev,
+        const updatedUserData = {
+            ...userData,
             faceVerified: true,
-        }));
-        handleNext();
+        };
+        
+        setUserData(updatedUserData);
+        
+        if (mobileMode && sessionId) {
+            if (onComplete) {
+                console.log('📱 Mobile verification complete. Sending data to parent:', updatedUserData);
+                onComplete(updatedUserData);
+            }
+            setMobileTransferComplete(true);
+            return;
+        }
+        
+        // On desktop, proceed to the review step
+        setStep(5);
     };
 
     const handleReviewComplete = (updatedOcrData) => {
@@ -140,22 +160,120 @@ export default function KYCPage() {
         handleFinalSubmit(finalUserData);
     };
 
+    // Handle mobile handoff completion
+    const handleHandoffComplete = (sessionData) => {
+        console.log('📱 Received session data from mobile handoff:', sessionData);
+        setShowQRHandoff(false);
+
+        let parsedData;
+        try {
+            // The actual user data is in a stringified JSON field named 'data'
+            if (typeof sessionData.data === 'string') {
+                parsedData = JSON.parse(sessionData.data);
+            } else if (typeof sessionData.data === 'object') {
+                // In case it's already an object
+                parsedData = sessionData.data;
+            } else {
+                throw new Error("sessionData.data is not a string or object");
+            }
+        } catch (error) {
+            console.error('❌ Failed to parse user data from mobile handoff:', error, 'Raw data:', sessionData.data);
+            alert("There was an issue parsing the data from your mobile device. Please try again.");
+            setStep(0); // Reset to start
+            return;
+        }
+        
+        // Now validate the PARSED data
+        if (parsedData && parsedData.ocrData && parsedData.faceVerified) {
+            setUserData({
+                phone: parsedData.phone || userData.phone,
+                documentFile: parsedData.documentFile || null,
+                ocrData: parsedData.ocrData || null,
+                faceImage: parsedData.faceImage || null,
+                faceVerified: parsedData.faceVerified || false,
+            });
+            
+            console.log('✅ Handoff complete, moving to Review Step.');
+            setStep(5);
+        } else {
+            console.error('❌ Invalid or incomplete data after parsing from mobile handoff. Parsed data:', parsedData);
+            alert("The data received from your mobile device was incomplete. Please try again.");
+            setStep(0); 
+        }
+    };
+
+    // Generate handoff session
+    const handleStartOnMobile = async () => {
+        const newSessionId = uuidv4();
+        try {
+            await createSession.mutateAsync(newSessionId);
+            setHandoffSessionId(newSessionId);
+            setSubmissionId(newSessionId);
+            setShowQRHandoff(true);
+        } catch (error) {
+            console.error('Failed to create verification session:', error);
+            alert('Failed to create verification session. Please try again.');
+        }
+    };
+
     const renderStep = () => {
-        switch (step) {
-            case 1:
-                return (<motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} key="step1" className="space-y-6 text-center">
+        // Choice screen (desktop only)
+        if (step === 0) {
+            return (
+                <motion.div 
+                    initial={{ opacity: 0, y: 40 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    exit={{ opacity: 0, y: -40 }} 
+                    key="step0" 
+                    className="space-y-6 text-center"
+                >
                     <div className="flex justify-center">
                         <LogoHero className="max-h-40" />
                     </div>
                     <div>
-                        <h2 className="text-lg sm:text-xl font-semibold mt-4">
+                        <h2 className="text-2xl font-bold">
+                            Verify Your Identity
+                        </h2>
+                        <p className="text-gray-300 text-sm mt-2">
+                            Choose how you'd like to complete verification
+                        </p>
+                    </div>
+                    <div className="space-y-3">
+                        <button 
+                            onClick={handleStartOnMobile}
+                            className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform hover:scale-105 hover:shadow-lg flex items-center justify-center gap-3"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            Continue on Mobile (Recommended)
+                        </button>
+                        <button 
+                            onClick={() => setStep(1)}
+                            className="w-full py-4 rounded-xl bg-white/10 border border-white/20 text-white font-semibold transition hover:bg-white/20"
+                        >
+                            Continue on Desktop
+                        </button>
+                    </div>
+                </motion.div>
+            );
+        }
+        
+        switch (step) {
+            case 1:
+                return (<motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} key="step1" className="space-y-4 sm:space-y-6 text-center">
+                    <div className="flex justify-center">
+                        <LogoHero className="max-h-28 sm:max-h-40" />
+                    </div>
+                    <div>
+                        <h2 className="text-base sm:text-xl font-semibold mt-2 sm:mt-4 text-white">
                             Verify your identity
                         </h2>
-                        <p className="text-gray-300 text-sm sm:text-base mt-1">
+                        <p className="text-gray-300 text-xs sm:text-base mt-1">
                             This process helps keep your account secure.
                         </p>
                     </div>
-                    <button onClick={handleNext} className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform hover:scale-105 hover:shadow-[0_0_10px_rgba(0,255,136,0.6)]">
+                    <button onClick={handleNext} className="w-full py-2.5 sm:py-3 text-sm sm:text-base rounded-lg sm:rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform hover:scale-105 hover:shadow-[0_0_10px_rgba(0,255,136,0.6)]">
                         Start Verification
                     </button>
                 </motion.div>);
@@ -199,20 +317,44 @@ export default function KYCPage() {
                 return <div>Invalid Step</div>;
         }
     };
-    return (<div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
+    
+    // Show mobile transfer complete screen
+    if (mobileMode && mobileTransferComplete) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
+                <div className="w-full max-w-lg">
+                    <MobileTransferComplete />
+                </div>
+            </div>
+        );
+    }
+    
+    // Show QR handoff if requested
+    if (showQRHandoff && handoffSessionId) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
+                <QRHandoff 
+                    sessionId={handoffSessionId}
+                    onComplete={handleHandoffComplete}
+                />
+            </div>
+        );
+    }
+
+    return (<div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
         <div className="w-full max-w-lg">
             {/* Progress Bar */}
-            {step < TOTAL_STEPS && <ProgressBar value={getProgress(step)} />}
+            {step > 0 && step < TOTAL_STEPS && <ProgressBar value={getProgress(step)} />}
 
             {/* Animated step content */}
-            <motion.div key={step} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl mt-8">
+            <motion.div key={step} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-xl mt-3 sm:mt-8">
                 <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
             </motion.div>
 
             {/* Navigation controls */}
-            {step < TOTAL_STEPS && step > 1 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center mt-6">
-                <button onClick={handleBack} className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {step < TOTAL_STEPS && step > 1 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center mt-3 sm:mt-6">
+                <button onClick={handleBack} className="flex items-center space-x-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                     <span>Go Back</span>

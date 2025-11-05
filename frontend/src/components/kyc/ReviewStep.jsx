@@ -74,42 +74,44 @@ export default function ReviewStep({ userData, onNext }) {
     const isFormValid = Object.values(errors).every(x => x === null);
 
     return (
-        <GlassCard className="space-y-6">
-            <h3 className="text-xl font-semibold">Review & Confirm Your Information</h3>
-            <p className="text-sm text-gray-300">
+        <GlassCard className="space-y-4 sm:space-y-6">
+            <div>
+                <h3 className="text-base sm:text-xl font-semibold text-white">Review & Confirm Your Information</h3>
+                <p className="text-xs sm:text-sm text-gray-300 mt-1">
                 Please review the information extracted from your document. Edit if necessary.
             </p>
+            </div>
 
             {/* Editable Form */}
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
                 {displayFields.map(({ key, label, editable, required }) => (
                     <div key={key}>
-                        <Label htmlFor={key} className="text-sm font-medium text-gray-400">
+                        <Label htmlFor={key} className="text-xs sm:text-sm font-medium text-gray-400">
                             {label} {required && <span className="text-red-500">*</span>}
                         </Label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 mt-1">
                             <Input
                                 id={key}
                                 name={key}
                                 value={editableData[key] || ''}
                                 onChange={editable ? handleInputChange : undefined}
                                 readOnly={!editable}
-                                className={`mt-1 w-full bg-white/10 border-white/20 ${!editable ? 'text-gray-400 cursor-not-allowed' : ''} ${errors[key] ? 'border-red-500' : ''}`}
+                                className={`w-full bg-white/10 border-white/20 text-sm h-9 sm:h-10 ${!editable ? 'text-gray-400 cursor-not-allowed' : 'text-white'} ${errors[key] ? 'border-red-500' : ''}`}
                             />
                             {key === 'birth_date' && age !== null && (
-                                <div className="mt-1 flex-shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300">
+                                <div className="flex-shrink-0 whitespace-nowrap rounded-md bg-white/10 px-2 sm:px-3 py-2 text-xs sm:text-sm text-gray-300">
                                     Age: {age}
                                 </div>
                             )}
                         </div>
-                        {errors[key] && <p className="mt-1 text-sm text-red-500">{errors[key]}</p>}
+                        {errors[key] && <p className="mt-1 text-xs text-red-500">{errors[key]}</p>}
                     </div>
                 ))}
             </div>
 
             {/* Submit */}
-            <div className="pt-4">
-                <Button onClick={handleSaveChanges} className="w-full h-12 text-lg" disabled={!isFormValid}>
+            <div className="pt-2 sm:pt-4">
+                <Button onClick={handleSaveChanges} className="w-full h-10 sm:h-12 text-sm sm:text-lg font-semibold" disabled={!isFormValid}>
                     Save & Continue
                 </Button>
             </div>

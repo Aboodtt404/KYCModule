@@ -1,4 +1,4 @@
-const OCR_SERVER_BASE_URL = process.env.NEXT_PUBLIC_OCR_SERVER_URL || 'http://194.31.150.154:5000';
+const OCR_SERVER_BASE_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
 export async function verifyFace(idImageBase64, liveImageBase64) {
     try {
         console.log('Sending face verification request to:', `${OCR_SERVER_BASE_URL}/verify-face`);
