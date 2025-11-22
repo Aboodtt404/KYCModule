@@ -96,8 +96,8 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
         // This ensures the camera is always stopped when the component is hidden or closed.
         return () => {
             if (streamRef.current) {
-                stopCamera();
-            }
+            stopCamera();
+                }
         };
     }, [isOpen]);
 
@@ -114,19 +114,19 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const context = canvas.getContext("2d");
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext("2d");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        canvas.toBlob((blob) => {
-            if (blob) {
+            canvas.toBlob((blob) => {
+                if (blob) {
                 console.log('Photo captured, blob size:', blob.size);
-                setCapturedBlob(blob);
+                    setCapturedBlob(blob);
                 const previewUrl = URL.createObjectURL(blob);
                 setPreview(previewUrl);
                 // DON'T stop camera here - keep it running
-                setMode('preview');
+        setMode('preview');
             }
         }, "image/jpeg", 0.95);
     };
@@ -140,7 +140,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
             });
             stopCamera(); // Stop camera before closing
             onCapture(file);
-        }
+                }
     };
 
     const handleRetake = () => {
@@ -167,7 +167,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
 
     return (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col">
-            {/* Header */}
+                {/* Header */}
             <div className="flex items-center justify-between p-3 bg-black/50 backdrop-blur-sm">
                 <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     {mode === 'camera' && (
@@ -182,38 +182,38 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                             <span>Review Image</span>
                         </>
                     )}
-                </h3>
+                    </h3>
                 <button 
                     onClick={handleCancel} 
                     className="p-2 text-white hover:bg-white/10 rounded-full transition"
                 >
                     <X className="w-5 h-5" />
                 </button>
-            </div>
+                </div>
 
             {/* Camera Mode - Fullscreen */}
-            {mode === 'camera' && (
+                {mode === 'camera' && (
                 <div className="flex-1 relative flex flex-col">
                     <div className="flex-1 relative bg-black">
-                        <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
                             webkit-playsinline="true"
                             x-webkit-airplay="allow"
                             className="w-full h-full object-cover"
                             style={{ WebkitTransform: 'translateZ(0)' }}
-                        />
-                        <canvas ref={canvasRef} className="hidden" />
+                            />
+                            <canvas ref={canvasRef} className="hidden" />
                         
                         {/* ID Card Frame Overlay */}
                         <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4">
                             {/* Semi-transparent overlay outside the frame */}
                             <div className="absolute inset-0 bg-black/40"></div>
                             
-                            {/* ID Card Frame - Credit card aspect ratio */}
-                            <div className="relative w-full max-w-md aspect-[85.6/53.98] z-10">
+                            {/* ID Card Frame - Credit card aspect ratio (smaller to encourage zoomed out capture) */}
+                            <div className="relative w-[85%] max-w-md aspect-[85.6/53.98] z-10">
                                 {/* Frame border */}
                                 <div className="absolute inset-0 border-3 border-white rounded-2xl shadow-lg"></div>
                                 
@@ -229,7 +229,7 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                         Position ID Card in Frame
                                     </p>
                                     <p className="text-white/80 text-xs">
-                                        Ensure good lighting • Keep card flat
+                                        
                                     </p>
                                 </div>
                             </div>
@@ -242,9 +242,9 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400 mx-auto mb-3"></div>
                                     <p className="text-white text-sm font-medium">Initializing camera...</p>
                                     <p className="text-white/60 text-xs mt-2">This should only take a moment</p>
-                                </div>
-                            </div>
-                        )}
+                                                </div>
+                                            </div>
+                                        )}
 
                         {/* Error display */}
                         {error && (
@@ -255,18 +255,18 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                     <p className="text-white/70 text-xs">{error}</p>
                                     <p className="text-white/50 text-xs mt-3">Closing in 2 seconds...</p>
                                 </div>
-                            </div>
+                                        </div>
                         )}
-                    </div>
+                                    </div>
 
                         {/* Capture Button - Bottom Fixed with iOS-safe area */}
-                        <div className="p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-                            <div className="flex gap-3 max-w-md mx-auto">
+                        <div className="p-3 sm:p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                            <div className="flex gap-2 sm:gap-3 max-w-md mx-auto">
                                 <button
                                     type="button"
                                     onClick={handleCancel}
                                     onTouchEnd={(e) => { e.preventDefault(); handleCancel(); }}
-                                    className="px-6 py-3 bg-white/10 active:bg-white/30 text-white rounded-full font-medium transition text-sm touch-manipulation"
+                                    className="px-4 sm:px-6 py-3 sm:py-3.5 bg-white/10 active:bg-white/30 text-white rounded-full font-medium transition text-xs sm:text-sm touch-manipulation min-h-[44px] flex items-center justify-center"
                                     style={{ WebkitTapHighlightColor: 'transparent' }}
                                 >
                                     Cancel
@@ -281,48 +281,50 @@ export function IDCameraCapture({ onCapture, onCancel, isOpen }) {
                                         }
                                     }}
                                     disabled={!cameraReady}
-                                    className="flex-1 px-6 py-4 bg-emerald-500 active:bg-emerald-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation"
+                                    className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-emerald-500 active:bg-emerald-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation min-h-[44px]"
                                     style={{ WebkitTapHighlightColor: 'transparent' }}
                                 >
-                                    <Camera className="w-5 h-5" />
-                                    Capture
+                                    <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    <span className="text-xs sm:text-sm">Capture</span>
                                 </button>
                             </div>
                         </div>
-                </div>
-            )}
+                    </div>
+                )}
 
             {/* Preview Mode - Fullscreen */}
-            {mode === 'preview' && preview && (
+                {mode === 'preview' && preview && (
                 <div className="flex-1 flex flex-col bg-black">
                     <div className="flex-1 relative flex items-center justify-center p-4">
-                        <img
-                            src={preview}
-                            alt="Preview"
+                            <img
+                                src={preview}
+                                alt="Preview"
                             className="max-w-full max-h-full object-contain rounded-lg"
-                        />
-                    </div>
+                            />
+                        </div>
 
                     {/* Action Buttons - Bottom Fixed */}
-                    <div className="p-4 bg-black/50 backdrop-blur-sm">
-                        <div className="flex gap-3 max-w-md mx-auto">
+                    <div className="p-3 sm:p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                        <div className="flex gap-2 sm:gap-3 max-w-md mx-auto">
                             <button
                                 onClick={handleRetake}
-                                className="flex-1 px-6 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition"
+                                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-white/10 active:bg-white/20 text-white rounded-full font-medium transition touch-manipulation min-h-[44px] flex items-center justify-center text-xs sm:text-sm"
+                                style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
                                 Retake
                             </button>
                             <button
                                 onClick={handleConfirm}
-                                className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
+                                className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-emerald-500 active:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation min-h-[44px]"
+                                style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
-                                <Check className="w-5 h-5" />
-                                Use This
+                                <Check className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <span className="text-xs sm:text-sm">Use This</span>
                             </button>
                         </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
         </div>
     );
 }

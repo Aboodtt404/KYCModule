@@ -45,12 +45,12 @@ const createCameraManager = () => ({
 
 const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
     const [step, setStep] = useState("instruction");
-    const [error, setError] = useState(null);
-    const [capturedImage, setCapturedImage] = useState(null);
-    const [verificationResult, setVerificationResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [verificationResult, setVerificationResult] = useState(null);
     const [cameraReady, setCameraReady] = useState(false);
-    const videoRef = useRef(null);
-    const canvasRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
     const cameraManager = useRef(null);
     if (!cameraManager.current) { cameraManager.current = createCameraManager(); }
 
@@ -66,52 +66,52 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
         return () => { manager.stop(); setCameraReady(false); };
     }, [step]);
 
-    const handleCapture = () => {
-        if (videoRef.current && canvasRef.current) {
-            const video = videoRef.current;
-            const canvas = canvasRef.current;
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const context = canvas.getContext("2d");
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL("image/jpeg");
-            setCapturedImage(dataUrl);
+  const handleCapture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg");
+      setCapturedImage(dataUrl);
             cameraManager.current.stop();
-            setStep("preview");
-        }
-    };
+      setStep("preview");
+    }
+  };
 
-    const handleVerify = async () => {
-        if (!capturedImage || !idFaceImage) return;
-        setStep("verifying");
-        setError(null);
-        try {
-            const liveImageBase64 = capturedImage.split(",")[1] || capturedImage;
-            const idImageBase64 = idFaceImage.split(",")[1] || idFaceImage;
-            const result = await verifyFace(idImageBase64, liveImageBase64);
-            setVerificationResult(result.verification_result);
+  const handleVerify = async () => {
+    if (!capturedImage || !idFaceImage) return;
+    setStep("verifying");
+    setError(null);
+    try {
+      const liveImageBase64 = capturedImage.split(",")[1] || capturedImage;
+      const idImageBase64 = idFaceImage.split(",")[1] || idFaceImage;
+      const result = await verifyFace(idImageBase64, liveImageBase64);
+      setVerificationResult(result.verification_result);
             cameraManager.current.stop();
-            if (result.verification_result.is_match) {
-                setStep("success");
+      if (result.verification_result.is_match) {
+        setStep("success");
                 setTimeout(onVerified, 2000);
             } else { setStep("failed"); }
-        } catch (err) {
+    } catch (err) {
             cameraManager.current.stop();
             setError(err.message || "Face verification failed.");
-            setStep("failed");
-        }
-    };
-    
-    const handleRetry = () => {
+      setStep("failed");
+    }
+  };
+  
+  const handleRetry = () => {
         cameraManager.current.stop();
-        setCapturedImage(null);
-        setVerificationResult(null);
-        setError(null);
-        setStep("instruction");
-    };
+    setCapturedImage(null);
+    setVerificationResult(null);
+    setError(null);
+    setStep("instruction");
+  };
 
-    const renderContent = () => {
-        switch (step) {
+  const renderContent = () => {
+    switch (step) {
             case "instruction": return <InstructionScreen onStart={() => setStep("camera")} idFaceImage={idFaceImage} />;
             case "camera": return <CameraScreen videoRef={videoRef} onCapture={handleCapture} onCancel={handleRetry} cameraReady={cameraReady} error={error} />;
             case "preview": return <PreviewScreen image={capturedImage} onConfirm={handleVerify} onRetry={() => setStep("camera")} />;
@@ -119,15 +119,15 @@ const FaceVerificationStep = ({ idFaceImage, onVerified, onSkip }) => {
             case "success": return <ResultScreen isSuccess={true} result={verificationResult} />;
             case "failed": return <ResultScreen isSuccess={false} result={verificationResult} error={error} onRetry={handleRetry} />;
             default: return <div>Invalid step</div>;
-        }
-    };
+    }
+  };
 
-    return (
-        <div className="w-full max-w-2xl mx-auto p-4 bg-white/10 rounded-2xl">
-            <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
-            <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
-        </div>
-    );
+  return (
+    <div className="w-full max-w-2xl mx-auto p-4 bg-white/10 rounded-2xl">
+      <AnimatePresence mode="wait">{renderContent()}</AnimatePresence>
+      <canvas ref={canvasRef} style={{ display: "none" }}></canvas>
+    </div>
+  );
 };
 
 // --- Child Components for each step ---
@@ -138,14 +138,14 @@ const InstructionScreen = ({ onStart, idFaceImage }) => (
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -20 }}
-    className="text-center space-y-6 p-6"
+    className="text-center space-y-4 sm:space-y-6 p-4 sm:p-6"
   >
-    <h2 className="text-2xl font-bold text-white">Face Verification</h2>
-    <p className="text-gray-300">
+    <h2 className="text-xl sm:text-2xl font-bold text-white">Face Verification</h2>
+    <p className="text-sm sm:text-base text-gray-300 px-2">
       Next, we need to verify your identity by comparing your face with the photo on your ID.
     </p>
-    <div className="flex justify-center items-center gap-4">
-      <div className="w-32 h-40 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center">
+    <div className="flex justify-center items-center gap-2 sm:gap-4 flex-wrap">
+      <div className="w-24 h-32 sm:w-32 sm:h-40 bg-gray-700 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0">
         {idFaceImage ? (
           <img
             src={idFaceImage}
@@ -153,22 +153,23 @@ const InstructionScreen = ({ onStart, idFaceImage }) => (
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="text-xs text-gray-400 p-2">No ID Photo Found</div>
+          <div className="text-[10px] sm:text-xs text-gray-400 p-2 text-center">No ID Photo Found</div>
         )}
       </div>
-      <div className="text-5xl">➡️</div>
-      <div className="w-32 h-40 bg-gray-700 rounded-lg flex flex-col items-center justify-center">
-        <Camera className="w-12 h-12 text-gray-400" />
-        <p className="mt-2 text-sm text-gray-300">Live Selfie</p>
+      <div className="text-3xl sm:text-5xl">➡️</div>
+      <div className="w-24 h-32 sm:w-32 sm:h-40 bg-gray-700 rounded-lg flex flex-col items-center justify-center flex-shrink-0">
+        <Camera className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400" />
+        <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-gray-300">Live Selfie</p>
       </div>
     </div>
-    <p className="text-sm text-gray-400">
+    <p className="text-xs sm:text-sm text-gray-400 px-2">
       Please position your face in a well-lit area, remove any hats or glasses, and look directly at the camera.
     </p>
     <button
       onClick={onStart}
-      className="w-full py-3 rounded-xl bg-emerald-500 text-black font-semibold transition transform hover:scale-105"
+      className="w-full py-3 sm:py-3.5 rounded-xl bg-emerald-500 active:bg-emerald-600 text-black font-semibold transition transform active:scale-[0.98] touch-manipulation min-h-[44px] text-sm sm:text-base"
       disabled={!idFaceImage}
+      style={{ WebkitTapHighlightColor: 'transparent' }}
     >
       {idFaceImage ? "Start Camera" : "Cannot Proceed (No ID Photo)"}
     </button>
@@ -261,22 +262,24 @@ const CameraScreen = ({ videoRef, onCapture, onCancel, cameraReady, error }) => 
       </div>
 
       {/* Capture Button - Bottom Fixed */}
-      <div className="p-4 bg-black/50 backdrop-blur-sm">
-        <div className="flex gap-3 max-w-md mx-auto">
-          <button
-            onClick={onCancel}
-            className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onCapture}
+      <div className="p-3 sm:p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="flex gap-2 sm:gap-3 max-w-md mx-auto">
+        <button
+          onClick={onCancel}
+            className="px-4 sm:px-6 py-3 sm:py-3.5 bg-white/10 active:bg-white/20 text-white rounded-full font-medium transition text-xs sm:text-sm touch-manipulation min-h-[44px] flex items-center justify-center"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onCapture}
             disabled={!cameraReady}
-            className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
-          >
-            <Camera className="w-5 h-5" />
-            Capture
-          </button>
+            className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-emerald-500 active:bg-emerald-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation min-h-[44px]"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+          <span className="text-xs sm:text-sm">Capture</span>
+        </button>
         </div>
       </div>
     </div>
@@ -311,21 +314,23 @@ const PreviewScreen = ({ image, onConfirm, onRetry }) => (
       </div>
 
       {/* Action Buttons - Bottom Fixed */}
-      <div className="p-4 bg-black/50 backdrop-blur-sm">
-        <div className="flex gap-3 max-w-md mx-auto">
-          <button
-            onClick={onRetry}
-            className="flex-1 px-6 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition"
-          >
-            Retake
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg"
-          >
-            <Check className="w-5 h-5" />
-            Yes, looks good
-          </button>
+      <div className="p-3 sm:p-4 pb-safe bg-black/50 backdrop-blur-sm" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="flex gap-2 sm:gap-3 max-w-md mx-auto">
+      <button
+        onClick={onRetry}
+            className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-white/10 active:bg-white/20 text-white rounded-full font-medium transition touch-manipulation min-h-[44px] flex items-center justify-center text-xs sm:text-sm"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+      >
+        Retake
+      </button>
+      <button
+        onClick={onConfirm}
+            className="flex-1 px-4 sm:px-6 py-3 sm:py-4 bg-emerald-500 active:bg-emerald-600 text-white rounded-full font-bold transition flex items-center justify-center gap-2 shadow-lg touch-manipulation min-h-[44px]"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+      >
+            <Check className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="text-xs sm:text-sm">Yes, looks good</span>
+      </button>
         </div>
       </div>
     </div>

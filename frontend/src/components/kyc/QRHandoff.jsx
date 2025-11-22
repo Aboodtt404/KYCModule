@@ -8,6 +8,24 @@ export default function QRHandoff({ sessionId, onComplete }) {
   const [currentStatus, setCurrentStatus] = useState('waiting'); // 'waiting', 'in_progress', 'completed', 'cancelled'
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now());
+  const [qrSize, setQrSize] = useState(240);
+
+  // Responsive QR code size
+  useEffect(() => {
+    const updateQrSize = () => {
+      const width = window.innerWidth;
+      if (width < 640) {
+        setQrSize(180); // Mobile
+      } else if (width < 1024) {
+        setQrSize(220); // Tablet
+      } else {
+        setQrSize(240); // Desktop
+      }
+    };
+    updateQrSize();
+    window.addEventListener('resize', updateQrSize);
+    return () => window.removeEventListener('resize', updateQrSize);
+  }, []);
   
   // useQuery now handles polling automatically
   const { data: sessionData, error } = useVerificationStatus(sessionId);
@@ -18,16 +36,26 @@ export default function QRHandoff({ sessionId, onComplete }) {
     console.log('📊 Desktop polling status:', sessionData);
 
     if (sessionData) {
-      if (sessionData.status === 'in_progress') {
-        // Only update to in_progress if not already completed
-        setCurrentStatus(prev => prev === 'completed' ? prev : 'in_progress');
-        setLastHeartbeat(Date.now());
-      } else if (sessionData.status === 'completed') {
+      // Check if completed by EITHER status OR completed_at + data presence
+      const isCompleted = sessionData.status === 'completed' || 
+                         (sessionData.completed_at !== null && 
+                          sessionData.completed_at !== undefined && 
+                          sessionData.data !== null && 
+                          sessionData.data !== undefined);
+      
+      if (isCompleted) {
         console.log('✅ Mobile verification completed, transferring to desktop...');
+        console.log('   Status:', sessionData.status);
+        console.log('   Completed at:', sessionData.completed_at);
+        console.log('   Has data:', !!sessionData.data);
         setCurrentStatus('completed');
         setTimeout(() => {
           onComplete(sessionData);
         }, 1000);
+      } else if (sessionData.status === 'in_progress') {
+        // Only update to in_progress if not already completed
+        setCurrentStatus(prev => prev === 'completed' ? prev : 'in_progress');
+        setLastHeartbeat(Date.now());
       } else if (sessionData.status === 'cancelled') {
         // Only set to cancelled if not already completed
         setCurrentStatus(prev => prev === 'completed' ? prev : 'cancelled');
@@ -72,14 +100,14 @@ export default function QRHandoff({ sessionId, onComplete }) {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
+    <div className="w-full max-w-4xl mx-auto p-3 sm:p-4 md:p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+        <div className="text-center mb-4 sm:mb-6 md:mb-8">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">
             Continue on Your Phone
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 px-2">
             Scan the QR code below to complete verification on your mobile device
           </p>
         </div>
@@ -133,7 +161,7 @@ export default function QRHandoff({ sessionId, onComplete }) {
         )}
 
         {/* Main Content */}
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-12 mb-8">
+        <div className="flex flex-col lg:flex-row items-center justify-center gap-6 sm:gap-8 md:gap-12 mb-4 sm:mb-6 md:mb-8">
           {/* Desktop Illustration */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -157,13 +185,16 @@ export default function QRHandoff({ sessionId, onComplete }) {
             transition={{ delay: 0.2 }}
             className="relative"
           >
-            <div className="bg-white p-6 rounded-2xl shadow-lg border-4 border-blue-500">
-              <QRCodeSVG
-                value={mobileUrl}
-                size={240}
-                level="H"
-                includeMargin={true}
-              />
+            <div className="bg-white p-3 sm:p-4 md:p-6 rounded-xl sm:rounded-2xl shadow-lg border-2 sm:border-4 border-blue-500 flex items-center justify-center w-full max-w-full">
+              <div className="w-full max-w-full" style={{ maxWidth: `${qrSize}px` }}>
+                <QRCodeSVG
+                  value={mobileUrl}
+                  size={qrSize}
+                  level="H"
+                  includeMargin={true}
+                  className="w-full h-auto block"
+                />
+              </div>
             </div>
             {currentStatus === 'completed' && (
               <motion.div
@@ -200,11 +231,11 @@ export default function QRHandoff({ sessionId, onComplete }) {
         </div>
 
         {/* Instructions */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg sm:rounded-xl p-4 sm:p-6">
+          <h3 className="font-semibold text-base sm:text-lg text-gray-900 dark:text-white mb-2 sm:mb-3">
             📱 How to continue:
           </h3>
-          <ol className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+          <ol className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
             <li className="flex items-start gap-2">
               <span className="flex-shrink-0 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
               <span>Open your phone's camera app</span>
@@ -229,23 +260,24 @@ export default function QRHandoff({ sessionId, onComplete }) {
         </div>
 
         {/* Alternative Link */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+        <div className="mt-4 sm:mt-6 text-center">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-2 px-2">
             Can't scan? Copy this link to your phone:
           </p>
-          <div className="flex items-center gap-2 max-w-md mx-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-md mx-auto px-2">
             <input
               type="text"
               value={mobileUrl}
               readOnly
-              className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600"
+              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 min-w-0"
             />
             <button
               onClick={() => {
                 navigator.clipboard.writeText(mobileUrl);
                 alert('Link copied to clipboard!');
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+              className="px-4 sm:px-5 py-2.5 sm:py-2.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium active:bg-blue-700 transition touch-manipulation min-h-[44px] flex items-center justify-center"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               Copy
             </button>

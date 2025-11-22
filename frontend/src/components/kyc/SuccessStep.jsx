@@ -15,7 +15,7 @@ export default function SuccessStep({ onDone }) {
       </GlassCard>
 
       <div>
-        <Button className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold" onClick={() => onDone?.()}>
+        <Button className="w-full h-10 sm:h-12 text-sm sm:text-base font-semibold touch-manipulation min-h-[44px]" onClick={() => onDone?.()} style={{ WebkitTapHighlightColor: 'transparent' }}>
           Go to dashboard
         </Button>
       </div>

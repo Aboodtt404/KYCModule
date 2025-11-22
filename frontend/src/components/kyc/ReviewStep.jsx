@@ -111,7 +111,7 @@ export default function ReviewStep({ userData, onNext }) {
 
             {/* Submit */}
             <div className="pt-2 sm:pt-4">
-                <Button onClick={handleSaveChanges} className="w-full h-10 sm:h-12 text-sm sm:text-lg font-semibold" disabled={!isFormValid}>
+                <Button onClick={handleSaveChanges} className="w-full h-10 sm:h-12 text-sm sm:text-base md:text-lg font-semibold touch-manipulation min-h-[44px]" disabled={!isFormValid} style={{ WebkitTapHighlightColor: 'transparent' }}>
                     Save & Continue
                 </Button>
             </div>

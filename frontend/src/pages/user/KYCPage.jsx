@@ -36,11 +36,26 @@ function calculateAge(birthDate) {
 }
 
 export default function KYCPage({ mobileMode = false, sessionId = null, onComplete = null }) {
+    const [isMobileDevice, setIsMobileDevice] = useState(false);
     const [step, setStep] = useState(mobileMode ? 1 : 0); // 0 = handoff choice, 1 = start
     const [submissionId, setSubmissionId] = useState(sessionId || null);
     const [showQRHandoff, setShowQRHandoff] = useState(false);
     const [handoffSessionId, setHandoffSessionId] = useState(null);
     const [mobileTransferComplete, setMobileTransferComplete] = useState(false);
+
+    // Detect if device is mobile
+    useEffect(() => {
+        const checkMobile = () => {
+            const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+            const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+            // Also check screen width as fallback
+            const isSmallScreen = window.innerWidth <= 768;
+            setIsMobileDevice(isMobile || isSmallScreen);
+        };
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
     const [userData, setUserData] = useState({
         phone: "",
         documentFile: null,
@@ -217,8 +232,44 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
     };
 
     const renderStep = () => {
-        // Choice screen (desktop only)
+        // Choice screen (desktop only, or simplified on mobile)
         if (step === 0) {
+            // On mobile device, show simplified version with just "Continue on Phone"
+            if (isMobileDevice) {
+                return (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 40 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        exit={{ opacity: 0, y: -40 }} 
+                        key="step0" 
+                        className="space-y-4 sm:space-y-6 text-center"
+                    >
+                        <div className="flex justify-center">
+                            <LogoHero className="max-h-32 sm:max-h-40" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl sm:text-2xl font-bold text-white">
+                                Verify Your Identity
+                            </h2>
+                            <p className="text-gray-300 text-sm mt-2 px-2">
+                                Complete verification on your phone
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => setStep(1)}
+                            className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform active:scale-[0.98] active:shadow-lg flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
+                        >
+                            <svg className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-xs sm:text-sm md:text-base">Continue on Phone</span>
+                        </button>
+                    </motion.div>
+                );
+            }
+            
+            // On desktop, show both options
             return (
                 <motion.div 
                     initial={{ opacity: 0, y: 40 }} 
@@ -238,19 +289,21 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                             Choose how you'd like to complete verification
                         </p>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-2 sm:space-y-3">
                         <button 
                             onClick={handleStartOnMobile}
-                            className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform hover:scale-105 hover:shadow-lg flex items-center justify-center gap-3"
+                            className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform active:scale-[0.98] active:shadow-lg flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
                         >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
-                            Continue on Mobile (Recommended)
+                            <span className="text-xs sm:text-sm md:text-base">Continue on Mobile (Recommended)</span>
                         </button>
                         <button 
                             onClick={() => setStep(1)}
-                            className="w-full py-4 rounded-xl bg-white/10 border border-white/20 text-white font-semibold transition hover:bg-white/20"
+                            className="w-full py-3 sm:py-4 rounded-xl bg-white/10 border border-white/20 text-white font-semibold transition active:bg-white/20 touch-manipulation min-h-[48px] text-sm sm:text-base"
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
                         >
                             Continue on Desktop
                         </button>
@@ -273,7 +326,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                             This process helps keep your account secure.
                         </p>
                     </div>
-                    <button onClick={handleNext} className="w-full py-2.5 sm:py-3 text-sm sm:text-base rounded-lg sm:rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform hover:scale-105 hover:shadow-[0_0_10px_rgba(0,255,136,0.6)]">
+                    <button onClick={handleNext} className="w-full py-3 sm:py-3.5 text-sm sm:text-base rounded-lg sm:rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform active:scale-[0.98] active:shadow-[0_0_10px_rgba(0,255,136,0.6)] touch-manipulation min-h-[48px]">
                         Start Verification
                     </button>
                 </motion.div>);
@@ -353,8 +406,8 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
 
             {/* Navigation controls */}
             {step < TOTAL_STEPS && step > 1 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center mt-3 sm:mt-6">
-                <button onClick={handleBack} className="flex items-center space-x-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onClick={handleBack} className="flex items-center space-x-2 px-3 sm:px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 active:text-gray-800 dark:active:text-gray-200 transition-colors duration-200 active:bg-gray-100 dark:active:bg-gray-800 rounded-lg touch-manipulation min-h-[44px] flex items-center justify-center" style={{ WebkitTapHighlightColor: 'transparent' }}>
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                     <span>Go Back</span>

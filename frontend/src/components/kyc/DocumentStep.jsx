@@ -189,11 +189,12 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
           ].map((doc) => (
             <button
               key={doc.key}
-              className={`flex-1 p-2.5 rounded-lg transition text-sm font-medium ${type === doc.key
-                ? "bg-emerald-500 text-black font-semibold shadow-lg"
-                : "bg-white/10 hover:bg-white/20 text-white"
+              className={`flex-1 p-2.5 sm:p-3 rounded-lg transition text-xs sm:text-sm font-medium touch-manipulation min-h-[40px] flex items-center justify-center ${type === doc.key
+                ? "bg-emerald-500 text-black font-semibold shadow-lg active:bg-emerald-600"
+                : "bg-white/10 active:bg-white/20 text-white"
                 }`}
               onClick={() => setType(doc.key)}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               {doc.label}
             </button>
@@ -205,16 +206,17 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
           <div className="mt-4">
             <button
               onClick={() => setShowCamera(true)}
-              className={`w-full py-5 rounded-xl text-base font-bold bg-gradient-to-br shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-3 ${
+              className={`w-full py-4 sm:py-5 rounded-xl text-sm sm:text-base font-bold bg-gradient-to-br shadow-lg active:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] ${
                 type === "id"
-                  ? "from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                  : "from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                  ? "from-blue-500 to-blue-600 active:from-blue-600 active:to-blue-700"
+                  : "from-purple-500 to-purple-600 active:from-purple-600 active:to-purple-700"
               } text-white`}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              <Camera className="w-7 h-7" />
-              <div className="text-left">
-                <div>Capture {type === "id" ? "ID Card" : "Passport"}</div>
-                <div className="text-[11px] font-normal text-white/90">Tap to open camera</div>
+              <Camera className="w-5 h-5 sm:w-6 sm:h-7 flex-shrink-0" />
+              <div className="text-left flex-shrink min-w-0">
+                <div className="text-xs sm:text-sm md:text-base">Capture {type === "id" ? "ID Card" : "Passport"}</div>
+                <div className="text-[10px] sm:text-[11px] font-normal text-white/90">Tap to open camera</div>
               </div>
             </button>
           </div>
@@ -247,7 +249,8 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
               <button
                 onClick={handleProcessDocument}
                 disabled={isProcessing}
-                className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-600 text-white rounded-lg font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg"
+                className="flex-1 py-3 sm:py-4 bg-emerald-500 active:bg-emerald-600 disabled:bg-gray-600 text-white rounded-lg font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-lg touch-manipulation min-h-[44px]"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 {isProcessing ? (
                   <>
@@ -268,7 +271,8 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
                   setShowCamera(false);
                 }}
                 disabled={isProcessing}
-                className="px-5 py-4 bg-white/10 hover:bg-white/20 disabled:bg-gray-600 text-white rounded-lg font-medium text-sm transition"
+                className="px-4 sm:px-5 py-3 sm:py-4 bg-white/10 active:bg-white/20 disabled:bg-gray-600 text-white rounded-lg font-medium text-xs sm:text-sm transition touch-manipulation min-h-[44px] flex items-center justify-center"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 Retake
               </button>
@@ -278,14 +282,14 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
       </GlassCard>
 
       {/* Camera Modal - Simplified to rely on isOpen */}
-      <IDCameraCapture
-        isOpen={showCamera}
-        onCapture={handleCameraCapture}
-        onCancel={() => {
-          console.log('📵 Closing camera modal');
-          setShowCamera(false);
-        }}
-      />
+        <IDCameraCapture
+          isOpen={showCamera}
+          onCapture={handleCameraCapture}
+          onCancel={() => {
+            console.log('📵 Closing camera modal');
+            setShowCamera(false);
+          }}
+        />
     </div>
   );
 }

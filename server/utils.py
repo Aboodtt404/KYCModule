@@ -4,8 +4,31 @@ import re
 import numpy as np
 import easyocr
 import base64
+from PIL import Image
+import torch
 
-# Initialize EasyOCR ONCE with optimizations
+# Initialize Qari-OCR (Arabic Transformer OCR) - Superior Arabic OCR
+try:
+    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+    from qwen_vl_utils import process_vision_info
+    
+    print("🔄 Loading Qari-OCR model (this may take a moment on first run)...")
+    qari_model_name = "NAMAA-Space/Qari-OCR-0.1-VL-2B-Instruct"
+    qari_model = Qwen2VLForConditionalGeneration.from_pretrained(
+        qari_model_name,
+        torch_dtype=torch.float32,  # Use float32 for CPU
+        device_map="cpu"  # Force CPU usage
+    )
+    qari_processor = AutoProcessor.from_pretrained(qari_model_name)
+    QARI_OCR_AVAILABLE = True
+    print("✅ Qari-OCR loaded successfully (98.1% character accuracy for Arabic)")
+except Exception as e:
+    QARI_OCR_AVAILABLE = False
+    print(f"⚠️ Qari-OCR not available, falling back to EasyOCR: {e}")
+    qari_model = None
+    qari_processor = None
+
+# Initialize EasyOCR as fallback
 reader = easyocr.Reader(
     ['ar'],  # Arabic language
     gpu=False,  # CPU mode (your setup)
@@ -13,6 +36,7 @@ reader = easyocr.Reader(
     user_network_directory='./easyocr_models',
     verbose=False  # Suppress logs
 )
+print(f"✅ EasyOCR loaded as {'fallback' if QARI_OCR_AVAILABLE else 'primary'} OCR engine")
 
 # Load models once for efficiency
 id_card_model = YOLO('detect_id_card.pt')
@@ -55,12 +79,83 @@ def diagnose_field_extraction(image, bbox_dict):
         if area < 2400:
             print(f"   ⚠️  AREA TOO SMALL ({area}px²) - needs aggressive upscaling")
 
-# Field-specific extraction with aggressive handling for firstName
+def extract_text_qari(image_crop, field_type='general'):
+    """
+    Extract Arabic text using Qari-OCR (Transformer-based, 98.1% accuracy)
+    Falls back to EasyOCR if Qari fails
+    """
+    if not QARI_OCR_AVAILABLE:
+        return None
+    
+    try:
+        # Convert OpenCV image (BGR) to PIL Image (RGB)
+        if len(image_crop.shape) == 2:  # Grayscale
+            pil_image = Image.fromarray(image_crop).convert("RGB")
+        else:  # BGR
+            rgb_crop = cv2.cvtColor(image_crop, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb_crop)
+        
+        # Save to temporary file (Qari expects file path)
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            pil_image.save(tmp.name)
+            tmp_path = tmp.name
+        
+        # Prepare prompt for Qari-OCR
+        prompt = "Extract all Arabic text from this image. Return only the plain text, no explanations."
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": f"file://{tmp_path}"},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        
+        # Process with Qari-OCR
+        text = qari_processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        image_inputs, video_inputs = process_vision_info(messages)
+        inputs = qari_processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+        
+        # Generate text (max 500 tokens for field text)
+        generated_ids = qari_model.generate(**inputs, max_new_tokens=500)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        output_text = qari_processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+        
+        # Cleanup
+        import os
+        os.remove(tmp_path)
+        
+        # Clean up the output
+        result = output_text.strip()
+        if result:
+            print(f"      ✅ Qari-OCR extracted: '{result}'")
+            return result
+        else:
+            print(f"      ⚠️ Qari-OCR returned empty result")
+            return None
+            
+    except Exception as e:
+        print(f"      ❌ Qari-OCR error: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def extract_text(image, bbox, lang='ar', field_type='general'):
-    """
-    Extract Arabic text with EasyOCR optimized for Egyptian IDs
-    Field-specific handling for firstName (smaller fields need more aggressive processing)
-    """
     x1, y1, x2, y2 = bbox
     cropped_image = image[y1:y2, x1:x2]
     
@@ -82,7 +177,12 @@ def extract_text(image, bbox, lang='ar', field_type='general'):
         min_scale = 2.0
         confidence_threshold = 0.15
     
-    # Upscale if needed
+    import os
+    debug_dir = 'debug_ocr'
+    os.makedirs(debug_dir, exist_ok=True)
+    original_crop = cropped_image.copy()
+    cv2.imwrite(f'{debug_dir}/0_original_{field_type}.png', original_crop)
+    
     if width < min_width or height < min_height:
         scale_factor = max(min_width/width, min_height/height, min_scale)
         new_width = int(width * scale_factor)
@@ -90,45 +190,28 @@ def extract_text(image, bbox, lang='ar', field_type='general'):
         cropped_image = cv2.resize(cropped_image, (new_width, new_height), 
                                    interpolation=cv2.INTER_CUBIC)
         print(f"      📏 Upscaled from {width}x{height} to {new_width}x{new_height} (scale: {scale_factor:.1f}x)")
+        cv2.imwrite(f'{debug_dir}/1_upscaled_{field_type}.png', cropped_image)
     
-    # AGGRESSIVE PREPROCESSING for firstName
-    if field_type == 'firstName':
-        # Save original for debugging
-        import os
-        debug_dir = 'debug_ocr'
-        os.makedirs(debug_dir, exist_ok=True)
+    # MINIMAL PREPROCESSING for Qari-OCR (transformer models work better with natural images)
+    if QARI_OCR_AVAILABLE:
+        # Only apply very gentle contrast enhancement - NO binarization, NO heavy denoising
+        # Qari-OCR is trained on natural images and doesn't need aggressive preprocessing
         
-        # 1. Gentle CLAHE first
+        # Option 1: Just slight contrast boost (very gentle)
         lab = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))  # Very gentle
         l = clahe.apply(l)
         enhanced = cv2.merge([l, a, b])
         cropped_image = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
-        cv2.imwrite(f'{debug_dir}/1_clahe.png', cropped_image)
-        
-        # 2. Light denoising (don't destroy text)
-        cropped_image = cv2.fastNlMeansDenoising(cropped_image, h=7, 
-                                                 templateWindowSize=7, 
-                                                 searchWindowSize=21)
-        cv2.imwrite(f'{debug_dir}/2_denoised.png', cropped_image)
-        
-        # 3. Try WITHOUT binarization first (it might be destroying text)
-        # Convert to grayscale but keep it as color for EasyOCR
-        gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
-        
-        # Apply adaptive threshold (better than OTSU for varying lighting)
-        adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                        cv2.THRESH_BINARY, 11, 2)
-        cv2.imwrite(f'{debug_dir}/3_adaptive.png', adaptive)
-        
-        # Convert back to BGR
-        cropped_image = cv2.cvtColor(adaptive, cv2.COLOR_GRAY2BGR)
-        cv2.imwrite(f'{debug_dir}/4_final.png', cropped_image)
+        cv2.imwrite(f'{debug_dir}/2_enhanced_{field_type}.png', cropped_image)
         
         print(f"      💾 Debug images saved to {debug_dir}/")
+        print(f"      ℹ️  Using MINIMAL preprocessing for Qari-OCR (natural image)")
     else:
-        # Standard preprocessing for other fields
+        # More aggressive preprocessing for EasyOCR (it needs it)
+        print(f"      ℹ️  Using STANDARD preprocessing for EasyOCR")
+        
         lab = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -136,16 +219,24 @@ def extract_text(image, bbox, lang='ar', field_type='general'):
         enhanced = cv2.merge([l, a, b])
         cropped_image = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
         
-        cropped_image = cv2.fastNlMeansDenoising(cropped_image, h=8, 
+        # Light denoising only
+        cropped_image = cv2.fastNlMeansDenoising(cropped_image, h=5, 
                                                  templateWindowSize=7, 
                                                  searchWindowSize=21)
-        
-        gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
-        clahe_gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        gray = clahe_gray.apply(gray)
-        cropped_image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        cv2.imwrite(f'{debug_dir}/2_preprocessed_{field_type}.png', cropped_image)
     
+    # Try Qari-OCR first (98.1% accuracy for Arabic)
+    if QARI_OCR_AVAILABLE:
+        print(f"      🔬 Trying Qari-OCR (Transformer-based)...")
+        qari_result = extract_text_qari(cropped_image, field_type)
+        if qari_result:
+            return qari_result
+        else:
+            print(f"      🔄 Qari-OCR failed, falling back to EasyOCR...")
+    
+    # Fallback to EasyOCR
     try:
+        print(f"      📖 Using EasyOCR...")
         result = reader.readtext(
             cropped_image,
             detail=1,

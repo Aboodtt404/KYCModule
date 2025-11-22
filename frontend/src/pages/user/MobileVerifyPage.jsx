@@ -170,21 +170,21 @@ export default function MobileVerifyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 overflow-x-hidden">
-      <div className="container mx-auto px-3 py-2 max-w-2xl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 overflow-x-hidden pt-safe pb-safe">
+      <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3 max-w-2xl">
         {/* Mobile Header - Compact */}
-        <div className="bg-white/10 backdrop-blur-md rounded-lg p-2.5 mb-3 text-white sticky top-0 z-10 shadow-lg">
+        <div className="bg-white/10 backdrop-blur-md rounded-lg p-2.5 sm:p-3 mb-2 sm:mb-3 text-white sticky top-0 z-10 shadow-lg" style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2">
-            <Smartphone className="w-4 h-4 flex-shrink-0" />
+            <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <h1 className="font-bold text-sm truncate">Mobile Verification</h1>
-              <p className="text-[10px] text-white/80 truncate">Complete KYC on your phone</p>
+              <h1 className="font-bold text-xs sm:text-sm truncate">Mobile Verification</h1>
+              <p className="text-[10px] sm:text-xs text-white/80 truncate">Complete KYC on your phone</p>
             </div>
           </div>
         </div>
 
         {/* KYC Flow - Optimized spacing */}
-        <div className="mobile-kyc-container pb-4">
+        <div className="mobile-kyc-container pb-2 sm:pb-4">
         <KYCPage 
           mobileMode={true} 
           sessionId={sessionId}
