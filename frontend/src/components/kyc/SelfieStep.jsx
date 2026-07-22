@@ -9,6 +9,9 @@ export default function SelfieStep({ onNext, onCapture, }) {
     useEffect(() => {
         async function start() {
             try {
+                if (!navigator.mediaDevices?.getUserMedia) {
+                    return;
+                }
                 const s = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: "user", width: { ideal: 720 } },
                     audio: false,
@@ -17,8 +20,7 @@ export default function SelfieStep({ onNext, onCapture, }) {
                 if (videoRef.current)
                     videoRef.current.srcObject = s;
             }
-            catch (e) {
-                console.error("camera error", e);
+            catch (_e) {
             }
         }
         start();

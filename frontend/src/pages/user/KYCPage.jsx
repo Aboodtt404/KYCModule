@@ -10,7 +10,7 @@ import SuccessStep from "@/components/kyc/SuccessStep";
 import MobileTransferComplete from "@/components/kyc/MobileTransferComplete";
 import LogoHero from "@/components/kyc/ThreeHero";
 import QRHandoff from "@/components/kyc/QRHandoff";
-import { useSubmitKYC, useCreateVerificationSession } from "../../hooks/useQueries";
+import { useSubmitKYC, useCreateVerificationSession, useCompleteVerification } from "../../hooks/useQueries";
 import { v4 as uuidv4 } from 'uuid';
 
 const TOTAL_STEPS = 6; // Welcome → OTP → Document → Face → Review → Success
@@ -23,25 +23,19 @@ const getProgress = (step) => {
     return 100;
 };
 
-function calculateAge(birthDate) {
-    if (!birthDate) return null;
-    const today = new Date();
-    const birthDateObj = new Date(birthDate);
-    let age = today.getFullYear() - birthDateObj.getFullYear();
-    const monthDifference = today.getMonth() - birthDateObj.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDateObj.getDate())) {
-        age--;
-    }
-    return age;
-}
+import { calculateAge } from "@/utils/age";
 
-export default function KYCPage({ mobileMode = false, sessionId = null, onComplete = null }) {
+// apiMode: the user arrived from a partner website's API session (/verify/:id).
+// The full flow runs (incl. review + submit); on success the session is marked
+// completed so the partner's polling sees the result.
+export default function KYCPage({ mobileMode = false, apiMode = false, sessionId = null, onComplete = null }) {
     const [isMobileDevice, setIsMobileDevice] = useState(false);
-    const [step, setStep] = useState(mobileMode ? 1 : 0); // 0 = handoff choice, 1 = start
+    const [step, setStep] = useState(mobileMode || apiMode ? 1 : 0); // 0 = handoff choice, 1 = start
     const [submissionId, setSubmissionId] = useState(sessionId || null);
     const [showQRHandoff, setShowQRHandoff] = useState(false);
     const [handoffSessionId, setHandoffSessionId] = useState(null);
     const [mobileTransferComplete, setMobileTransferComplete] = useState(false);
+    const [error, setError] = useState(null);
 
     // Detect if device is mobile
     useEffect(() => {
@@ -58,6 +52,8 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
     }, []);
     const [userData, setUserData] = useState({
         phone: "",
+        email: "",
+        phoneVerified: false,
         documentFile: null,
         ocrData: null,
         faceImage: null,
@@ -66,29 +62,41 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
     const [submissionComplete, setSubmissionComplete] = useState(false);
     const submitKYC = useSubmitKYC();
     const createSession = useCreateVerificationSession();
+    const completeApiSession = useCompleteVerification();
 
     // Submit KYC data when reaching success step
     const handleFinalSubmit = (finalUserData) => {
-        if (!submissionComplete && finalUserData.faceVerified) {
+        if (!submissionComplete) {
             // Ensure ocrData is an object before destructuring
             const ocrData = finalUserData.ocrData || {};
 
-            // Filter ocrData to only include desired fields for submission
+            // Filter ocrData to only include desired fields for submission.
+            // face_image is intentionally excluded — storing raw biometric data on-chain
+            // violates GDPR data minimisation; faceVerified boolean is sufficient.
             const ocrDataForSubmission = {
                 full_name: ocrData.full_name || "",
                 national_id: ocrData.national_id,
                 birth_date: ocrData.birth_date,
-                age: calculateAge(ocrData.birth_date), // Calculate and add age
+                age: calculateAge(ocrData.birth_date),
                 address: ocrData.address || "",
                 governorate: ocrData.governorate,
                 gender: ocrData.gender,
-                face_image: ocrData.face_image
+                // Factory/serial number — from the FRONT (رقم المصنع)
+                serial_number: ocrData.serial_number || ocrData.serial || "",
+                // Back-of-card fields (empty for passport submissions)
+                national_id_back: ocrData.national_id_back || "",
+                marital_status: ocrData.marital_status || "",
+                occupation: ocrData.occupation || "",
+                issue_date: ocrData.issue_date || "",
+                expiry_date: ocrData.expiry_date || "",
             };
 
             const kycData = {
                 submissionId,
                 timestamp: new Date().toISOString(),
                 phone: finalUserData.phone,
+                phoneVerified: finalUserData.phoneVerified !== false,
+                email: finalUserData.email || "",
                 documentFile: finalUserData.documentFile?.name || "N/A",
                 ocrData: ocrDataForSubmission,
                 faceVerified: finalUserData.faceVerified,
@@ -99,14 +107,33 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
             const payload = { kycData };
 
             submitKYC.mutate({ submissionId, kycData: payload }, {
-                onSuccess: () => {
-                    console.log("✅ KYC submission successful");
+                onSuccess: async () => {
+                    // API sessions: mark the partner's session completed with a
+                    // minimal result payload so their polling sees the outcome.
+                    if (apiMode && sessionId) {
+                        try {
+                            await completeApiSession.mutateAsync({
+                                sessionId,
+                                kycData: {
+                                    submissionId,
+                                    phone: finalUserData.phone || "",
+                                    faceVerified: finalUserData.faceVerified,
+                                    ocrData: {
+                                        national_id: ocrDataForSubmission.national_id,
+                                        full_name: ocrDataForSubmission.full_name,
+                                    },
+                                },
+                            });
+                        } catch (err) {
+                            // The KYC submission itself succeeded — surface but don't block
+                            setError(`Verification saved, but notifying the partner session failed: ${err.message || err}`);
+                        }
+                    }
                     setSubmissionComplete(true);
                     setStep(TOTAL_STEPS); // Move to success step
                 },
-                onError: (error) => {
-                    console.error("❌ KYC submission failed:", error);
-                    alert(`KYC submission failed: ${error.message || error}`);
+                onError: (err) => {
+                    setError(`Submission failed: ${err.message || err}`);
                 }
             });
         }
@@ -122,6 +149,8 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
         setStep(1);
         setUserData({
             phone: "",
+            email: "",
+            phoneVerified: false,
             documentFile: null,
             ocrData: null,
             faceImage: null,
@@ -130,9 +159,13 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
         setSubmissionId(null);
         setSubmissionComplete(false);
     };
-    const handleOtpVerified = (phoneNumber) => {
-        setUserData((prev) => ({ ...prev, phone: phoneNumber }));
-        const newSubmissionId = `kyc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const handleOtpVerified = (otpResult) => {
+        // otpResult is { phone, email, phoneVerified } from OTPStep, or "skipped" (legacy)
+        const phone = typeof otpResult === 'string' ? otpResult : otpResult.phone;
+        const email = typeof otpResult === 'string' ? '' : (otpResult.email || '');
+        const phoneVerified = typeof otpResult === 'string' ? false : otpResult.phoneVerified !== false;
+        setUserData((prev) => ({ ...prev, phone, email, phoneVerified }));
+        const newSubmissionId = `kyc_${uuidv4()}`;
         setSubmissionId(newSubmissionId);
         handleNext();
     };
@@ -146,23 +179,24 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
         handleNext();
     };
     const handleFaceVerified = () => {
-        const updatedUserData = {
-            ...userData,
-            faceVerified: true,
-        };
-        
+        const updatedUserData = { ...userData, faceVerified: true };
         setUserData(updatedUserData);
-        
         if (mobileMode && sessionId) {
-            if (onComplete) {
-                console.log('📱 Mobile verification complete. Sending data to parent:', updatedUserData);
-                onComplete(updatedUserData);
-            }
+            if (onComplete) onComplete(updatedUserData);
             setMobileTransferComplete(true);
             return;
         }
-        
-        // On desktop, proceed to the review step
+        setStep(5);
+    };
+
+    const handleFaceSkipped = () => {
+        const updatedUserData = { ...userData, faceVerified: false };
+        setUserData(updatedUserData);
+        if (mobileMode && sessionId) {
+            if (onComplete) onComplete(updatedUserData);
+            setMobileTransferComplete(true);
+            return;
+        }
         setStep(5);
     };
 
@@ -177,7 +211,6 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
 
     // Handle mobile handoff completion
     const handleHandoffComplete = (sessionData) => {
-        console.log('📱 Received session data from mobile handoff:', sessionData);
         setShowQRHandoff(false);
 
         let parsedData;
@@ -192,28 +225,41 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                 throw new Error("sessionData.data is not a string or object");
             }
         } catch (error) {
-            console.error('❌ Failed to parse user data from mobile handoff:', error, 'Raw data:', sessionData.data);
-            alert("There was an issue parsing the data from your mobile device. Please try again.");
-            setStep(0); // Reset to start
+            setError("There was an issue parsing the data from your mobile device. Please try again.");
+            setStep(0);
             return;
         }
         
         // Now validate the PARSED data
-        if (parsedData && parsedData.ocrData && parsedData.faceVerified) {
+        if (parsedData && parsedData.ocrData) {
+            const nationalId = parsedData.ocrData.national_id || "";
+            if (!/^[23]\d{13}$/.test(nationalId)) {
+                setError("The National ID could not be read correctly from your ID. Please retry the scan or continue verification on this device instead.");
+                setStep(0);
+                return;
+            }
+            // Phone is only mandatory when the mobile user went through OTP;
+            // a skipped verification legitimately arrives with no phone.
+            if (parsedData.phoneVerified !== false && !parsedData.phone?.trim()) {
+                setError("Phone number is missing from the mobile submission. Please try again.");
+                setStep(0);
+                return;
+            }
+
             setUserData({
-                phone: parsedData.phone || userData.phone,
+                phone: parsedData.phone || "",
+                phoneVerified: parsedData.phoneVerified !== false && !!parsedData.phone?.trim(),
+                email: parsedData.email || userData.email || "",
                 documentFile: parsedData.documentFile || null,
                 ocrData: parsedData.ocrData || null,
                 faceImage: parsedData.faceImage || null,
                 faceVerified: parsedData.faceVerified || false,
             });
-            
-            console.log('✅ Handoff complete, moving to Review Step.');
+
             setStep(5);
         } else {
-            console.error('❌ Invalid or incomplete data after parsing from mobile handoff. Parsed data:', parsedData);
-            alert("The data received from your mobile device was incomplete. Please try again.");
-            setStep(0); 
+            setError("The data received from your mobile device was incomplete. Please try again.");
+            setStep(0);
         }
     };
 
@@ -226,8 +272,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
             setSubmissionId(newSessionId);
             setShowQRHandoff(true);
         } catch (error) {
-            console.error('Failed to create verification session:', error);
-            alert('Failed to create verification session. Please try again.');
+            setError('Failed to create verification session. Please try again.');
         }
     };
 
@@ -257,7 +302,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                         </div>
                         <button 
                             onClick={() => setStep(1)}
-                            className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform active:scale-[0.98] active:shadow-lg flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base"
+                            className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 hover:from-brand-500 hover:to-violet-500 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.5)] text-white font-semibold transition-colors transform active:scale-[0.98] flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base"
                             style={{ WebkitTapHighlightColor: 'transparent' }}
                         >
                             <svg className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -290,17 +335,27 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                         </p>
                     </div>
                     <div className="space-y-2 sm:space-y-3">
-                        <button 
-                            onClick={handleStartOnMobile}
-                            className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold transition transform active:scale-[0.98] active:shadow-lg flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base"
-                            style={{ WebkitTapHighlightColor: 'transparent' }}
-                        >
-                            <svg className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-xs sm:text-sm md:text-base">Continue on Mobile (Recommended)</span>
+                        <button
+ onClick={handleStartOnMobile}
+ disabled={createSession.isPending}
+ className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 hover:from-brand-500 hover:to-violet-500 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.5)] text-white font-semibold transition transform active:scale-[0.98] flex items-center justify-center gap-2 sm:gap-3 touch-manipulation min-h-[48px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed"
+ style={{ WebkitTapHighlightColor: 'transparent' }}
+ >
+                            {createSession.isPending ? (
+                                <svg className="w-5 h-5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                </svg>
+                            ) : (
+                                <svg className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                            )}
+                            <span className="text-xs sm:text-sm md:text-base">
+                                {createSession.isPending ? 'Creating session…' : 'Continue on Mobile (Recommended)'}
+                            </span>
                         </button>
-                        <button 
+                        <button
                             onClick={() => setStep(1)}
                             className="w-full py-3 sm:py-4 rounded-xl bg-white/10 border border-white/20 text-white font-semibold transition active:bg-white/20 touch-manipulation min-h-[48px] text-sm sm:text-base"
                             style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -326,7 +381,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                             This process helps keep your account secure.
                         </p>
                     </div>
-                    <button onClick={handleNext} className="w-full py-3 sm:py-3.5 text-sm sm:text-base rounded-lg sm:rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-black font-semibold transition transform active:scale-[0.98] active:shadow-[0_0_10px_rgba(0,255,136,0.6)] touch-manipulation min-h-[48px]">
+                    <button onClick={handleNext} className="w-full py-3 sm:py-3.5 text-sm sm:text-base rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 hover:from-brand-500 hover:to-violet-500 shadow-[0_4px_20px_-4px_rgba(99,102,241,0.5)] text-white font-semibold transition-colors transform active:scale-[0.98] touch-manipulation min-h-[48px]">
                         Start Verification
                     </button>
                 </motion.div>);
@@ -354,7 +409,8 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                     <FaceVerificationStep
                         idFaceImage={idFaceImageWithPrefix}
                         onVerified={handleFaceVerified}
-                        onSkip={handleFaceVerified} // Allow skipping for testing
+                        onSkip={handleFaceSkipped}
+                        submissionId={submissionId}
                     />
                 );
             case 5:
@@ -362,10 +418,11 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
                     <ReviewStep
                         userData={userData}
                         onNext={handleReviewComplete}
+                        isSubmitting={submitKYC.isPending}
                     />
                 );
             case 6:
-                return <SuccessStep />;
+                return <SuccessStep submissionId={submissionId} nationalId={userData?.ocrData?.national_id} />;
             default:
                 return <div>Invalid Step</div>;
         }
@@ -374,7 +431,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
     // Show mobile transfer complete screen
     if (mobileMode && mobileTransferComplete) {
         return (
-            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
+            <div className="min-h-screen app-bg text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
                 <div className="w-full max-w-lg">
                     <MobileTransferComplete />
                 </div>
@@ -385,7 +442,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
     // Show QR handoff if requested
     if (showQRHandoff && handoffSessionId) {
         return (
-            <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-4 py-10">
+            <div className="min-h-screen app-bg text-white flex items-center justify-center px-4 py-10">
                 <QRHandoff 
                     sessionId={handoffSessionId}
                     onComplete={handleHandoffComplete}
@@ -394,10 +451,18 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
         );
     }
 
-    return (<div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
+    return (<div className="min-h-screen app-bg text-white flex items-center justify-center px-3 sm:px-4 py-4 sm:py-10">
         <div className="w-full max-w-lg">
             {/* Progress Bar */}
             {step > 0 && step < TOTAL_STEPS && <ProgressBar value={getProgress(step)} />}
+
+            {/* Inline error banner */}
+            {error && (
+                <div className="flex items-start gap-3 bg-red-500/15 border border-red-500/30 rounded-xl px-4 py-3 mt-3 text-sm text-red-300">
+                    <span className="flex-1">{error}</span>
+                    <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200 leading-none mt-0.5">✕</button>
+                </div>
+            )}
 
             {/* Animated step content */}
             <motion.div key={step} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.4 }} className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl sm:rounded-2xl p-3 sm:p-6 shadow-xl mt-3 sm:mt-8">
@@ -406,7 +471,7 @@ export default function KYCPage({ mobileMode = false, sessionId = null, onComple
 
             {/* Navigation controls */}
             {step < TOTAL_STEPS && step > 1 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center mt-3 sm:mt-6">
-                <button onClick={handleBack} className="flex items-center space-x-2 px-3 sm:px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 active:text-gray-800 dark:active:text-gray-200 transition-colors duration-200 active:bg-gray-100 dark:active:bg-gray-800 rounded-lg touch-manipulation min-h-[44px] flex items-center justify-center" style={{ WebkitTapHighlightColor: 'transparent' }}>
+                <button onClick={handleBack} className="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 active:text-gray-800 dark:active:text-gray-200 transition-colors duration-200 active:bg-gray-100 dark:active:bg-gray-800 rounded-xl touch-manipulation min-h-[44px]" style={{ WebkitTapHighlightColor: 'transparent' }}>
                     <svg className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>

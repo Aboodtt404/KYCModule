@@ -11,6 +11,9 @@ export function CameraCapture({ onCapture, onCancel, isOpen }) {
     const startCamera = async () => {
         try {
             setError(null);
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error("Camera not available. Please use HTTPS or localhost, or upload a file instead.");
+            }
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: "user",
@@ -25,7 +28,6 @@ export function CameraCapture({ onCapture, onCancel, isOpen }) {
             }
         }
         catch (err) {
-            console.error("Camera error:", err);
             setError("Unable to access camera. Please check permissions.");
             setIsCapturing(false);
         }

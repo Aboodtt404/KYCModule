@@ -8,29 +8,36 @@ import {
   TooltipContent,
 } from "../../components/ui/tooltip";
 import {
-  FileText,
   Upload,
-  Image,
-  Star,
-  Download,
   ScanText,
   Menu,
   Moon,
   Sun,
   Users,
+  LogOut,
+  ClipboardList,
+  BarChart2,
+  FolderOpen,
+  KeyRound,
 } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
 
 const tabs = [
-    { id: "kyc-submissions", label: "KYC Submissions", icon: Users, to: "/admin/kyc-submissions" },
-    { id: "upload", label: "Upload", icon: Upload, to: "/admin/upload" },
-    { id: "ocr", label: "OCR Processor", icon: ScanText, to: "/admin/ocr" },
+    { id: "stats",           label: "Dashboard",        icon: BarChart2,      to: "/admin/stats"           },
+    { id: "kyc-submissions", label: "KYC Submissions",  icon: Users,          to: "/admin/kyc-submissions" },
+    { id: "audit-log",       label: "Audit Log",        icon: ClipboardList,  to: "/admin/audit-log"       },
+    { id: "api-clients",     label: "API Clients",      icon: KeyRound,       to: "/admin/api-clients"     },
+    { id: "upload",          label: "Upload",           icon: Upload,         to: "/admin/upload"          },
+    { id: "documents",       label: "Documents",        icon: FolderOpen,     to: "/admin/documents"       },
+    { id: "ocr",             label: "OCR Processor",    icon: ScanText,       to: "/admin/ocr"             },
 ];
 
 // Card wrapper
-const ContentWrapper = ({ children }) => (
+const ContentWrapper = ({ children, contentKey }) => (
   <motion.div
-    key={Math.random()}
+    key={contentKey}
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
     exit={{ opacity: 0, y: -10 }}
@@ -42,7 +49,22 @@ const ContentWrapper = ({ children }) => (
 );
 
 export function AdminDashboard() {
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile: closed by default
+  const navigate = useNavigate();
+  const { isAuthenticated, principal, logout, loading } = useAuth();
+
+  // Guard: wait for II session check to complete, then redirect if not authenticated
+  React.useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/", { replace: true });
+  };
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const location = useLocation();
@@ -76,7 +98,7 @@ export function AdminDashboard() {
 
   return (
     <div className={darkMode ? "dark" : ""}>
-      <div className="min-h-screen flex bg-gray-900 text-white font-inter">
+      <div className="min-h-screen flex app-bg text-white">
         {/* Mobile Menu Overlay */}
         {mobileMenuOpen && (
           <div
@@ -108,7 +130,7 @@ export function AdminDashboard() {
                 setMobileMenuOpen(false);
               }}
               aria-label="Toggle sidebar"
-              className="p-2 rounded-lg hover:bg-gray-800 active:bg-gray-700 touch-manipulation"
+              className="p-2 rounded-xl hover:bg-gray-800 active:bg-gray-700 touch-manipulation"
             >
               <Menu className="w-5 h-5 text-indigo-500/90" />
             </button>
@@ -166,13 +188,27 @@ export function AdminDashboard() {
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 aria-label="Toggle menu"
-                className="md:hidden p-2 rounded-lg hover:bg-gray-800 active:bg-gray-700 touch-manipulation"
+                className="md:hidden p-2 rounded-xl hover:bg-gray-800 active:bg-gray-700 touch-manipulation"
               >
                 <Menu className="w-5 h-5 text-indigo-500/90" />
               </button>
               <h2 className="text-lg sm:text-xl font-semibold capitalize">{currentTitle}</h2>
             </div>
             <div className="flex items-center gap-3 sm:gap-4">
+              {/* Principal display */}
+              {principal && (
+                <span className="hidden md:block text-xs text-gray-400 font-mono truncate max-w-[140px]" title={principal.toText()}>
+                  {principal.toText().slice(0, 10)}…
+                </span>
+              )}
+              {/* Logout */}
+              <button
+ onClick={handleLogout}
+ title="Sign out"
+ className="p-2 rounded-xl hover:bg-gray-800 text-gray-400 hover:text-red-400 transition-colors"
+ >
+                <LogOut className="w-4 h-4" />
+              </button>
               {/* Dark mode toggle */}
               <button
                 onClick={() => setDarkMode(!darkMode)}
@@ -199,9 +235,23 @@ export function AdminDashboard() {
 
           {/* Body */}
           <section className="flex-1 p-4 sm:p-6 md:p-8 bg-gray-900 transition-colors overflow-x-hidden">
-            <ContentWrapper>
-              <Outlet />
-            </ContentWrapper>
+            <ErrorBoundary fallback={(err) => (
+              <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                <p className="text-4xl">⚠</p>
+                <h2 className="text-lg font-semibold text-white">This page crashed</h2>
+                <p className="text-sm text-gray-400 font-mono break-all max-w-md">{err.message}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-sm text-white hover:bg-white/15 transition"
+                >
+                  Reload page
+                </button>
+              </div>
+            )}>
+              <ContentWrapper contentKey={location.pathname}>
+                <Outlet />
+              </ContentWrapper>
+            </ErrorBoundary>
           </section>
         </main>
       </div>

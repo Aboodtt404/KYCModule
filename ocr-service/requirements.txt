@@ -1,0 +1,20 @@
+# ── Active OCR server (server.py — Flask) ───────────────────────────────────
+flask>=3.0.0
+flask-cors>=4.0.0
+flask-limiter>=3.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+easyocr==1.7.2
+deepface==0.0.93
+tf-keras>=2.16.0
+Pillow>=10.4.0
+scipy>=1.13.0
+ultralytics>=8.0.0
+
+# ── Development / testing ────────────────────────────────────────────────────
+pytest>=8.0.0
+
+# ── Legacy face/OCR API (main.py — FastAPI, port 5050) ───────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9

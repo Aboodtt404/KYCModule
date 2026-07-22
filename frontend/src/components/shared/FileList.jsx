@@ -22,15 +22,11 @@ export const useFileList = () => {
             throw new Error('Backend is not available');
         }
         const files = await actor.list();
-        console.log("[useFileList] Raw files from canister:", files);
-
         const transformedFiles = files.map(file => ({
             path: file.path,
             mimeType: file.mime_type,
             size: Number(file.size)
         }));
-
-        console.log("[useFileList] Transformed files:", transformedFiles);
         return transformedFiles;
     };
     const getFileUrl = async (metadata) => {

@@ -61,7 +61,6 @@ export default function DocumentUpload() {
                 }));
             }
             catch (error) {
-                console.error('Compression failed:', error);
                 setUploadState(prev => ({
                     ...prev,
                     compressing: false,
@@ -163,13 +162,13 @@ export default function DocumentUpload() {
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-3">Document Type</label>
           <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => setUploadState(prev => ({ ...prev, documentType: 'national-id' }))} className={`p-4 border-2 rounded-lg text-left transition-colors ${uploadState.documentType === 'national-id'
+            <button onClick={() => setUploadState(prev => ({ ...prev, documentType: 'national-id' }))} className={`p-4 border-2 rounded-xl text-left transition-colors ${uploadState.documentType === 'national-id'
             ? 'border-blue-500 bg-blue-50'
             : 'border-gray-200 hover:border-gray-300'}`}>
               <div className="font-medium text-gray-900">National ID</div>
               <div className="text-sm text-gray-600">Arabic national identity card</div>
             </button>
-            <button onClick={() => setUploadState(prev => ({ ...prev, documentType: 'passport' }))} className={`p-4 border-2 rounded-lg text-left transition-colors ${uploadState.documentType === 'passport'
+            <button onClick={() => setUploadState(prev => ({ ...prev, documentType: 'passport' }))} className={`p-4 border-2 rounded-xl text-left transition-colors ${uploadState.documentType === 'passport'
             ? 'border-blue-500 bg-blue-50'
             : 'border-gray-200 hover:border-gray-300'}`}>
               <div className="font-medium text-gray-900">Passport</div>
@@ -239,7 +238,7 @@ export default function DocumentUpload() {
 
         {/* Upload Button */}
         {uploadState.file && !uploadState.completed && (<div className="mt-6">
-            <button onClick={handleUpload} disabled={uploadState.enhancing || uploadState.uploading || uploadState.processing} className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <button onClick={handleUpload} disabled={uploadState.enhancing || uploadState.uploading || uploadState.processing} className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
               {uploadState.enhancing
                 ? 'Enhancing Image...'
                 : uploadState.uploading
@@ -333,7 +332,7 @@ export default function DocumentUpload() {
               </div>
             </div>
 
-            <button onClick={resetUpload} className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            <button onClick={resetUpload} className="w-full bg-blue-600 text-white py-2 px-4 rounded-xl font-medium hover:bg-blue-700 transition-colors">
               Upload Another Document
             </button>
           </div>)}

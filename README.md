@@ -1,73 +1,25 @@
-# KYC Module
+# Hello, world!
 
-A Know Your Customer (KYC) verification system with Egyptian ID and passport OCR processing, face recognition, and identity verification.
+"Hello, world!" projects are a common starting point for developers learning new languages or platforms, as it provides a simple demonstration of how a programming language can be written for an application.
 
-## Quick Start
+This application's logic is written in [Motoko](https://internetcomputer.org/docs/motoko/main/getting-started/motoko-introduction), a programming language designed specifically for developing canisters on ICP.
 
-### Prerequisites
+## Deploying from ICP Ninja
 
-- Node.js 18+
-- DFX (Internet Computer SDK)
+When viewing this project in ICP Ninja, you can deploy it directly to the mainnet for free by clicking "Run" in the upper right corner. Open this project in ICP Ninja:
 
-### 1. Frontend Setup
+[![](https://icp.ninja/assets/open.svg)](https://icp.ninja/i?g=https://github.com/dfinity/examples/motoko/hello_world)
 
-```bash
-cd frontend
-npm install
-npm run build
-```
+## Project structure
 
-### 2. Deploy to Internet Computer
+The `/backend` folder contains the Motoko canister, `app.mo`. The `/frontend` folder contains web assets for the application's user interface. The user interface is written with plain JavaScript, but any frontend framework can be used.
 
-```bash
-dfx start --background
-dfx deploy
-```
+Edit the `mops.toml` file to add [Motoko dependencies](https://mops.one/) to the project.
 
-### 3. Access the Application
+## Build and deploy from the command-line
 
-Open your browser and navigate to the deployed canister URL.
+To migrate your ICP Ninja project off of the web browser and develop it locally, follow these steps. These steps are necessary if you want to deploy this project for long-term, production use on the mainnet.
 
-## Project Structure
+### 1. Download your project from ICP Ninja using the 'Download files' button on the upper left corner under the pink ninja star icon.
 
-```
-KYCModule/
-├── backend/           # Python OCR server
-│   ├── ocr_server.py  # Flask API server
-│   ├── egyptian_ocr_id.py  # Egyptian ID processing
-│   └── passport_ocr.py     # Passport processing
-├── frontend/          # React frontend
-│   └── src/
-│       ├── components/kyc/  # KYC components
-│       └── pages/user/      # User pages
-└── README.md
-```
-
-## Testing
-
-1. Upload an Egyptian ID or passport image
-2. Review extracted information
-3. Take a selfie for identity verification
-4. Edit information if needed
-5. Submit for verification
-
-## Troubleshooting
-
-- **Frontend Build Errors**: Run `npm install` and check Node.js version
-- **DFX Deployment**: Ensure DFX is properly installed and IC network is accessible
-- **OCR Processing**: Ensure the cloud OCR server is accessible and running
-
-## Requirements
-
-### Frontend
-- React 18
-- TypeScript
-- Tailwind CSS
-- Framer Motion
-
-### Cloud OCR Server
-- Flask
-- OpenCV
-- EasyOCR
-- YOLO
-- Face Recognition
+### 2. Open the `BUILD.md` file for further instructions.

@@ -1,5 +1,6 @@
 import React from 'react';
 import { User, Hash, Calendar, Globe, FileText, Clock } from 'lucide-react';
+import { countryCodeToName } from '../../utils/countries';
 export default function StructuredDataDisplay({ data }) {
     const getDocumentTitle = () => {
         return data.documentType === 'national-id' ? 'National ID Information' : 'Passport Information';
@@ -49,7 +50,7 @@ export default function StructuredDataDisplay({ data }) {
         },
         {
             label: 'Nationality',
-            value: data.nationality || 'Not detected',
+            value: data.nationality ? countryCodeToName(data.nationality) : 'Not detected',
             icon: <Globe className="w-4 h-4 text-gray-500"/>,
             show: true,
         },

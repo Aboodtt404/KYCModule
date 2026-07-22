@@ -1,9 +1,27 @@
-const OCR_SERVER_BASE_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
-export async function verifyFace(idImageBase64, liveImageBase64) {
+import { isDemoMode } from '@/demo/demoMode';
+
+const OCR_SERVER_BASE_URL = process.env.VITE_OCR_SERVER_URL || '';
+export async function verifyFace(idImageBase64, liveImageBase64, challengeFramesBase64 = []) {
+    // Demo mode: simulate a successful active-liveness match without a server
+    if (isDemoMode()) {
+        await new Promise(r => setTimeout(r, 1800));
+        return {
+            success: true,
+            verification_result: {
+                is_match: true,
+                similarity_score: 91.4,
+                distance: 0.32,
+                threshold: 75,
+                liveness_failed: false,
+                liveness_mode: 'active',
+                liveness_score: 118.6,
+            },
+        };
+    }
+    if (!OCR_SERVER_BASE_URL) {
+        throw new Error('Face verification service is not configured. Please contact support.');
+    }
     try {
-        console.log('Sending face verification request to:', `${OCR_SERVER_BASE_URL}/verify-face`);
-        console.log('ID image length:', idImageBase64.length);
-        console.log('Live image length:', liveImageBase64.length);
         const response = await fetch(`${OCR_SERVER_BASE_URL}/verify-face`, {
             method: 'POST',
             headers: {
@@ -12,20 +30,16 @@ export async function verifyFace(idImageBase64, liveImageBase64) {
             body: JSON.stringify({
                 id_image: idImageBase64,
                 live_image: liveImageBase64,
+                challenge_frames: challengeFramesBase64.slice(0, 4),
             }),
         });
-        console.log('Face verification response status:', response.status);
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Face verification error response:', errorData);
             throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-        const data = await response.json();
-        console.log('Face verification response data:', data);
-        return data;
+        return await response.json();
     }
     catch (error) {
-        console.error('Face verification error:', error);
         throw new Error(error instanceof Error
             ? error.message
             : 'Face verification failed. Please try again.');
@@ -36,8 +50,8 @@ export function convertFileToBase64(file) {
         const reader = new FileReader();
         reader.onload = () => {
             const result = reader.result;
-            // Remove the data URL prefix to get just the base64 string
-            const base64 = result.split(',')[1];
+            const base64 = typeof result === 'string' ? result.split(',')[1] : undefined;
+            if (!base64) { reject(new Error('Failed to extract base64 from file')); return; }
             resolve(base64);
         };
         reader.onerror = () => reject(new Error('Failed to convert file to base64'));

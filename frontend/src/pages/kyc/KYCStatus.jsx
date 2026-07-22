@@ -117,9 +117,9 @@ export function KYCStatus({ status, onStartVerification, onContinueToOTP, onDown
               </p>
             </div>
           </div>
-          <button onClick={statusInfo.onAction} disabled={status === "otp_verified"} className={`px-6 py-3 rounded-lg font-medium transition-colors ${status === "otp_verified"
-            ? "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-            : "bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500"}`}>
+          <button onClick={statusInfo.onAction} disabled={status ==="otp_verified"} className={`px-6 py-3 rounded-xl font-medium transition-colors ${status ==="otp_verified"
+ ?"bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+ :"bg-blue-600 text-white hover:bg-blue-700 dark:hover:bg-blue-500"}`}>
             {statusInfo.action}
           </button>
         </div>
@@ -182,10 +182,10 @@ export function KYCStatus({ status, onStartVerification, onContinueToOTP, onDown
             If your verification was rejected, please contact our support team for assistance.
           </p>
           <div className="flex space-x-4">
-            <button className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+            <button className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors">
               Contact Support
             </button>
-            <button className="px-4 py-2 border border-red-600 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <button className="px-4 py-2 border border-red-600 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
               View Guidelines
             </button>
           </div>

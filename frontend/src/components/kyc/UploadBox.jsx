@@ -29,10 +29,10 @@ export default function UploadBox({ onFile, accept = "image/*,application/pdf", 
             setDrag(false);
             handleFiles(e.dataTransfer.files);
         }} onClick={() => inputRef.current?.click()} className={`w-full rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition duration-200 ${drag
-            ? "border-emerald-400 bg-emerald-400/5"
+            ? "border-brand-400 bg-brand-400/5"
             : "border-white/10 bg-white/5 hover:bg-white/10"}`}>
         <div className="flex flex-col items-center gap-3">
-          {preview ? (<img src={preview} alt="Preview" className="w-20 h-20 object-cover rounded-xl shadow-md"/>) : (<Upload className="w-10 h-10 text-emerald-400"/>)}
+          {preview ? (<img src={preview} alt="Preview" className="w-20 h-20 object-cover rounded-xl shadow-md"/>) : (<Upload className="w-10 h-10 text-brand-400"/>)}
           <div className="font-medium">{label}</div>
           <div className="text-xs text-gray-400">
             JPG, PNG, PDF — max 10MB

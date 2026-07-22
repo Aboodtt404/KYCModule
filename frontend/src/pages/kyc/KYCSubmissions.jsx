@@ -1,11 +1,97 @@
 import React, { useState } from 'react';
-import { Users, Trash2, Eye, CheckCircle, XCircle, Clock, Loader2, X } from 'lucide-react';
-import { useKYCSubmissions, useDeleteKYCSubmission } from '../../hooks/useQueries';
+import { Users, Trash2, Eye, CheckCircle, XCircle, Clock, Loader2, X, ChevronLeft, ChevronRight, Download, Mail, MailX } from 'lucide-react';
+import { countryCodeToName } from '../../utils/countries';
+import { useKYCSubmissionsPage, useDeleteKYCSubmission, useUpdateKYCStatus } from '../../hooks/useQueries';
+import { useActor } from '../../hooks/useActor';
+
+const PAGE_SIZE = 20;
 
 export function KYCSubmissions() {
-  const { data: submissions, isLoading, refetch } = useKYCSubmissions();
+  const [page, setPage] = useState(0);
+  const { data, isLoading, refetch } = useKYCSubmissionsPage(PAGE_SIZE, page * PAGE_SIZE);
+  const submissions = data?.items ?? [];
+  const totalCount  = data?.total ?? 0;
+  const totalPages  = Math.ceil(totalCount / PAGE_SIZE);
+
+  const { actor } = useActor();
+  const [exporting, setExporting] = useState(false);
   const deleteSubmission = useDeleteKYCSubmission();
+  const updateStatus = useUpdateKYCStatus();
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [statusError, setStatusError] = useState(null);
+  const [emailNotifyMap, setEmailNotifyMap] = useState({});
+
+  const exportCSV = async () => {
+    if (!actor || exporting) return;
+    setExporting(true);
+    try {
+      const PAGE = 100n;
+      let offset = 0n;
+      let all = [];
+      while (true) {
+        const [, items] = await actor.get_kyc_submissions_page(PAGE, offset);
+        if (!items || items.length === 0) break;
+        all = all.concat(items);
+        offset += PAGE;
+        if (items.length < Number(PAGE)) break;
+      }
+
+      const rows = all.map(([id, json]) => {
+        try {
+          const d = JSON.parse(json);
+          const kyc = d.kycData || d;
+          const ocr = kyc.ocrData || {};
+          return [
+            id,
+            kyc.timestamp || '',
+            kyc.phone || '',
+            ocr.full_name || '',
+            ocr.national_id || '',
+            ocr.birth_date || '',
+            ocr.gender || '',
+            ocr.governorate || '',
+            ocr.address || '',
+            ocr.serial_number || '',
+            ocr.marital_status || '',
+            ocr.occupation || '',
+            ocr.issue_date || '',
+            ocr.expiry_date || '',
+            kyc.faceVerified ? 'Yes' : 'No',
+            kyc.status || 'pending_review',
+          ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+        } catch { return `"${id}","parse error"`; }
+      });
+
+      const header = 'Submission ID,Timestamp,Phone,Full Name,National ID,Birth Date,Gender,Governorate,Address,Serial Number,Marital Status,Occupation,Issue Date,Expiry Date,Face Verified,Status';
+      const csv = [header, ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kyc-submissions-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleStatusChange = async (submissionId, status) => {
+    try {
+      setStatusError(null);
+      const { emailSent } = await updateStatus.mutateAsync({ submissionId, status });
+      setEmailNotifyMap(prev => ({ ...prev, [submissionId]: emailSent }));
+      refetch();
+      if (!emailSent) {
+        setStatusError(
+          `Status updated to "${status}" but the notification email could not be sent. ` +
+          `Check that the email is configured (configure_email) and the user provided an email address.`
+        );
+      }
+    } catch (error) {
+      setStatusError(`Failed to update status: ${error.message}`);
+    }
+  };
 
   const parseSubmissions = () => {
     if (!submissions || submissions.length === 0) return [];
@@ -19,8 +105,7 @@ export function KYCSubmissions() {
         }
         // Fallback for old format (if any)
         return { id, submissionId: id, ...data };
-      } catch (e) {
-        console.error('Failed to parse submission:', e);
+      } catch (_e) {
         return { id, error: true, rawData: jsonData };
       }
     });
@@ -30,8 +115,8 @@ export function KYCSubmissions() {
     if (window.confirm('Are you sure you want to delete this KYC submission?')) {
       try {
         await deleteSubmission.mutateAsync(submissionId);
-      } catch (error) {
-        console.error('Failed to delete submission:', error);
+      } catch (_error) {
+        // delete failure silently ignored — mutation error state handles retry
       }
     }
   };
@@ -59,7 +144,7 @@ export function KYCSubmissions() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-400" />
         <span className="ml-2 text-gray-600 dark:text-gray-300">Loading KYC submissions...</span>
       </div>
     );
@@ -67,6 +152,12 @@ export function KYCSubmissions() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {statusError && (
+        <div className="flex items-center justify-between gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3 mb-4 text-sm text-red-700 dark:text-red-300">
+          <span>{statusError}</span>
+          <button onClick={() => setStatusError(null)} className="text-red-400 hover:text-red-600 dark:hover:text-red-200">✕</button>
+        </div>
+      )}
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -75,15 +166,26 @@ export function KYCSubmissions() {
             KYC Submissions
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            {parsedSubmissions.length} total submission{parsedSubmissions.length !== 1 ? 's' : ''}
+            {totalCount} total submission{totalCount !== 1 ? 's' : ''}
+            {totalPages > 1 && ` — page ${page + 1} of ${totalPages}`}
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-500 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+ onClick={exportCSV}
+ disabled={!actor || exporting || totalCount === 0}
+ className="flex items-center gap-2 bg-brand-600 text-white px-4 py-2 rounded-xl hover:bg-brand-500 transition-colors disabled:opacity-40 text-sm"
+ >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => refetch()}
+            className="bg-slate-800 text-slate-100 border border-slate-700 px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors text-sm"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Submissions List */}
@@ -118,6 +220,9 @@ export function KYCSubmissions() {
                     Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Review
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -135,7 +240,12 @@ export function KYCSubmissions() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                      {submission.phone || 'N/A'}
+                      {submission.phone || '—'}
+                      {submission.phoneVerified === false && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
+                          unverified
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {submission.ocrData?.full_name || 'N/A'}
@@ -144,10 +254,38 @@ export function KYCSubmissions() {
                       {submission.ocrData?.national_id || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(submission.status)}
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(submission.status)}
+                        {emailNotifyMap.hasOwnProperty(submission.submissionId || submission.id) && (
+                          emailNotifyMap[submission.submissionId || submission.id]
+                            ? <Mail className="w-3.5 h-3.5 text-green-400 flex-shrink-0" title="Notification email sent" />
+                            : <MailX className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" title="Email not sent — user may have no email address" />
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {submission.timestamp ? new Date(submission.timestamp).toLocaleDateString() : 'N/A'}
+                    </td>
+                    {/* Approve / Reject */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleStatusChange(submission.submissionId || submission.id, 'approved')}
+                          disabled={submission.status === 'approved' || updateStatus.isPending}
+                          className="flex items-center gap-1 px-2 py-1 rounded-xl bg-green-600/20 text-green-400 hover:bg-green-600/40 disabled:opacity-30 text-xs font-semibold"
+                          title="Approve"
+                        >
+                          <CheckCircle className="w-3 h-3" /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange(submission.submissionId || submission.id, 'rejected')}
+                          disabled={submission.status === 'rejected' || updateStatus.isPending}
+                          className="flex items-center gap-1 px-2 py-1 rounded-xl bg-red-600/20 text-red-400 hover:bg-red-600/40 disabled:opacity-30 text-xs font-semibold"
+                          title="Reject"
+                        >
+                          <XCircle className="w-3 h-3" /> Reject
+                        </button>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
@@ -176,6 +314,32 @@ export function KYCSubmissions() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 px-1">
+          <span className="text-sm text-gray-400">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 text-sm disabled:opacity-30 hover:bg-white/20"
+            >
+              <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <span className="text-sm text-gray-400">{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 text-sm disabled:opacity-30 hover:bg-white/20"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -211,7 +375,12 @@ export function KYCSubmissions() {
                 <div>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Phone</p>
                   <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">
-                    {selectedSubmission.phone || 'N/A'}
+                    {selectedSubmission.phone || '—'}
+                    {selectedSubmission.phoneVerified === false && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
+                        unverified
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div>
@@ -251,7 +420,9 @@ export function KYCSubmissions() {
                             {key.replace(/_/g, ' ')}
                           </p>
                           <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">
-                            {value || 'N/A'}
+                            {key === 'nationality' && value
+                              ? countryCodeToName(value)
+                              : (value || 'N/A')}
                           </p>
                         </div>
                       ))}

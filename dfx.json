@@ -11,16 +11,11 @@
       "type": "rust"
     },
     "frontend": {
-      "dependencies": [
-        "rust_backend",
-        "sms_verification_backend"
-      ],
+      "dependencies": ["rust_backend", "sms_verification_backend"],
       "frontend": {
         "entrypoint": "frontend/dist/index.html"
       },
-      "source": [
-        "frontend/dist"
-      ],
+      "source": ["frontend/dist"],
       "type": "assets"
     }
   },

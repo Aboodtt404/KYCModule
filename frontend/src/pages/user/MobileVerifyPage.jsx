@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import KYCPage from './KYCPage';
-import { CheckCircle, Smartphone } from 'lucide-react';
+import { CheckCircle, Smartphone, Check } from 'lucide-react';
 import { useVerifySession, useMarkVerificationInProgress, useCompleteVerification } from '@/hooks/useQueries';
 
 export default function MobileVerifyPage() {
@@ -9,6 +9,8 @@ export default function MobileVerifyPage() {
   const navigate = useNavigate();
   const [isValidSession, setIsValidSession] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [transferError, setTransferError] = useState(null);
+  const [transferSuccess, setTransferSuccess] = useState(false);
   
   const verifySession = useVerifySession();
   const markInProgress = useMarkVerificationInProgress();
@@ -32,8 +34,7 @@ export default function MobileVerifyPage() {
         if (isValid) {
           await markInProgress.mutateAsync(sessionId);
         }
-      } catch (error) {
-        console.error('Error validating session:', error);
+      } catch (_error) {
         setIsValidSession(false);
       }
     };
@@ -44,72 +45,39 @@ export default function MobileVerifyPage() {
       setIsValidSession(false);
     }
 
-    // Send heartbeat to keep session alive
+    // Send heartbeat every 5 seconds to keep the session alive on the desktop polling side
     let heartbeatInterval;
     if (sessionId && isValidSession) {
       heartbeatInterval = setInterval(async () => {
         try {
           await markInProgress.mutateAsync(sessionId);
-        } catch (error) {
-          console.error('Heartbeat failed:', error);
+        } catch (_error) {
         }
-      }, 5000); // Send heartbeat every 5 seconds
+      }, 5000);
     }
-
-    // Detect when user closes/leaves the page
-    const handleBeforeUnload = async (e) => {
-      try {
-        // Mark session as cancelled when user leaves
-        await fetch(`${window.location.origin}/api/cancel-session/${sessionId}`, {
-          method: 'POST',
-          keepalive: true, // Ensures request completes even if page closes
-        });
-      } catch (error) {
-        console.error('Failed to cancel session:', error);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden && sessionId && isValidSession) {
-        // User switched away or closed tab
-        navigator.sendBeacon(
-          `${window.location.origin}/api/cancel-session/${sessionId}`,
-          JSON.stringify({ cancelled: true })
-        );
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(heartbeatInterval);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [sessionId, isValidSession]);
 
   // Handle completion (after face verification on mobile)
   const handleVerificationComplete = async (data) => {
+    setTransferError(null);
     try {
-      console.log('📤 Sending mobile data to server:', data);
-      
-      // Update backend with completion status
       await completeVerification.mutateAsync({
         sessionId,
         kycData: data,
       });
-
-      // Don't navigate - show a "transfer complete" message instead
-      // The user should go back to desktop to complete review
-    } catch (error) {
-      console.error('Error completing verification:', error);
+      setTransferSuccess(true);
+    } catch (err) {
+      setTransferError(err?.message || 'Failed to transfer data to desktop. Please try again.');
     }
   };
 
   if (isValidSession === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600">
+      <div className="min-h-screen flex items-center justify-center app-bg">
         <div className="text-white text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-white mx-auto mb-4"></div>
           <p>Loading verification...</p>
@@ -146,7 +114,7 @@ export default function MobileVerifyPage() {
           </p>
           <button
             onClick={() => navigate('/')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+            className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
           >
             Go to Home
           </button>
@@ -157,11 +125,13 @@ export default function MobileVerifyPage() {
 
   if (!isMobile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-600 p-4">
-        <div className="bg-white rounded-2xl p-8 max-w-md text-center">
-          <Smartphone className="w-16 h-16 text-blue-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Mobile Device Required</h2>
-          <p className="text-gray-600 mb-6">
+      <div className="min-h-screen flex items-center justify-center app-bg p-4">
+        <div className="content-card max-w-md text-center">
+          <div className="w-16 h-16 rounded-2xl bg-brand-500/15 ring-1 ring-brand-400/30 flex items-center justify-center mx-auto mb-4">
+            <Smartphone className="w-8 h-8 text-brand-300" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Mobile Device Required</h2>
+          <p className="text-slate-400 mb-2">
             This verification process is designed for mobile devices. Please scan the QR code using your phone's camera.
           </p>
         </div>
@@ -169,8 +139,24 @@ export default function MobileVerifyPage() {
     );
   }
 
+  if (transferSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-500 to-teal-600 p-4">
+        <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-xl">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Check className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Verification Sent!</h2>
+          <p className="text-gray-600 text-sm">
+            Your information has been securely transferred to your desktop session. You can close this tab.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 overflow-x-hidden pt-safe pb-safe">
+    <div className="min-h-screen app-bg overflow-x-hidden pt-safe pb-safe">
       <div className="container mx-auto px-3 sm:px-4 py-2 sm:py-3 max-w-2xl">
         {/* Mobile Header - Compact */}
         <div className="bg-white/10 backdrop-blur-md rounded-lg p-2.5 sm:p-3 mb-2 sm:mb-3 text-white sticky top-0 z-10 shadow-lg" style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top))' }}>
@@ -183,10 +169,17 @@ export default function MobileVerifyPage() {
           </div>
         </div>
 
+        {transferError && (
+          <div className="bg-red-500/90 text-white text-sm rounded-lg px-4 py-3 mb-3">
+            {transferError}
+            <button className="ml-3 underline text-white/80 text-xs" onClick={() => setTransferError(null)}>Dismiss</button>
+          </div>
+        )}
+
         {/* KYC Flow - Optimized spacing */}
         <div className="mobile-kyc-container pb-2 sm:pb-4">
-        <KYCPage 
-          mobileMode={true} 
+        <KYCPage
+          mobileMode={true}
           sessionId={sessionId}
           onComplete={handleVerificationComplete}
         />

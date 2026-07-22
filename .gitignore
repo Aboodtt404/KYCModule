@@ -46,4 +46,5 @@ frontend/backup_src_ts
 # Motoko
 .mops
 
-backend/server
+backend/serverocr-service/.venv*
+ocr-service/__pycache__/

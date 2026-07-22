@@ -41,8 +41,7 @@ export function FileUpload() {
       await handleFileSelect(files);
       setUploadStatus("success");
       setTimeout(() => setUploadStatus("idle"), 3000); // Reset after 3s
-    } catch (err) {
-      console.error("Upload component error:", err);
+    } catch (_err) {
       setUploadStatus("error");
     }
   };
@@ -122,9 +121,9 @@ export function FileUpload() {
             </p>
 
             <button
-              onClick={resetUpload}
-              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-            >
+ onClick={resetUpload}
+ className="px-6 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+ >
               Upload More Files
             </button>
           </div>
@@ -141,9 +140,9 @@ export function FileUpload() {
             </p>
 
             <button
-              onClick={resetUpload}
-              className="px-6 py-2 rounded-full font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-            >
+ onClick={resetUpload}
+ className="px-6 py-2 rounded-xl font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+ >
               Try Again
             </button>
           </div>

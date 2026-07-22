@@ -9,6 +9,7 @@ export default function QRHandoff({ sessionId, onComplete }) {
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [lastHeartbeat, setLastHeartbeat] = useState(Date.now());
   const [qrSize, setQrSize] = useState(240);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Responsive QR code size
   useEffect(() => {
@@ -33,21 +34,15 @@ export default function QRHandoff({ sessionId, onComplete }) {
   const mobileUrl = `${window.location.origin}/mobile-verify/${sessionId}`;
 
   useEffect(() => {
-    console.log('📊 Desktop polling status:', sessionData);
-
     if (sessionData) {
       // Check if completed by EITHER status OR completed_at + data presence
-      const isCompleted = sessionData.status === 'completed' || 
-                         (sessionData.completed_at !== null && 
-                          sessionData.completed_at !== undefined && 
-                          sessionData.data !== null && 
+      const isCompleted = sessionData.status === 'completed' ||
+                         (sessionData.completed_at !== null &&
+                          sessionData.completed_at !== undefined &&
+                          sessionData.data !== null &&
                           sessionData.data !== undefined);
-      
+
       if (isCompleted) {
-        console.log('✅ Mobile verification completed, transferring to desktop...');
-        console.log('   Status:', sessionData.status);
-        console.log('   Completed at:', sessionData.completed_at);
-        console.log('   Has data:', !!sessionData.data);
         setCurrentStatus('completed');
         setTimeout(() => {
           onComplete(sessionData);
@@ -62,9 +57,6 @@ export default function QRHandoff({ sessionId, onComplete }) {
       }
     }
     
-    if (error) {
-        console.error('Error checking status:', error);
-    }
   }, [sessionData, onComplete, error]);
 
   // Detect timeout (no heartbeat for 15 seconds)
@@ -76,7 +68,6 @@ export default function QRHandoff({ sessionId, onComplete }) {
     const timeoutCheck = setInterval(() => {
       const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
       if (timeSinceLastHeartbeat > 15000) {
-        console.log('⚠️ Heartbeat timeout detected - mobile may have disconnected');
         // Only set to cancelled if still in progress (not completed)
         setCurrentStatus(prev => prev === 'in_progress' ? 'cancelled' : prev);
       }
@@ -168,8 +159,8 @@ export default function QRHandoff({ sessionId, onComplete }) {
             animate={{ opacity: 1, x: 0 }}
             className="flex flex-col items-center"
           >
-            <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4">
-              <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-24 h-24 bg-brand-500/15 ring-1 ring-brand-400/30 rounded-2xl flex items-center justify-center mb-4">
+              <svg className="w-12 h-12 text-brand-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2" strokeWidth="2"/>
                 <line x1="8" y1="21" x2="16" y2="21" strokeWidth="2"/>
                 <line x1="12" y1="17" x2="12" y2="21" strokeWidth="2"/>
@@ -274,12 +265,13 @@ export default function QRHandoff({ sessionId, onComplete }) {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(mobileUrl);
-                alert('Link copied to clipboard!');
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 2000);
               }}
-              className="px-4 sm:px-5 py-2.5 sm:py-2.5 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium active:bg-blue-700 transition touch-manipulation min-h-[44px] flex items-center justify-center"
+              className="px-4 sm:px-5 py-2.5 sm:py-2.5 bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-medium active:bg-blue-700 transition touch-manipulation min-h-[44px] flex items-center justify-center"
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              Copy
+              {linkCopied ? 'Copied!' : 'Copy'}
             </button>
           </div>
         </div>

@@ -1,30 +1,56 @@
 service : {
-  "upload": (text, text, vec nat8, bool) -> ();
-  "list": () -> (vec record { path: text; mime_type: text; size: nat64; completed: bool; }) query;
-  "delete": (text) -> ();
-  "http_request": (record { method: text; url: text; headers: vec record { text; text; }; body: vec nat8; }) -> (record { status_code: nat16; headers: vec record { text; text; }; body: vec nat8; streaming_strategy: opt variant { Callback: record { callback: func () -> (); token: record {}; }; }; }) query;
-  "get_ocr_health": () -> (text);
-  "get_egyptian_id_ocr": (text) -> (text);
-  "get_passport_ocr": (text) -> (text);
-  "add_document": (text, text, vec nat8, bool) -> (nat64);
-  "submit_kyc": (text, text) -> ();
-  "get_kyc_submission": (text) -> (opt text) query;
-  "get_all_kyc_submissions": () -> (vec record { text; text; }) query;
-  "delete_kyc_submission": (text) -> ();
-  "get_egyptian_id_ocr_and_save": (text) -> (text);
-  "get_passport_ocr_and_save": (text) -> (text);
-  "get_egyptian_id_result": (text) -> (opt text) query;
-  "get_passport_result": (text) -> (opt text) query;
-  "get_all_egyptian_id_results": () -> (vec record { text; text; }) query;
-  "get_all_passport_results": () -> (vec record { text; text; }) query;
-  "delete_egyptian_id_result": (text) -> ();
-  "delete_passport_result": (text) -> ();
-  "national_id_exists": (text) -> (bool) query;
-  "create_verification_session": (text) -> (variant { Ok; Err: text });
-  "get_verification_status": (text) -> (opt text) query;
-  "verify_session": (text) -> (bool) query;
+  "is_admin_check"               : () -> (bool) query;
+  "get_stable_memory_used"       : () -> (nat64) query;
+  "set_admin"                    : (principal) -> (variant { Ok; Err: text });
+
+  "upload"                       : (text, text, vec nat8, bool) -> ();
+  "list"                         : () -> (vec record { path: text; mime_type: text; size: nat64; completed: bool; uploader: text; }) query;
+  "delete"                       : (text) -> (variant { Ok; Err: text });
+  "add_document"                 : (text, text, vec nat8, bool) -> (nat64);
+
+  "http_request"                 : (record { method: text; url: text; headers: vec record { text; text; }; body: vec nat8; }) -> (record { status_code: nat16; headers: vec record { text; text; }; body: vec nat8; upgrade: opt bool; }) query;
+
+  "submit_kyc"                   : (text, text) -> (variant { Ok; Err: text });
+  "update_kyc_status"            : (text, text) -> (variant { Ok: bool; Err: text });
+  "get_kyc_submission"           : (text) -> (opt text) query;
+  "get_all_kyc_submissions"      : () -> (vec record { text; text; });
+  "get_kyc_submissions_page"    : (nat64, nat64) -> (record { nat64; vec record { text; text; } }) query;
+  "get_kyc_submissions_count"   : () -> (nat64) query;
+  "get_kyc_status_counts"       : () -> (nat64, nat64, nat64) query;
+  "delete_kyc_submission"        : (text) -> (variant { Ok; Err: text });
+  "national_id_exists"           : (text) -> (bool) query;
+  "get_my_kyc_status"            : (text, text) -> (opt text) query;
+
+  "get_egyptian_id_ocr_and_save" : (text) -> (text);
+  "get_passport_ocr_and_save"    : (text) -> (text);
+  "get_egyptian_id_result"       : (text) -> (opt text) query;
+  "get_passport_result"          : (text) -> (opt text) query;
+  "get_all_egyptian_id_results"  : () -> (vec record { text; text; }) query;
+  "get_all_passport_results"     : () -> (vec record { text; text; }) query;
+  "delete_egyptian_id_result"    : (text) -> (variant { Ok; Err: text });
+  "delete_passport_result"       : (text) -> (variant { Ok; Err: text });
+  "cleanup_ocr_results"          : () -> (variant { Ok: record { nat64; nat64 }; Err: text });
+
+  "create_verification_session"  : (text) -> (variant { Ok; Err: text });
+  "get_verification_status"      : (text) -> (opt text) query;
+  "verify_session"               : (text) -> (bool) query;
   "mark_verification_in_progress": (text) -> (variant { Ok; Err: text });
-  "complete_verification": (text, text) -> (variant { Ok; Err: text });
+  "complete_verification"        : (text, text) -> (variant { Ok; Err: text });
   "get_all_verification_sessions": () -> (vec record { text; text; }) query;
-  "delete_verification_session": (text) -> ();
+  "delete_verification_session"  : (text) -> ();
+  "cleanup_expired_sessions"     : () -> (variant { Ok: nat64; Err: text });
+
+  "get_audit_log"                : (nat64) -> (vec record { text; text; }) query;
+  "get_audit_log_page"          : (nat64, nat64) -> (record { nat64; vec record { text; text; } }) query;
+  "export_audit_log_range"      : (nat64, nat64) -> (vec record { text; text; });
+  "log_consent_event"           : (text) -> ();
+  "configure_email"             : (text, text) -> (variant { Ok; Err: text });
+  "configure_ocr_server"        : (text) -> (variant { Ok; Err: text });
+  "configure_frontend_url"      : (text) -> (variant { Ok; Err: text });
+  "register_api_client"         : (text, text, text) -> (variant { Ok: record { text; text }; Err: text });
+  "list_api_clients"            : () -> (vec record { text; text });
+  "set_api_client_status"       : (text, text) -> (variant { Ok; Err: text });
+  "delete_api_client"           : (text) -> (variant { Ok; Err: text });
+  "http_request_update"         : (record { method: text; url: text; headers: vec record { text; text; }; body: vec nat8; }) -> (record { status_code: nat16; headers: vec record { text; text; }; body: vec nat8; upgrade: opt bool; });
+  "delete_my_kyc"               : (text, text) -> (variant { Ok; Err: text });
 }

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useActor } from '@/hooks/useActor';
 import { useFileList } from '@/components/shared/FileList';
+import { log } from '@/lib/logger';
 
 export function useDocuments() {
   const { actor, isFetching } = useActor();
@@ -10,7 +11,7 @@ export function useDocuments() {
     queryKey: ['documents'],
     queryFn: async () => {
       if (!actor) return [];
-      console.log('[useDocuments] Refetching documents from canister...');
+      log.debug('Fetching documents from canister...');
       return await getFileList();
     },
     enabled: !!actor && !isFetching,
@@ -24,23 +25,20 @@ export function useDeleteDocument() {
   return useMutation({
     mutationFn: async (path) => {
       if (!actor) throw new Error('Backend not available');
-      console.log('Attempting to delete file:', path);
+      log.debug('Deleting file:', path);
       try {
         const result = await actor['delete'](path);
-        console.log('Delete result:', result);
+        log.debug('Delete result:', result);
         return result;
       } catch (error) {
-        console.error('Delete error:', error);
         throw error;
       }
     },
     onSuccess: (data, path) => {
-      console.log('Delete successful for:', path);
+      log.debug('Delete successful for:', path);
       queryClient.invalidateQueries({ queryKey: ['documents'] });
     },
-    onError: (error, path) => {
-      console.error('Delete failed for:', path, error);
-    },
+    onError: () => {},
   });
 }
 
@@ -51,7 +49,7 @@ export function useOCR() {
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       try {
-        const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
+        const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || '';
         const response = await fetch(`${OCR_SERVER_URL}/ocr`, {
           method: 'POST',
           body: imageData,
@@ -182,9 +180,8 @@ export function useSubmitKYC() {
       if (!actor) throw new Error('Actor not available');
       // kycData is already wrapped in { kycData: {...} } from the frontend
       const jsonData = JSON.stringify(kycData);
-      console.log('Submitting KYC:', jsonData);
       const result = await actor.submit_kyc(submissionId, jsonData);
-      console.log('KYC submission result:', result);
+      if (result && 'Err' in result) throw new Error(result.Err);
       return { submissionId, kycData };
     },
     onSuccess: () => {
@@ -195,19 +192,30 @@ export function useSubmitKYC() {
 
 export function useKYCSubmissions() {
   const { actor, isFetching } = useActor();
-
   return useQuery({
     queryKey: ['kycSubmissions'],
     queryFn: async () => {
       if (!actor) return [];
-      console.log('[useKYCSubmissions] Fetching submissions from canister...');
-      const submissions = await actor.get_all_kyc_submissions();
-      console.log('[useKYCSubmissions] Received submissions:', submissions);
-      return submissions || [];
+      return await actor.get_all_kyc_submissions() || [];
     },
     enabled: !!actor && !isFetching,
-    refetchOnWindowFocus: true,
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchOnWindowFocus: false,
+    refetchInterval: false,   // full dump — only fetch when explicitly needed (CSV export)
+  });
+}
+
+export function useKYCSubmissionsPage(limit, offset) {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ['kycSubmissionsPage', limit, offset],
+    queryFn: async () => {
+      if (!actor) return { total: 0, items: [] };
+      const [total, items] = await actor.get_kyc_submissions_page(BigInt(limit), BigInt(offset));
+      return { total: Number(total), items: items || [] };
+    },
+    enabled: !!actor && !isFetching,
+    keepPreviousData: true,   // don't flash empty while loading next page
+    refetchInterval: 15000,
   });
 }
 
@@ -218,7 +226,27 @@ export function useDeleteKYCSubmission() {
   return useMutation({
     mutationFn: async (submissionId) => {
       if (!actor) throw new Error('Actor not available');
-      await actor.delete_kyc_submission(submissionId);
+      const result = await actor.delete_kyc_submission(submissionId);
+      if (result && 'Err' in result) throw new Error(result.Err);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['kycSubmissions'] });
+    },
+  });
+}
+
+export function useUpdateKYCStatus() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ submissionId, status }) => {
+      if (!actor) throw new Error('Actor not available');
+      const result = await actor.update_kyc_status(submissionId, status);
+      if (result && 'Err' in result) throw new Error(result.Err);
+      // Ok value is a bool: true = email sent, false = email failed
+      const emailSent = result && 'Ok' in result ? result.Ok : false;
+      return { submissionId, status, emailSent };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kycSubmissions'] });

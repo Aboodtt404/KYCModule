@@ -15,8 +15,7 @@ export default function MobileSuccessPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ notified: true }),
         });
-      } catch (error) {
-        console.error('Error notifying completion:', error);
+      } catch (_error) {
       }
     };
 

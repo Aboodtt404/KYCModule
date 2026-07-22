@@ -45,8 +45,7 @@ export function DocumentList() {
       const url = await getFileUrl(file);
       setPreviewUrl(url);
       setSelectedFile(file);
-    } catch (error) {
-      console.error("Failed to load preview:", error);
+    } catch (_error) {
     } finally {
       setLoadingPreview(false);
     }
@@ -63,8 +62,7 @@ export function DocumentList() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (error) {
-      console.error("Failed to download file:", error);
+    } catch (_error) {
     } finally {
       setDownloadingFiles((prev) => {
         const newSet = new Set(prev);
@@ -79,8 +77,7 @@ export function DocumentList() {
     if (window.confirm(`Are you sure you want to delete "${file.path}"?`)) {
       try {
         await deleteDocumentMutation.mutateAsync(file.path);
-      } catch (error) {
-        console.error("Failed to delete file:", error);
+      } catch (_error) {
       }
     }
   };
@@ -188,7 +185,7 @@ export function DocumentList() {
                           <button
                             onClick={() => handlePreview(file)}
                             disabled={loadingPreview}
-                            className="p-2 rounded-lg text-indigo-400 hover:text-indigo-300 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
+                            className="p-2 rounded-xl text-indigo-400 hover:text-indigo-300 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -208,7 +205,7 @@ export function DocumentList() {
                         <button
                           onClick={() => handleDelete(file)}
                           disabled={deleteDocumentMutation.isPending}
-                          className="p-2 rounded-lg text-red-500 hover:text-red-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
+                          className="p-2 rounded-xl text-red-500 hover:text-red-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
                         >
                           {deleteDocumentMutation.isPending ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -249,7 +246,7 @@ export function DocumentList() {
                       <button
                         onClick={() => handlePreview(file)}
                         disabled={loadingPreview}
-                        className="p-2 rounded-lg text-indigo-400 hover:text-indigo-300 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
+                        className="p-2 rounded-xl text-indigo-400 hover:text-indigo-300 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -257,7 +254,7 @@ export function DocumentList() {
                     <button
                       onClick={() => handleDownload(file)}
                       disabled={downloadingFiles.has(file.path)}
-                      className="p-2 rounded-lg text-indigo-500 hover:text-indigo-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
+                      className="p-2 rounded-xl text-indigo-500 hover:text-indigo-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
                     >
                       {downloadingFiles.has(file.path) ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -268,7 +265,7 @@ export function DocumentList() {
                     <button
                       onClick={() => handleDelete(file)}
                       disabled={deleteDocumentMutation.isPending}
-                      className="p-2 rounded-lg text-red-500 hover:text-red-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
+                      className="p-2 rounded-xl text-red-500 hover:text-red-400 hover:bg-slate-700/50 disabled:opacity-50 transition-all"
                     >
                       {deleteDocumentMutation.isPending ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -306,9 +303,9 @@ export function DocumentList() {
                   Download
                 </button>
                 <button
-                  onClick={closePreview}
-                  className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-slate-700/50 transition-all"
-                >
+ onClick={closePreview}
+ className="p-2 rounded-xl text-gray-400 hover:text-gray-200 hover:bg-slate-700/50 transition-all"
+ >
                   <X className="w-6 h-6" />
                 </button>
               </div>

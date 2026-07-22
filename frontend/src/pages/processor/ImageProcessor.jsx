@@ -27,13 +27,6 @@ export function ImageProcessor() {
     const [downloadingProcessed, setDownloadingProcessed] = useState(false);
     const canvasRef = useRef(null);
     const imageFiles = documents?.filter(doc => doc.mimeType.startsWith('image/')) || [];
-    // Debug logs
-    console.log('=== DEBUG INFO ===');
-    console.log('documents:', documents);
-    console.log('imageFiles:', imageFiles);
-    console.log('selectedImage:', selectedImage);
-    console.log('originalUrl:', originalUrl);
-    console.log('==================');
     const loadImage = useCallback(async (file) => {
         try {
             const url = await getFileUrl(file);
@@ -248,7 +241,7 @@ export function ImageProcessor() {
               <Image className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400 mb-4"/>
               <p className="text-gray-600 dark:text-gray-300">No images available</p>
             </div>) : (<div className="space-y-2 max-h-96 overflow-y-auto">
-              {imageFiles.map((file, index) => (<button key={`${file.path}-${index}`} onClick={() => loadImage(file)} className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedImage?.path === file.path
+              {imageFiles.map((file, index) => (<button key={`${file.path}-${index}`} onClick={() => loadImage(file)} className={`w-full text-left p-3 rounded-xl border transition-colors ${selectedImage?.path === file.path
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'}`}>
                   <div className="flex items-center">
@@ -280,7 +273,7 @@ export function ImageProcessor() {
 
               {/* Control Buttons */}
               <div className="space-y-2">
-                <button onClick={applyEnhancements} disabled={isProcessing || !originalUrl} className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center">
+                <button onClick={applyEnhancements} disabled={isProcessing || !originalUrl} className="w-full bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center">
                   {isProcessing ? (<>
                       <Loader2 className="w-4 h-4 animate-spin mr-2"/>
                       Processing...
@@ -290,7 +283,7 @@ export function ImageProcessor() {
                     </>)}
                 </button>
 
-                <button onClick={resetEnhancements} disabled={!hasEnhancements} className="w-full bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center justify-center">
+                <button onClick={resetEnhancements} disabled={!hasEnhancements} className="w-full bg-gray-600 text-white px-4 py-2 rounded-xl hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center justify-center">
                   <RotateCcw className="w-4 h-4 mr-2"/>
                   Reset
                 </button>
@@ -304,7 +297,7 @@ export function ImageProcessor() {
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Image Processing</h3>
 
             {processedUrl && (<div className="flex space-x-2">
-                <button onClick={downloadProcessed} disabled={downloadingProcessed} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center">
+                <button onClick={downloadProcessed} disabled={downloadingProcessed} className="bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center">
                   {downloadingProcessed ? (<>
                       <Loader2 className="w-4 h-4 animate-spin mr-2"/>
                       Downloading...
@@ -314,7 +307,7 @@ export function ImageProcessor() {
                     </>)}
                 </button>
 
-                <button onClick={saveProcessed} disabled={isUploading} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center">
+                <button onClick={saveProcessed} disabled={isUploading} className="bg-purple-600 text-white px-4 py-2 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center">
                   {isUploading ? (<>
                       <Loader2 className="w-4 h-4 animate-spin mr-2"/>
                       Saving... {Math.round(uploadProgress)}%

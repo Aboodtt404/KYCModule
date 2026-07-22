@@ -41,14 +41,6 @@ export const useImageCompression = (options = {}) => {
                 ...result,
                 originalSize: file.size
             });
-            if (showCompressionInfo) {
-                console.log('Image compression completed:', {
-                    originalSize: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
-                    compressedSize: `${(result.compressedSize / 1024 / 1024).toFixed(2)} MB`,
-                    compressionRatio: `${((1 - result.compressedSize / file.size) * 100).toFixed(1)}%`,
-                    dimensions: result.dimensions
-                });
-            }
             setIsCompressing(false);
             return compressedFile;
         }
@@ -56,7 +48,6 @@ export const useImageCompression = (options = {}) => {
             const errorMessage = error instanceof Error ? error.message : 'Unknown compression error';
             setCompressionError(errorMessage);
             setIsCompressing(false);
-            console.error('Image compression failed:', error);
             // Return original file if compression fails
             return file;
         }

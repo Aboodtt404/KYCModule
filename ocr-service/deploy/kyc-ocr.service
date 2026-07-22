@@ -1,0 +1,47 @@
+# KYC OCR Server — systemd unit
+#
+# Install (on the VPS, as root):
+#   cp kyc-ocr.service /etc/systemd/system/kyc-ocr.service
+#   # Edit WorkingDirectory/ExecStart paths and Environment lines below first
+#   systemctl daemon-reload
+#   systemctl enable --now kyc-ocr
+#
+# Logs:    journalctl -u kyc-ocr -f
+# Restart: systemctl restart kyc-ocr
+
+[Unit]
+Description=KYC OCR Server (Flask + EasyOCR + DeepFace)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ── Adjust these paths to the VPS install location ──────────────────────────
+WorkingDirectory=/root/kyc-ocr
+ExecStart=/root/kyc-ocr/.venv/bin/python3 /root/kyc-ocr/server.py
+
+# ── Production environment ───────────────────────────────────────────────────
+Environment=ALLOWED_ORIGINS=https://YOUR-FRONTEND-DOMAIN
+Environment=TLS_CERT=/etc/letsencrypt/live/ocr.mercaturaforum.com/fullchain.pem
+Environment=TLS_KEY=/etc/letsencrypt/live/ocr.mercaturaforum.com/privkey.pem
+Environment=FACE_THRESHOLD=75
+# Optional: Redis-backed rate limiting shared across restarts
+# Environment=REDIS_URL=redis://localhost:6379
+
+# ── Reliability ───────────────────────────────────────────────────────────────
+Restart=always
+RestartSec=5
+# EasyOCR + DeepFace model loading takes time on first start
+TimeoutStartSec=300
+# If it crash-loops 5 times in 10 min, hold off and let the monitor alert
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# ── Hardening ─────────────────────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/root/kyc-ocr
+
+[Install]
+WantedBy=multi-user.target

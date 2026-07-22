@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 export function OCRProcessor() {
-  const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || 'https://194.31.150.154:5000';
+  const OCR_SERVER_URL = process.env.VITE_OCR_SERVER_URL || '';
   const { data: documents } = useDocuments();
   const { getFileUrl } = useFileList();
   const ocrMutation = useOCR();
@@ -153,7 +153,7 @@ export function OCRProcessor() {
       <div className="mb-6 border-b border-gray-700 flex space-x-6">
         <button
           onClick={() => setActiveTab("process")}
-          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-md ${
+          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-xl ${
             activeTab === "process"
               ? "border-indigo-500 text-indigo-400"
               : "border-transparent text-gray-400 hover:text-white"
@@ -164,7 +164,7 @@ export function OCRProcessor() {
 
         <button
           onClick={() => setActiveTab("results")}
-          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-md ${
+          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-xl ${
             activeTab === "results"
               ? "border-indigo-500 text-indigo-400"
               : "border-transparent text-gray-400 hover:text-white"
@@ -175,7 +175,7 @@ export function OCRProcessor() {
 
         <button
           onClick={() => setActiveTab("debug")}
-          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-md ${
+          className={`px-4 py-2 -mb-px font-medium border-b-2 transition rounded-xl ${
             activeTab === "debug"
               ? "border-indigo-500 text-indigo-400"
               : "border-transparent text-gray-400 hover:text-white"
@@ -194,7 +194,7 @@ export function OCRProcessor() {
           <div className="flex space-x-4 mb-6">
             <button
               onClick={() => setOcrType("egyptian")}
-              className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition shadow-sm ${
+              className={`flex items-center px-3 py-2 rounded-xl text-sm font-medium transition shadow-sm ${
                 ocrType === "egyptian"
                   ? "bg-indigo-600 text-white"
                   : "bg-slate-800 text-indigo-100 hover:bg-gradient-to-r from-indigo-500 to-indigo-700 hover:text-white"
@@ -206,7 +206,7 @@ export function OCRProcessor() {
 
             <button
               onClick={() => setOcrType("passport")}
-              className={`flex items-center px-3 py-2 rounded-full text-sm font-medium transition shadow-sm ${
+              className={`flex items-center px-3 py-2 rounded-xl text-sm font-medium transition shadow-sm ${
                 ocrType === "passport"
                   ? "bg-indigo-600 text-white"
                   : "bg-slate-800 text-indigo-100 hover:bg-gradient-to-r from-indigo-500 to-indigo-700 hover:text-white"
@@ -236,7 +236,7 @@ export function OCRProcessor() {
                     <button
                       key={file.path}
                       onClick={() => handleImageSelect(file)}
-                      className={`w-full text-left px-3 py-2 rounded-lg border transition flex items-center min-w-0 ${
+                      className={`w-full text-left px-3 py-2 rounded-xl border transition flex items-center min-w-0 ${
                         selectedImage?.path === file.path
                           ? "bg-indigo-700/30 border-indigo-500 text-white"
                           : "border-slate-700 text-slate-100 hover:border-indigo-500"
@@ -316,15 +316,15 @@ export function OCRProcessor() {
 
                   <div className="text-center">
                     <button
-                      onClick={handleRunOcr}
-                      disabled={
-                        ocrMutation.isPending ||
-                        egyptianIDMutation.isPending ||
-                        passportMutation.isPending ||
-                        compressing
-                      }
-                      className="bg-gradient-to-r from-indigo-500 to-indigo-700 text-white px-6 py-3 rounded-full hover:shadow-lg transition flex items-center justify-center mx-auto disabled:opacity-50"
-                    >
+ onClick={handleRunOcr}
+ disabled={
+ ocrMutation.isPending ||
+ egyptianIDMutation.isPending ||
+ passportMutation.isPending ||
+ compressing
+ }
+ className="bg-gradient-to-r from-indigo-500 to-indigo-700 text-white px-6 py-3 rounded-xl hover:shadow-lg transition flex items-center justify-center mx-auto disabled:opacity-50"
+ >
                       {(ocrMutation.isPending ||
                         egyptianIDMutation.isPending ||
                         passportMutation.isPending) && (

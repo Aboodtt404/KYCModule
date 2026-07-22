@@ -13,5 +13,13 @@ export function useSmsVerificationActor() {
         gcTime: Infinity,
         enabled: !!canisterId,
     });
+    // E2E test hook — only exists in dev builds; Vite eliminates this branch in prod
+    if (import.meta.env.DEV && typeof window !== "undefined" && window.__TEST_SMS_ACTOR__) {
+        return { actor: window.__TEST_SMS_ACTOR__, isLoading: false, error: null };
+    }
+    // Demo mode — sandboxed mock actor (OTP code is fixed in demo)
+    if (typeof window !== "undefined" && window.__DEMO_SMS_ACTOR__) {
+        return { actor: window.__DEMO_SMS_ACTOR__, isLoading: false, error: null };
+    }
     return { actor, isLoading, error };
 }
