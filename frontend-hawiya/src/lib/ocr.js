@@ -52,3 +52,18 @@ export const stripDataUrl = (dataUrl) => dataUrl.replace(/^data:[^,]*,/, '');
 export function detectFields(blob, signal) {
   return fetch(`${BASE}/detect-fields`, { method: 'POST', body: blob, signal }).then(jsonOrThrow);
 }
+
+// Live session-step mirror (desktop watches the phone's progress).
+export function reportStep(sessionId, step) {
+  if (!sessionId) return;
+  fetch(`${BASE}/session-step`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, step })
+  }).catch(() => { /* mirror is best-effort */ });
+}
+
+export async function getStep(sessionId, signal) {
+  const res = await fetch(`${BASE}/session-step/${encodeURIComponent(sessionId)}`, { signal });
+  if (!res.ok) return null;
+  return (await res.json()).step || null;
+}

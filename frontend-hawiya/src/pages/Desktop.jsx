@@ -5,10 +5,25 @@ import { C, F, btnPrimary, btnGhost, h1, arSub } from '@/theme';
 import { Card, Chip, Mono, Row, Wordmark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { agentReady, kycActor } from '@/lib/agent';
+import { getStep } from '@/lib/ocr';
 
 const uuid = () =>
   crypto.randomUUID ? crypto.randomUUID() :
   Math.random().toString(16).slice(2) + '-' + Math.random().toString(16).slice(2);
+
+
+const STEP_LABEL = {
+  'welcome': 'Opening the flow…', 'front-cap': 'Scanning the front of the ID…',
+  'front-proc': 'Reading the front of the ID…', 'verdict-accept': 'Front verified ✓',
+  'verdict-abstain': 'Confirming details…', 'verdict-reject': 'Front needs a retake…',
+  'back-cap': 'Scanning the back of the ID…', 'back-proc': 'Reading the back…',
+  'back-review': 'Back read ✓', 'back-mismatch': 'Re-scanning the back…',
+  'selfie-intro': 'Getting ready for the selfie…', 'selfie-cap': 'Taking the liveness selfie…',
+  'face-proc': 'Matching face to ID…', 'face-ok': 'Face verified ✓',
+  'liveness-fail': 'Retrying the selfie…', 'phone': 'Entering phone number…',
+  'otp': 'Entering the SMS code…', 'review': 'Reviewing before submit…',
+  'submitting': 'Submitting…', 'status': 'Submitted ✓'
+};
 
 const SESSION_UI = {
   pending: { bg: C.shell, dot: C.inkFaint, fg: '#7a6752', anim: 'pulse 2s infinite', title: 'Waiting for your phone…', sub: 'Scan the code to begin — this page updates automatically' },
@@ -25,6 +40,7 @@ export default function Desktop() {
   const [sess, setSess] = useState('pending');
   const [sessData, setSessData] = useState(null);
   const [hb, setHb] = useState(0);
+  const [phoneStep, setPhoneStep] = useState(null);
   const [error, setError] = useState(null);
   const pollRef = useRef(null);
   const navigate = useNavigate();
@@ -41,7 +57,7 @@ export default function Desktop() {
       const res = await kycActor().create_verification_session(id);
       if (res && 'Err' in res) throw new Error(res.Err);
     } catch (e) { setError(e.message); return; }
-    setSessionId(id); setSess('pending'); setSessData(null); setHb(0); setStep('qr');
+    setSessionId(id); setSess('pending'); setSessData(null); setHb(0); setPhoneStep(null); setStep('qr');
     pollRef.current = setInterval(async () => {
       try {
         const raw = await kycActor().get_verification_status(id);
@@ -51,6 +67,7 @@ export default function Desktop() {
         const done = st.status === 'completed' || (st.completed_at && st.data);
         setSess(done ? 'completed' : st.status || 'pending');
         setHb((h) => h + 1);
+        getStep(id).then((ps) => ps && setPhoneStep(ps)).catch(() => {});
         if (done) {
           clearInterval(pollRef.current);
           let data = st.data;
@@ -183,6 +200,12 @@ export default function Desktop() {
               )}
               {(sess === 'pending' || sess === 'in_progress') && (
                 <>
+                  {phoneStep && STEP_LABEL[phoneStep] ? (
+                    <div style={{ marginTop: 20, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '12px 15px' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.okFg, animation: 'pulse 1.4s ease-in-out infinite' }} />
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: C.okFg }}>On phone: {STEP_LABEL[phoneStep]}</div>
+                    </div>
+                  ) : null}
                   <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13, color: C.inkSoft, lineHeight: 1.6 }}>
                     <div style={{ display: 'flex', gap: 10 }}><span style={{ color: C.primary, fontWeight: 700 }}>1</span>Open your phone camera and scan the code</div>
                     <div style={{ display: 'flex', gap: 10 }}><span style={{ color: C.primary, fontWeight: 700 }}>2</span>Complete ID scan, selfie and SMS steps there</div>

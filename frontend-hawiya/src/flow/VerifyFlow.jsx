@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
-import { health, readFront, readBack, verifyFace } from '@/lib/ocr';
+import { health, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
 import { buzz, closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
@@ -58,6 +58,10 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   }, []);
 
   const go = useCallback((s) => { setError(null); setStep(s); }, []);
+
+  // Desktop mirror: when this flow was opened from a QR session, report each
+  // step so the desktop page can narrate progress live. Labels only.
+  useEffect(() => { reportStep(sessionId, step); }, [sessionId, step]);
 
   // ── entry: health gate ───────────────────────────────────────────────────
   const begin = async () => {

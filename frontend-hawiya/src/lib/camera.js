@@ -97,3 +97,21 @@ export function grabChallengeB64(videoEl, maxW = 480, quality = 0.7) {
 export function buzz(ms = 30) {
   try { navigator.vibrate?.(ms); } catch { /* unsupported */ }
 }
+
+// Torch (rear flash) — capability depends on device/browser; both helpers are
+// safe no-ops when unsupported.
+export function hasTorch(videoEl) {
+  try {
+    const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+    return !!track?.getCapabilities?.().torch;
+  } catch { return false; }
+}
+
+export async function setTorch(videoEl, on) {
+  try {
+    const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+    if (!track?.getCapabilities?.().torch) return false;
+    await track.applyConstraints({ advanced: [{ torch: !!on }] });
+    return true;
+  } catch { return false; }
+}

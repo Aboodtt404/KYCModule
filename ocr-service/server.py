@@ -1486,6 +1486,45 @@ def detect_fields():
         return jsonify({"card": None, "fields": []})
 
 
+# ── live session-step mirror ─────────────────────────────────────────────────
+# The phone reports which flow step it's on; the desktop QR page polls it to
+# mirror progress live ("Scanning back of ID…"). Ephemeral, in-memory, labels
+# only — no personal data. The canister session only knows pending/in_progress/
+# completed, which is too coarse for a live mirror.
+_SESSION_STEPS: dict[str, tuple[float, str]] = {}
+_STEP_TTL = 3600.0
+_STEP_RE = re.compile(r"^[a-z0-9-]{1,32}$")
+
+
+def _prune_steps() -> None:
+    now = time.time()
+    for k in [k for k, (t, _) in _SESSION_STEPS.items() if now - t > _STEP_TTL]:
+        _SESSION_STEPS.pop(k, None)
+
+
+@app.post("/session-step")
+@limiter.limit("240 per minute")
+def session_step_set():
+    data = request.get_json(silent=True) or {}
+    sid, step = str(data.get("session_id") or ""), str(data.get("step") or "")
+    if not (8 <= len(sid) <= 64) or not _STEP_RE.fullmatch(step):
+        return jsonify({"ok": False}), 400
+    _prune_steps()
+    if len(_SESSION_STEPS) > 500 and sid not in _SESSION_STEPS:
+        return jsonify({"ok": False}), 429
+    _SESSION_STEPS[sid] = (time.time(), step)
+    return jsonify({"ok": True})
+
+
+@app.get("/session-step/<sid>")
+@limiter.limit("240 per minute")
+def session_step_get(sid):
+    t, step = _SESSION_STEPS.get(sid, (0.0, ""))
+    if not step or time.time() - t > _STEP_TTL:
+        return jsonify({"step": None})
+    return jsonify({"step": step, "age": round(time.time() - t, 1)})
+
+
 @app.post("/verify-face")
 @limiter.limit("10 per minute")
 def verify_face():

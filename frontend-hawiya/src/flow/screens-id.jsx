@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
 import { Card, CardFrame, IconBadge, Mono, Row, ShutterButton, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
-import { buzz, grabSmallBlob } from '@/lib/camera';
+import { buzz, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
 
 const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
@@ -113,11 +113,35 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
     return () => clearInterval(t);
   }, [liveGuide, autoCapture, videoRef]);
 
+  // Torch: capability appears only after the stream starts — probe on a timer.
+  const [torchable, setTorchable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  useEffect(() => {
+    setTorchOn(false);
+    const t = setInterval(() => setTorchable(hasTorch(videoRef.current)), 1000);
+    return () => clearInterval(t);
+  }, [videoRef]);
+  const toggleTorch = async () => {
+    const next = !torchOn;
+    if (await setTorch(videoRef.current, next)) setTorchOn(next);
+  };
+
   const holdMsg = steady >= 3 ? 'Capturing… · جارٍ الالتقاط' : steady > 0 ? 'Hold still… · اثبت مكانك' : null;
   return (
     <Pad>
-      <div style={h1(28)}>{title}</div>
-      <div dir="rtl" style={arSub(18)}>{ar}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <div>
+          <div style={h1(28)}>{title}</div>
+          <div dir="rtl" style={arSub(18)}>{ar}</div>
+        </div>
+        {torchable && (
+          <button onClick={toggleTorch} aria-label="Toggle flashlight"
+            style={{ border: `1.5px solid ${torchOn ? C.primary : C.line}`, background: torchOn ? C.warnBg : '#fff',
+                     borderRadius: 12, width: 42, height: 42, fontSize: 19, cursor: 'pointer', flex: 'none' }}>
+            🔦
+          </button>
+        )}
+      </div>
       <ErrorNote error={error} />
       <CardFrame videoRef={videoRef} caption={holdMsg || caption} detect={detect} showZones={liveGuide} />
       <ShutterButton onClick={onShutter} />
