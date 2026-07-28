@@ -3,7 +3,7 @@ import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
 import { health, readFront, readBack, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
-import { closeCamera, grabB64, grabBlob, grabChallengeB64, openCamera } from '@/lib/camera';
+import { closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
   VerdictAbstain, BackProcessing, BackMismatch
@@ -77,7 +77,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   // ── front of card ────────────────────────────────────────────────────────
   const captureFront = async () => {
     const video = videoRef.current;
-    const blob = await grabBlob(video);
+    setError(null);
+    const blob = await grabSharpestBlob(video);
     closeCamera(video);
     setProcStage(0); go('front-proc');
     later(1200, () => setProcStage((s) => Math.max(s, 1)));
@@ -93,14 +94,18 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const verdict = data.verification?.verdict || 'abstain';
       go(`verdict-${['accept', 'abstain', 'reject'].includes(verdict) ? verdict : 'abstain'}`);
     } catch (e) {
-      setError(e.message); go('svc-down');
+      setError(e.message);
+      // Quality rejection (blur) → straight back to the camera with the note;
+      // anything else is a service problem.
+      go(/blurry|steady/i.test(e.message) ? 'front-cap' : 'svc-down');
     }
   };
 
   // ── back of card ─────────────────────────────────────────────────────────
   const captureBack = async () => {
     const video = videoRef.current;
-    const blob = await grabBlob(video);
+    setError(null);
+    const blob = await grabSharpestBlob(video);
     closeCamera(video);
     go('back-proc');
     const ctl = new AbortController(); abortRef.current = ctl;
