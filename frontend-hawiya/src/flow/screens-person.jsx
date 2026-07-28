@@ -6,9 +6,17 @@ const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '26px 26px 30px', ...style }}>{children}</div>
 );
 
-const ErrorNote = ({ error }) => error ? (
-  <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>{error}</div>
-) : null;
+const ErrorNote = ({ error }) => {
+  if (!error) return null;
+  const msg = typeof error === 'string' ? error : error.msg;
+  const detail = typeof error === 'string' ? '' : error.detail;
+  return (
+    <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>
+      {msg}
+      {detail ? <div style={{ marginTop: 5, fontSize: 9.5, opacity: 0.6, fontFamily: 'monospace' }}>{detail}</div> : null}
+    </div>
+  );
+};
 
 export function SelfieIntro({ startSelfie, error }) {
   const tips = [

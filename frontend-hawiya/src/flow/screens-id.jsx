@@ -8,9 +8,17 @@ const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
 );
 
-const ErrorNote = ({ error }) => error ? (
-  <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>{error}</div>
-) : null;
+const ErrorNote = ({ error }) => {
+  if (!error) return null;
+  const msg = typeof error === 'string' ? error : error.msg;
+  const detail = typeof error === 'string' ? '' : error.detail;
+  return (
+    <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>
+      {msg}
+      {detail ? <div style={{ marginTop: 5, fontSize: 9.5, opacity: 0.6, fontFamily: 'monospace' }}>{detail}</div> : null}
+    </div>
+  );
+};
 
 export function Welcome({ begin }) {
   const steps = [
@@ -260,6 +268,46 @@ export function VerdictAbstain({ front, addr, setAddr, go }) {
 
 export function BackProcessing() {
   return <BusyScreen en="Checking both sides match…" ar="جارٍ مطابقة الوجهين…" />;
+}
+
+export function BackReview({ front, back, go }) {
+  const frontNid = (front?.national_id || '').replace(/\D/g, '');
+  const backNid = (back?.national_id || '').replace(/\D/g, '');
+  const matched = frontNid && backNid && frontNid === backNid;
+  const rows = [
+    ['المهنة · Occupation', back?.occupation],
+    ['الحالة الاجتماعية · Marital', back?.marital_status],
+    ['Issue date', back?.issue_date],
+    ['Valid until', back?.expiry_date],
+  ].filter(([, v]) => v);
+  return (
+    <Pad style={{ padding: '26px 26px 30px' }}>
+      <IconBadge bg={C.okBg} fg={C.okFg}>✓</IconBadge>
+      <TitleAr en="Back of ID read" ar="تمت قراءة ظهر البطاقة" size={29} />
+      {matched ? (
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px' }}>
+          <span style={{ fontSize: 16, color: C.okFg }}>⇄</span>
+          <div style={{ fontSize: 12.5, color: C.okFg, lineHeight: 1.5 }}>
+            <b>Front and back match.</b> The national ID number on both sides is identical — a strong integrity signal.
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 14, background: C.shell, borderRadius: 14, padding: '11px 15px', fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
+          The number on the back couldn't be read clearly — your submission will simply be checked manually. Nothing to fix.
+        </div>
+      )}
+      {rows.length > 0 && (
+        <Card style={{ marginTop: 14, padding: '4px 0' }}>
+          {rows.map(([label, v], i) => (
+            <Row key={label} label={label} last={i === rows.length - 1}
+              value={<span dir="rtl">{v}</span>} />
+          ))}
+        </Card>
+      )}
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('selfie-intro')} style={btnPrimary}>Continue · متابعة</button>
+    </Pad>
+  );
 }
 
 export function BackMismatch({ front, back, go }) {

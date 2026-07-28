@@ -4,9 +4,10 @@ import { Wordmark, StepDots } from '@/components/ui';
 import { health, readFront, readBack, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
 import { closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
+import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
-  VerdictAbstain, BackProcessing, BackMismatch
+  VerdictAbstain, BackProcessing, BackMismatch, BackReview
 } from './screens-id';
 import {
   SelfieIntro, SelfieCapture, FaceProcessing, LivenessFail, FaceOk,
@@ -94,10 +95,11 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const verdict = data.verification?.verdict || 'abstain';
       go(`verdict-${['accept', 'abstain', 'reject'].includes(verdict) ? verdict : 'abstain'}`);
     } catch (e) {
-      setError(e.message);
       // Quality rejection (blur) → straight back to the camera with the note;
-      // anything else is a service problem.
+      // anything else is a service problem. go() clears error state — set the
+      // message AFTER navigating or it never renders.
       go(/blurry|steady/i.test(e.message) ? 'front-cap' : 'svc-down');
+      setError(humanError(e, 'ocr'));
     }
   };
 
@@ -116,9 +118,9 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const frontNid = (front?.national_id || '').replace(/\D/g, '');
       const backNid = (b.national_id || '').replace(/\D/g, '');
       if (frontNid && backNid && frontNid !== backNid) go('back-mismatch');
-      else go('selfie-intro');
+      else go('back-review');
     } catch (e) {
-      setError(e.message); go('back-cap');
+      go('back-cap'); setError(humanError(e, 'ocr'));
     }
   };
 
@@ -152,8 +154,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
         else go('face-ok');
       } catch (e) {
         setLivenessReason(e.code === 'ERR_NO_FACE' ? 'no_face' : 'server');
-        setError(e.message);
         go('liveness-fail');
+        setError(humanError(e, 'face'));
       }
     });
   };
@@ -166,7 +168,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const res = await smsActor().send_sms(`+20${phone.replace(/\D/g, '')}`);
       if (!res.success) throw new Error(res.message || 'Could not send SMS');
       go('otp');
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(humanError(e, 'sms')); }
   };
 
   const dupCheckThenReview = async () => {
@@ -182,7 +184,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       if (!res.success) { setOtpError(true); return; }
       setPhoneVerified(true);
       await dupCheckThenReview();
-    } catch (e) { setError(e.message); setOtpError(true); }
+    } catch (e) { setError(humanError(e, 'sms')); setOtpError(true); }
   };
 
   // Temporary: SMS provider not configured in this environment — allow skipping.
@@ -241,7 +243,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       setReference(`KYC-${id.slice(0, 4).toUpperCase()}-${id.slice(4, 8).toUpperCase()}`);
       go('status');
       onCompleted?.();
-    } catch (e) { setError(e.message); go('review'); }
+    } catch (e) { go('review'); setError(humanError(e, 'submit')); }
   };
 
   const phase = PHASE(step);
@@ -283,6 +285,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       )}
       {step === 'back-proc' && <BackProcessing />}
       {step === 'back-mismatch' && <BackMismatch {...props} />}
+      {step === 'back-review' && <BackReview {...props} />}
       {step === 'selfie-intro' && <SelfieIntro {...props} />}
       {step === 'selfie-cap' && <SelfieCapture {...props} />}
       {step === 'face-proc' && <FaceProcessing />}
