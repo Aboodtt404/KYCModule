@@ -371,7 +371,7 @@ export function BackReview({ front, back, go }) {
       <IconBadge bg={C.okBg} fg={C.okFg}>✓</IconBadge>
       <TitleAr en="Back of ID read" ar="تمت قراءة ظهر البطاقة" size={29} />
       {matched ? (
-        <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px' }}>
+        <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px', animation: 'stamp .5s ease .35s both' }}>
           <span style={{ fontSize: 16, color: C.okFg }}>⇄</span>
           <div style={{ fontSize: 12.5, color: C.okFg, lineHeight: 1.5 }}>
             <b>Front and back match.</b> The national ID number on both sides is identical — a strong integrity signal.
@@ -383,7 +383,7 @@ export function BackReview({ front, back, go }) {
         </div>
       )}
       {rows.length > 0 && (
-        <Card style={{ marginTop: 14, padding: '4px 0' }}>
+        <Card style={{ marginTop: 14, padding: '4px 0', animation: 'flipIn .5s ease both' }}>
           {rows.map(([label, v], i) => (
             <Row key={label} label={label} last={i === rows.length - 1}
               value={<span dir="rtl">{v}</span>} />

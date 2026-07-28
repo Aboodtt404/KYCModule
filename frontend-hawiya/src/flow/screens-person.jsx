@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { C, F, btnPrimary, btnGhost, h1, arSub } from '@/theme';
 import { BusyScreen, Card, IconBadge, Mono, Row, TitleAr } from '@/components/ui';
 
@@ -103,6 +103,23 @@ export function FaceProcessing() {
   );
 }
 
+
+// Count a number up from 0 with ease-out — scores feel earned, not printed.
+function useCountUp(target, ms = 900) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    let raf; const t0 = performance.now();
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / ms);
+      setV(target * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return v;
+}
+
 const LIVENESS_COPY = {
   no_motion: {
     title: 'We need to see you move', ar: 'لم نرصد حركة كافية',
@@ -144,9 +161,10 @@ const LIVENESS_COPY = {
 
 export function LivenessFail({ livenessReason, startSelfie, faceResult }) {
   const copy = LIVENESS_COPY[livenessReason] || LIVENESS_COPY.no_motion;
-  const score = faceResult?.similarity_score;
+  const rawScore = faceResult?.similarity_score;
   const threshold = faceResult?.threshold ?? 50;
-  const showScore = livenessReason === 'no_match' && typeof score === 'number';
+  const showScore = livenessReason === 'no_match' && typeof rawScore === 'number';
+  const score = useCountUp(showScore ? rawScore : 0);
   return (
     <Pad>
       <IconBadge bg={C.warnBg} fg={C.warnFg}>↺</IconBadge>
@@ -177,7 +195,8 @@ export function LivenessFail({ livenessReason, startSelfie, faceResult }) {
 }
 
 export function FaceOk({ faceResult, go }) {
-  const score = faceResult?.similarity_score ?? 0;
+  const target = faceResult?.similarity_score ?? 0;
+  const score = useCountUp(target);
   const threshold = faceResult?.threshold ?? 50;
   return (
     <Pad>
@@ -355,10 +374,20 @@ export function Submitting() {
   );
 }
 
+function TypedText({ text, speed = 55 }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setN(0);
+    const t = setInterval(() => setN((v) => (v >= (text || '').length ? (clearInterval(t), v) : v + 1)), speed);
+    return () => clearInterval(t);
+  }, [text, speed]);
+  return <>{(text || '').slice(0, n)}<span style={{ opacity: n < (text || '').length ? 0.5 : 0 }}>▌</span></>;
+}
+
 export function StatusScreen({ reference, sessionId }) {
   return (
     <Pad style={{ padding: '36px 26px 30px' }}>
-      <div style={{ alignSelf: 'center' }}>
+      <div style={{ alignSelf: 'center', animation: 'stamp .55s ease both' }}>
         <IconBadge bg={C.okBg} fg={C.okFg} size={74}>✓</IconBadge>
       </div>
       <div style={{ ...h1(32), marginTop: 20, textAlign: 'center' }}>You're all set</div>
@@ -371,7 +400,7 @@ export function StatusScreen({ reference, sessionId }) {
       <Card style={{ marginTop: 22, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: C.inkSoft }}>Reference</span>
-          <Mono style={{ fontSize: 12.5, fontWeight: 600 }}>{reference || '—'}</Mono>
+          <Mono style={{ fontSize: 12.5, fontWeight: 600 }}>{reference ? <TypedText text={reference} /> : '—'}</Mono>
         </div>
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column' }}>
           <TimelineItem done title="Submitted" sub="Just now — identity checks passed" />
