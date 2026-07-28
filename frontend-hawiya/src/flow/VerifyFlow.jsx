@@ -3,7 +3,7 @@ import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
 import { health, readFront, readBack, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
-import { closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
+import { buzz, closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
@@ -140,6 +140,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
         if (!videoRef.current) return;
         frames.push(grabChallengeB64(video));
         setFramesDone(n);
+        buzz(20);
       }
       await new Promise((r) => setTimeout(r, 700));
       const liveB64 = grabB64(video);

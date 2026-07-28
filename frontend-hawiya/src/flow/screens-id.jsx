@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
 import { Card, CardFrame, IconBadge, Mono, Row, ShutterButton, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
-import { grabSmallBlob } from '@/lib/camera';
+import { buzz, grabSmallBlob } from '@/lib/camera';
 
 const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
@@ -104,6 +104,7 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
         setSteady(steadyRef.current);
         if (autoCapture && steadyRef.current >= 3 && !firedRef.current) {
           firedRef.current = true;
+          buzz(40);
           shutterRef.current();
         }
       } catch { setDetect(null); steadyRef.current = 0; setSteady(0); }

@@ -92,3 +92,8 @@ export function grabChallengeB64(videoEl, maxW = 480, quality = 0.7) {
   c.getContext('2d').drawImage(videoEl, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', quality).replace(/^data:[^,]*,/, '');
 }
+
+// Tiny haptic tick — capture confirmations feel physical on phones that support it.
+export function buzz(ms = 30) {
+  try { navigator.vibrate?.(ms); } catch { /* unsupported */ }
+}

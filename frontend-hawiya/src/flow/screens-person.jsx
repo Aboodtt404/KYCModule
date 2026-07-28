@@ -120,8 +120,11 @@ const LIVENESS_COPY = {
   }
 };
 
-export function LivenessFail({ livenessReason, startSelfie }) {
+export function LivenessFail({ livenessReason, startSelfie, faceResult }) {
   const copy = LIVENESS_COPY[livenessReason] || LIVENESS_COPY.no_motion;
+  const score = faceResult?.similarity_score;
+  const threshold = faceResult?.threshold ?? 50;
+  const showScore = livenessReason === 'no_match' && typeof score === 'number';
   return (
     <Pad>
       <IconBadge bg={C.warnBg} fg={C.warnFg}>↺</IconBadge>
@@ -131,6 +134,18 @@ export function LivenessFail({ livenessReason, startSelfie }) {
         <div style={{ fontSize: 13, lineHeight: 1.6, marginTop: 8 }}>
           {copy.body} <Mono style={{ fontSize: 11, color: C.inkFaint }}>({copy.code})</Mono>. This protects you from someone using a printed photo.
         </div>
+        {showScore && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.inkSoft, marginTop: 14 }}>
+              <span>How close you got</span>
+              <Mono style={{ fontWeight: 600, color: C.warnFg }}>{score.toFixed(1)} — needs {threshold}</Mono>
+            </div>
+            <div style={{ position: 'relative', height: 8, background: C.line, borderRadius: 99, marginTop: 8 }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${Math.min(score, 100)}%`, background: C.warnFg, borderRadius: 99 }} />
+              <div style={{ position: 'absolute', left: `${threshold}%`, top: -4, bottom: -4, width: 2, background: C.primary }} />
+            </div>
+          </>
+        )}
       </Card>
       <div style={{ marginTop: 14, fontSize: 13, color: C.inkSoft, lineHeight: 1.7 }}>{copy.tip}</div>
       <div style={{ flex: 1 }} />
@@ -141,7 +156,7 @@ export function LivenessFail({ livenessReason, startSelfie }) {
 
 export function FaceOk({ faceResult, go }) {
   const score = faceResult?.similarity_score ?? 0;
-  const threshold = faceResult?.threshold ?? 75;
+  const threshold = faceResult?.threshold ?? 50;
   return (
     <Pad>
       <IconBadge bg={C.okBg} fg={C.okFg}>✓</IconBadge>
