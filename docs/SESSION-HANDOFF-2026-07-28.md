@@ -83,8 +83,28 @@ now scans all 14-digit windows preferring checksum-valid ones.
 - Present to Kareem: PP results reset the research baseline (stock CPU-capable model
   beat the fine-tuned 2B on names → the brief's operator-gated levers look different).
 
-## Backlog (post fine-tune)
-Real-device test pass of hawiya → card/field detector retraining (serving gap) →
-address line-assembly conventions → back-of-card accuracy (research's 0/32 problem) →
-confidence-gate + escalation architecture (validated in research, never serving-wired)
-→ stable domain / staging deploy.
+## Office test round 1 (2026-07-28, Kareem's team; Wael + one more)
+Front scan praised. Three failures, all fixed the same day from the saved captures:
+- **Back scan extracted nothing** (the research's 0/32 problem, reproduced live).
+  Root causes: back pipeline never card-cropped (card fills ~⅓ of a live photo, the
+  field detector found almost no boxes on the full scene), the back NID is printed in
+  ARABIC-INDIC numerals (digit YOLO knows Western glyphs only; nid_back box found on
+  0/2 real captures), and every field read used EasyOCR. Now: `_yolo_card` crop →
+  PP-reads with raw postprocess (no gazetteer on occupation/dates) → NID from a PP
+  read of the card's TOP band, accepted only if a 14-digit window passes the mod-11
+  checksum (else honest empty → verifier abstains). Wael's back now yields
+  checksum-valid NID + occupation + dates, enabling the front==back verdict signal.
+- **Nobody could pass face matching**: sigmoid was centred at cosine 0.6 with default
+  threshold 75 ⇒ effectively demanded dist ≤ 0.49, stricter than ArcFace's published
+  same-person boundary (0.68) on the hardest domain (printed ID photo vs selfie);
+  genuine Wael peaked at dist 0.661. Now: sigmoid centred at 0.68 (sim 50 ==
+  borderline same person), default `FACE_THRESHOLD` 50, and the ID is matched against
+  the BEST of selfie+challenge frames (identity-consistency across frames is already
+  enforced, so an impostor gains nothing).
+- **Liveness prompts flashed too fast to read**: 900ms per instruction → 2.4s.
+
+## Backlog
+Office retest (face + back + fine-tuned-removal check) → card/field detector
+retraining (serving gap) → address line-assembly conventions → date formatting on
+back reads (digits arrive un-slashed) → confidence-gate + escalation architecture
+(validated in research, never serving-wired) → stable domain / staging deploy.
