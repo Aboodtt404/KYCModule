@@ -142,10 +142,20 @@ Latin line below NID. Results (content-fair):
   shift-guard (firstName is 1-2 tokens / y-position vs NID anchor) + 2× upscale.
 - **NID: 212/220 (96%) checksum-valid on TEST, 197/200 TRAIN, 5/5 real** — far beyond
   the digit-YOLO path, and it reads Arabic-Indic NIDs natively.
-Proposed integration (not yet wired): one PP full-card pass in the sidecar —
-authoritative NID source (checksum-gated), name/address fallback replacing the band
-crops (which mis-anchor on real captures), cross-check vs field-box reads. Field
-detector stays primary for names on real captures.
+WIRED INTO SERVING same day (`detfirst_rules.py`, sidecar `/scan`): scan NID is the
+checksum-gated fallback (and replaces a checksum-failing digit-YOLO read); scan
+fields replace the band crops; field-box reads stay primary at conf ≥ 0.5. All NID
+acceptance points additionally require date+governorate plausibility (`_nid_plausible`
+— checksum alone false-accepted a window starting inside a fused issue date, live
+office bug). Iterations on TRAIN-val 200 (CF): rules-only 80.6/73.7/67.3 →
++shift-guard/upscale/fn-rescue 88.8/79.3/70.9 → +TEMPLATE ZONES **90.3/79.3/70.9**.
+Template zones (Abdelrahman's direction — the layout is fixed): field positions as
+fractions of the header-bottom→NID-top anchor span, calibrated on 24 real captures
+(fn 0.17, ln 0.33, addr 0.55/0.72, ±few %); any det-missed field is zone-cropped and
+read directly (narrow right-strip retry for firstName). Visual overlays incl. the
+computed zones: `ocr-service/debug_captures/detfirst_viz/` (regen via scratchpad
+viz_detfirst.py). The research prototype `kyc-bakeoff/detfirst.py` now IMPORTS the
+serving rules module — single source of truth.
 
 ## Backlog
 Office retest (face + back + box-priority + blur gate) → det-first serving
