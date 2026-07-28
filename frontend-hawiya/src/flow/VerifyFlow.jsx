@@ -125,13 +125,16 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const video = videoRef.current;
       if (!video) return;
       const frames = [];
+      // Each prompt stays up long enough to read AND perform the motion before
+      // the frame is grabbed (office feedback: 900ms flashed faster than
+      // anyone could read).
       for (let n = 1; n <= 4; n++) {
-        await new Promise((r) => setTimeout(r, 900));
+        await new Promise((r) => setTimeout(r, 2400));
         if (!videoRef.current) return;
         frames.push(grabChallengeB64(video));
         setFramesDone(n);
       }
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 700));
       const liveB64 = grabB64(video);
       closeCamera(video);
       go('face-proc');
