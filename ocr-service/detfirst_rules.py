@@ -115,6 +115,7 @@ def assign(lines):
     nid_y = 0.80
     if best_row is not None and len(best_digits) >= 12:
         nid_y = best_row["yc"]
+        out["_y_nid_top"] = best_row["yc"] - best_row["h"] / 2
         nid, ok = nid_from_digits(best_digits)
         if nid:
             out["nid"], out["nid_checksum"] = nid, ok
@@ -137,8 +138,10 @@ def assign(lines):
         # rec turns the header into noise no regex catches). The header is
         # centered and wide; names are right-aligned and narrow.
         if r["yc"] < 0.30 and (HEADER.search(r["t"]) or r["xc"] < 0.74 or r["w"] > 0.34):
+            out["_y_header"] = max(out.get("_y_header", 0.0), r["yc"] + r["h"] / 2)
             continue
         if HEADER.search(r["t"]) and r["yc"] < 0.40:
+            out["_y_header"] = max(out.get("_y_header", 0.0), r["yc"] + r["h"] / 2)
             continue
         if len(digs) >= max(4, len(re.sub(r"\s", "", r["t"])) - 2):
             continue  # digit-dominated stray (partial nid echo)
@@ -179,11 +182,41 @@ def assign(lines):
     return out
 
 
+# Field zones as fractions of the header-bottom -> NID-top span, calibrated on
+# 24 real office captures 2026-07-28 (medians: fn 0.17, ln 0.33, addr 0.55/0.72,
+# line height 0.17; every card within a few percent — the layout is fixed).
+ZONES = {
+    "firstName": (0.05, 0.28),
+    "lastName": (0.22, 0.45),
+    "address": (0.44, 0.84),
+}
+_SPAN_FRAC = 0.53   # header->NID span as a fraction of card height (fallback anchor)
+
+
+def _read_zone(img, ocr, y0f, y1f, x0f=0.36):
+    """OCR a computed zone directly (det+rec on the strip, Arabic tokens only)."""
+    H, W = img.shape[:2]
+    y0, y1 = max(0, int(y0f * H)), min(H, int(y1f * H))
+    band = img[y0:y1, int(x0f * W):int(0.995 * W)]
+    if band.size == 0:
+        return ""
+    bh = band.shape[0]
+    if bh < 160:
+        s = 160 / bh
+        band = cv2.resize(band, (max(1, int(band.shape[1] * s)), 160),
+                          interpolation=cv2.INTER_LANCZOS4)
+    res = ocr.predict(band)[0]
+    texts = [t.strip() for t in (res.get("rec_texts") or []) if t and t.strip()]
+    return " ".join(t for t in texts if ARABIC.search(t)
+                    and not re.search(r"[A-Za-z0-9]", t))
+
+
 def extract(img, ocr, upscale_below=1200):
-    """Full det-first extraction: predict -> assign, with 2x upscale for small
-    cards (det misses one-word lines at low res) and a firstName ZONE rescue —
-    when the shift-guard says the firstName line was missed, crop the band just
-    above the lastName line and read it directly."""
+    """Full det-first extraction: predict -> assign -> ZONE RESCUE.
+
+    All Egyptian IDs share one layout, so any field the detector missed is read
+    from its COMPUTED position between the two self-identifying anchors (header
+    bottom, NID row top) — fixed template geometry, per Abdelrahman's direction."""
     H, W = img.shape[:2]
     if W < upscale_below:
         img = cv2.resize(img, (W * 2, H * 2), interpolation=cv2.INTER_LANCZOS4)
@@ -191,22 +224,29 @@ def extract(img, ocr, upscale_below=1200):
     res = ocr.predict(img)[0]
     lines = lines_of(res, W, H)
     out = assign(lines)
-    if not out["firstName"] and out.get("fn_line_h"):
-        y1 = int(out["fn_line_y0"] * H)
-        y0 = max(0, y1 - int(out["fn_line_h"] * H * 1.7))
-        band = img[y0:y1, int(0.38 * W):int(0.99 * W)]
-        if band.size:
-            bh = band.shape[0]
-            if bh and bh < 96:
-                s = 96 / bh
-                band = cv2.resize(band, (int(band.shape[1] * s), 96),
-                                  interpolation=cv2.INTER_LANCZOS4)
-            r2 = ocr.predict(band)[0]
-            texts = [t.strip() for t in (r2.get("rec_texts") or []) if t and t.strip()]
-            cand = " ".join(t for t in texts if ARABIC.search(t)
-                            and not re.search(r"[A-Za-z0-9]", t))
-            if cand and not HEADER.search(cand) and len(cand.split()) <= 2:
-                out["firstName"] = cand
+
+    y_n = out.pop("_y_nid_top", None)
+    y_h = out.pop("_y_header", None)
     out.pop("fn_line_y0", None)
     out.pop("fn_line_h", None)
+    # Anchor fallbacks: estimate the missing one from the other (span is a
+    # stable fraction of card height on rectangular card crops).
+    if y_n is None and y_h is not None:
+        y_n = min(0.95, y_h + _SPAN_FRAC)
+    if y_h is None and y_n is not None:
+        y_h = max(0.04, y_n - _SPAN_FRAC)
+    if y_n is not None and y_h is not None and y_n > y_h + 0.15:
+        span = y_n - y_h
+        for fld, (t0, t1) in ZONES.items():
+            if out[fld]:
+                continue
+            txt = _read_zone(img, ocr, y_h + t0 * span, y_h + t1 * span)
+            if not txt and fld == "firstName":
+                # one word far right — a narrower strip makes it dominant
+                txt = _read_zone(img, ocr, y_h + t0 * span, y_h + t1 * span, x0f=0.68)
+            if not txt or HEADER.search(txt):
+                continue
+            if fld == "firstName" and len(txt.split()) > 2:
+                continue  # zone caught the neighbour line — not a first name
+            out[fld] = txt
     return out
