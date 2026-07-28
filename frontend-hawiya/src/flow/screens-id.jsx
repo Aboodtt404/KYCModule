@@ -149,12 +149,54 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
   );
 }
 
-export function FrontProcessing({ stage, healthOnly = false }) {
+// Field zones lighting up in reading order during the scan reveal. Stage 1
+// lights the name/address zones one by one; stage 2 lights the NID row.
+const REVEAL_ZONES = [
+  { label: 'الاسم', box: [0.35, 0.24, 0.60, 0.13], atStage: 1, delay: 0 },
+  { label: 'العائلة', box: [0.35, 0.38, 0.60, 0.13], atStage: 1, delay: 500 },
+  { label: 'العنوان', box: [0.35, 0.52, 0.60, 0.20], atStage: 1, delay: 1000 },
+  { label: 'الرقم القومي', box: [0.15, 0.75, 0.80, 0.17], atStage: 2, delay: 0 },
+];
+
+function ScanReveal({ shotUrl, stage }) {
+  return (
+    <div style={{ position: 'relative', width: '100%', maxWidth: 320, aspectRatio: '1.586', alignSelf: 'center', borderRadius: 16, overflow: 'hidden', background: C.dark, boxShadow: '0 10px 30px rgba(61,44,34,.25)' }}>
+      <img src={shotUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(.55) saturate(.8)' }} />
+      {/* sweeping light beam */}
+      <div style={{ position: 'absolute', left: 0, right: 0, height: 46, top: 0, animation: 'scan 2.6s ease-in-out infinite',
+        background: 'linear-gradient(180deg, transparent, rgba(245,166,35,.35) 45%, rgba(255,236,200,.55) 50%, rgba(245,166,35,.35) 55%, transparent)' }} />
+      {REVEAL_ZONES.map((z) => {
+        const on = stage >= z.atStage;
+        return (
+          <div key={z.label} style={{
+            position: 'absolute', left: `${z.box[0] * 100}%`, top: `${z.box[1] * 100}%`,
+            width: `${z.box[2] * 100}%`, height: `${z.box[3] * 100}%`,
+            border: '1.5px solid rgba(123,191,126,.95)', borderRadius: 7,
+            background: 'rgba(123,191,126,.14)',
+            opacity: on ? 1 : 0, transform: on ? 'scale(1)' : 'scale(1.12)',
+            transition: `opacity .5s ease ${z.delay}ms, transform .5s ease ${z.delay}ms`,
+          }}>
+            <span dir="rtl" style={{ position: 'absolute', top: -1, right: 5, fontSize: 9, fontWeight: 700, color: '#bfe8c1' }}>
+              {z.label} {on ? '✓' : ''}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function FrontProcessing({ stage, healthOnly = false, shotUrl = null }) {
   const items = ['Detecting card & fields', 'Extracting Arabic text', 'Running integrity checks'];
   const mark = (i) => (stage > i ? '✓' : stage === i ? '●' : '○');
   const color = (i) => (stage > i ? C.okFg : stage === i ? C.primary : C.inkFaint);
   return (
     <BusyScreen en={healthOnly ? 'One moment…' : 'Reading your ID…'} ar={healthOnly ? 'لحظة من فضلك…' : 'جارٍ قراءة البطاقة…'}>
+      {!healthOnly && shotUrl && (
+        <div style={{ marginTop: 20, alignSelf: 'stretch', display: 'flex', flexDirection: 'column' }}>
+          <ScanReveal shotUrl={shotUrl} stage={stage} />
+        </div>
+      )}
       {!healthOnly && (
         <>
           <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'stretch' }}>

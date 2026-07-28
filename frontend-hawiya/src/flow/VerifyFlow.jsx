@@ -46,6 +46,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const [error, setError] = useState(null);
   const [framesDone, setFramesDone] = useState(0);
   const [reference, setReference] = useState(null);
+  const [shotUrl, setShotUrl] = useState(null);   // captured frame, shown during the scan reveal
   const videoRef = useRef(null);
   const timersRef = useRef([]);
   const abortRef = useRef(null);
@@ -86,6 +87,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     setError(null);
     const blob = await grabSharpestBlob(video);
     closeCamera(video);
+    setShotUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
     setProcStage(0); go('front-proc');
     later(1200, () => setProcStage((s) => Math.max(s, 1)));
     later(6000, () => setProcStage((s) => Math.max(s, 2)));
@@ -261,7 +263,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     go, error, setError, front, back, addr, setAddr, phone, setPhone,
     otpError, setOtpError, framesDone, faceResult, livenessReason, reference,
     videoRef, begin, captureFront, captureBack, startSelfie, sendOtp, submitOtp,
-    skipPhone, phoneVerified, submitKyc, sessionId, fixes, setFixes
+    skipPhone, phoneVerified, submitKyc, sessionId, fixes, setFixes, shotUrl
   };
 
   return (
@@ -283,7 +285,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
           title="Front of your ID" ar="الوجه الأمامي للبطاقة"
           caption="Fit the card inside the frame · ضع البطاقة داخل الإطار" />
       )}
-      {step === 'front-proc' && <FrontProcessing stage={procStage} />}
+      {step === 'front-proc' && <FrontProcessing stage={procStage} shotUrl={shotUrl} />}
       {step === 'verdict-reject' && <VerdictReject {...props} />}
       {step === 'verdict-accept' && <VerdictAccept {...props} />}
       {step === 'verdict-abstain' && <VerdictAbstain {...props} />}
