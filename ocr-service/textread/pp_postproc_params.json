@@ -1,0 +1,26 @@
+{
+  "firstName": {
+    "val_acc": 0.844559585492228,
+    "val_raw": 0.8290155440414507,
+    "strip_punct": true,
+    "max_ed": 1,
+    "do_respace": true,
+    "do_snap": true
+  },
+  "lastName": {
+    "val_acc": 0.766497461928934,
+    "val_raw": 0.6700507614213198,
+    "strip_punct": true,
+    "max_ed": 1,
+    "do_respace": true,
+    "do_snap": true
+  },
+  "address": {
+    "val_acc": 0.7121212121212122,
+    "val_raw": 0.5050505050505051,
+    "strip_punct": true,
+    "max_ed": 1,
+    "do_respace": true,
+    "do_snap": true
+  }
+}

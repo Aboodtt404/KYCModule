@@ -48,3 +48,6 @@ frontend/backup_src_ts
 
 backend/serverocr-service/.venv*
 ocr-service/__pycache__/
+*.log
+.env.local
+**/.env.local

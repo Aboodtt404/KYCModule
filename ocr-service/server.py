@@ -47,6 +47,46 @@ except Exception as _verr:  # pragma: no cover - defensive
     _VERIFIER = None
     log.warning("NIDVerifier unavailable (%s) — results will NOT carry a verdict", _verr)
 
+# ── PaddleOCR text-field reader (names/address) — sidecar client ────────────
+# Paddle runs in its own process (pp_service.py, :5001): in-process it deadlocks/
+# segfaults against TensorFlow+torch (mixed CUDA/OpenMP runtimes). Guarded so a
+# sidecar problem can never take down OCR — EasyOCR remains the fallback.
+_PP_URL = os.getenv("PP_SERVICE_URL", "http://127.0.0.1:5001")
+_PP_READER = False
+
+
+def _pp_ping() -> bool:
+    global _PP_READER
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"{_PP_URL}/health", timeout=3) as r:
+            import json as _json
+            _PP_READER = bool(_json.loads(r.read()).get("ok"))
+    except Exception:
+        _PP_READER = False
+    return _PP_READER
+
+
+def _pp_read_field(bgr_crop, field: str) -> str:
+    """Read one field crop via the PP sidecar. Empty string on any failure."""
+    try:
+        import json as _json
+        import urllib.request
+        okenc, buf = cv2.imencode(".jpg", bgr_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not okenc:
+            return ""
+        payload = _json.dumps({
+            "field": field,
+            "image": base64.b64encode(buf.tobytes()).decode(),
+        }).encode()
+        req = urllib.request.Request(
+            f"{_PP_URL}/read", data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return _json.loads(r.read()).get("text", "") or ""
+    except Exception as e:
+        log.warning("pp sidecar read failed for %s: %s", field, e)
+        return ""
+
 
 def _attach_verification(data: dict, back_nid: Optional[str] = None) -> dict:
     """Attach a deterministic verdict to an extracted-data dict (additive).
@@ -676,10 +716,13 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                     cropped = image[y1:y2, x1:x2]
 
         if cropped is None or cropped.size == 0:
-            log.info("YOLO: no ID card detected — will use multi-pass fallback")
-            return None
-
-        log.info("YOLO: ID card cropped (confidence=%.2f)", best_conf)
+            # Capture UIs guide the user to fill the frame with the card, so the
+            # full image is usually a usable card crop; running the field/band
+            # pipeline on it beats dropping straight to multi-pass EasyOCR.
+            log.info("YOLO: no ID card detected — treating full frame as the card")
+            cropped = image
+        else:
+            log.info("YOLO: ID card cropped (confidence=%.2f)", best_conf)
 
         # Deskew the cropped card so tilted photos don't degrade field detection
         cropped = _deskew(cropped)
@@ -692,6 +735,7 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         address = ""
         nid = ""
         nid_crop = None   # tight NID region, kept for an OCR fallback
+        nid_top_frac = None   # digit-row top as a fraction of card height (band anchor)
         serial = ""   # رقم المصنع — factory/serial number (front, bottom-left)
 
         for result in field_results:
@@ -708,13 +752,18 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         serial = re.sub(r"[^A-Za-z0-9]", "", "".join(stxt)).upper()
 
                 elif class_name in ("firstName", "lastName", "address"):
-                    # Run EasyOCR on the tight field crop (grayscale for speed)
                     crop = cropped[y1:y2, x1:x2]
                     if crop.size == 0:
                         continue
-                    gray  = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-                    texts = reader.readtext(gray, detail=0, paragraph=True)
-                    text  = _clean_arabic(" ".join(texts))
+                    # PaddleOCR (PP-OCRv6 det + arabic rec) — 81/74 vs EasyOCR's 36/24
+                    # on the held-out name benchmark. EasyOCR remains the fallback.
+                    text = ""
+                    if _PP_READER:
+                        text = _clean_arabic(_pp_read_field(crop, class_name))
+                    if not text:
+                        gray  = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                        texts = reader.readtext(gray, detail=0, paragraph=True)
+                        text  = _clean_arabic(" ".join(texts))
                     if class_name == "firstName":
                         first_name = text
                     elif class_name == "lastName":
@@ -730,6 +779,7 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                     ey1      = max(0, cy - new_h // 2)
                     ey2      = min(h_card, cy + new_h // 2)
                     nid_crop = cropped[ey1:ey2, x1:x2]
+                    nid_top_frac = y1 / max(h_card, 1)   # anchor for the text-field bands
 
                     # Digit-by-digit detection: class id IS the digit value (0-9)
                     digit_results = _yolo_digits(nid_crop, verbose=False)
@@ -744,6 +794,53 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         digit_info.sort(key=lambda d: d[1])   # left → right
                         nid = "".join(str(d[0]) for d in digit_info)
                         log.info("YOLO digit NID: [%d digits]", len(nid))
+
+        # ── Step 2b: digit-row-anchored band crops for the text fields ──────
+        # The field detector mislocates boxes on hard captures (it reads the card
+        # header as a name); the band geometry anchored to the NID digit row is
+        # the exact crop recipe the PP reader was benchmarked on (81/74 CF vs
+        # gold). Bands are the primary source; the YOLO box reads above remain
+        # as fallback when a band read comes back empty.
+        if _PP_READER and nid_top_frac is None:
+            # No 'nid' field box — anchor on the digit ROW from the digit detector
+            # instead (this is what the benchmarked cropper does): the dominant
+            # horizontal run of ≥8 digit boxes in the lower card half.
+            try:
+                digs = []
+                for dr in _yolo_digits(cropped, verbose=False):
+                    for db in dr.boxes:
+                        bx = db.xyxy[0].tolist()
+                        digs.append(((bx[1] + bx[3]) / 2, bx[1]))
+                if len(digs) >= 8:
+                    import statistics as _st
+                    med = _st.median(y for y, _ in digs)
+                    row = [t for y, t in digs if abs(y - med) < 0.05 * cropped.shape[0]]
+                    if len(row) >= 8 and med > cropped.shape[0] * 0.5:
+                        nid_top_frac = min(row) / cropped.shape[0]
+                        log.info("band anchor from digit row: nid_top=%.2f", nid_top_frac)
+            except Exception as _ae:
+                log.warning("digit-row anchor failed: %s", _ae)
+
+        if _PP_READER and nid_top_frac is not None:
+            _BANDS = {"firstName": (0.255, 0.355), "lastName": (0.355, 0.455),
+                      "address": (0.455, 0.660)}
+            _NID_TOP_REF, _XB = 0.80, (0.28, 1.0)
+            hh, ww = cropped.shape[:2]
+            shift = min(max(nid_top_frac, 0.55), 0.95) - _NID_TOP_REF
+            for fld, (f0, f1) in _BANDS.items():
+                by0 = int(min(max(f0 + shift, 0.0), 1.0) * hh)
+                by1 = int(min(max(f1 + shift, 0.0), 1.0) * hh)
+                if by1 - by0 < 8:
+                    continue
+                band = cropped[by0:by1, int(_XB[0] * ww):int(_XB[1] * ww)]
+                t = _clean_arabic(_pp_read_field(band, fld))
+                if t:
+                    if fld == "firstName":
+                        first_name = t
+                    elif fld == "lastName":
+                        second_name = t
+                    else:
+                        address = t
 
         # ── Step 3: validate NID — if invalid, try EasyOCR ──────────────────
         # The YOLO digit model only knows Western glyphs, so it fails on cards
@@ -805,8 +902,10 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         governorate = text
                         log.info("ArabID seg: governorate from state field: %s", governorate)
 
-                # Build enriched address from segmented parts when available
-                if neighbourhood or city:
+                # Build enriched address from segmented parts when available.
+                # Skip when the PP reader already produced an address — its full-field
+                # read beats concatenated EasyOCR fragments.
+                if (neighbourhood or city) and not (_PP_READER and address):
                     parts = [p for p in [neighbourhood, city] if p]
                     if address and not any(p in address for p in parts):
                         parts.append(address)
@@ -1106,6 +1205,65 @@ def passport():
     finally:
         _secure_delete(path)
 
+@app.post("/detect-fields")
+@limiter.limit("240 per minute")
+def detect_fields():
+    """Live capture-guidance: detect the card + field boxes on a viewfinder frame.
+
+    Fast path for real-time UI overlays (no OCR): downscaled YOLO passes only.
+    Returns normalized [x, y, w, h] boxes (fractions of the SENT image), so the
+    client can map them onto its preview regardless of resolution.
+    """
+    if not _YOLO_AVAILABLE:
+        return jsonify({"card": None, "fields": []})
+    if not request.data:
+        return jsonify({"error": "No image data"}), 400
+    if len(request.data) > 2 * 1024 * 1024:
+        return jsonify({"error": "Frame too large (max 2 MB)"}), 413
+    try:
+        arr = np.frombuffer(request.data, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return jsonify({"error": "Bad image"}), 400
+        H, W = img.shape[:2]
+        if W > 640:
+            s = 640 / W
+            img = cv2.resize(img, (640, int(H * s)))
+            H, W = img.shape[:2]
+
+        card_box = None
+        best = 0.0
+        for r in _yolo_card(img, verbose=False):
+            for b in r.boxes:
+                c = float(b.conf[0])
+                if c > best and c > 0.3:
+                    best = c
+                    x1, y1, x2, y2 = [float(v) for v in b.xyxy[0].tolist()]
+                    card_box = [x1 / W, y1 / H, (x2 - x1) / W, (y2 - y1) / H]
+
+        fields = []
+        if card_box:
+            cx, cy, cw, ch = [card_box[0] * W, card_box[1] * H, card_box[2] * W, card_box[3] * H]
+            crop = img[int(cy):int(cy + ch), int(cx):int(cx + cw)]
+            if crop.size:
+                for r in _yolo_fields(crop, verbose=False):
+                    for b in r.boxes:
+                        name = r.names[int(b.cls[0])]
+                        if name not in ("firstName", "lastName", "address", "nid"):
+                            continue
+                        x1, y1, x2, y2 = [float(v) for v in b.xyxy[0].tolist()]
+                        fields.append({
+                            "name": name,
+                            "conf": round(float(b.conf[0]), 2),
+                            "box": [(cx + x1) / W, (cy + y1) / H,
+                                    (x2 - x1) / W, (y2 - y1) / H],
+                        })
+        return jsonify({"card": card_box, "conf": round(best, 2), "fields": fields})
+    except Exception as exc:
+        log.warning("detect-fields failed: %s", exc)
+        return jsonify({"card": None, "fields": []})
+
+
 @app.post("/verify-face")
 @limiter.limit("10 per minute")
 def verify_face():
@@ -1143,11 +1301,11 @@ def verify_face():
         if live_mean > 225:
             return jsonify({"error": "Selfie is overexposed. Please avoid direct light sources."}), 422
 
-        id_reps = DeepFace.represent(id_img, model_name="ArcFace", enforce_detection=True)
+        id_reps = DeepFace.represent(id_img, model_name="ArcFace", enforce_detection=True, detector_backend="retinaface")
         if not id_reps:
             raise ValueError("No face detected in ID image")
         id_rep    = id_reps[0]["embedding"]
-        live_reps = DeepFace.represent(live_img, model_name="ArcFace", enforce_detection=True)
+        live_reps = DeepFace.represent(live_img, model_name="ArcFace", enforce_detection=True, detector_backend="retinaface")
         if not live_reps:
             raise ValueError("No face detected in selfie")
         if len(live_reps) > 1:
@@ -1167,7 +1325,7 @@ def verify_face():
         # Passive liveness: reject if the selfie looks like a photo of a screen/print.
         # Laplacian variance on the live image — printed photos have very low sharpness variance.
         lap_var = float(cv2.Laplacian(live_gray, cv2.CV_64F).var())
-        LIVENESS_MIN_VARIANCE = 50   # tune upward if real users fail; lower catches prints
+        LIVENESS_MIN_VARIANCE = float(os.getenv("LIVENESS_MIN_VARIANCE", "50"))
         liveness_ok = lap_var >= LIVENESS_MIN_VARIANCE
         liveness_reason = "low_sharpness" if not liveness_ok else None
         liveness_mode = "passive"
@@ -1176,13 +1334,19 @@ def verify_face():
         # A static photo/screen replay yields near-identical embeddings across frames;
         # a real head turn produces measurable embedding motion. A face swap mid-challenge
         # produces too MUCH distance. Both are rejected.
+        # When challenge frames are present, the active check DECIDES — real motion by
+        # the same person is direct liveness evidence, while Laplacian sharpness is
+        # camera/lighting-dependent and false-flags soft webcam images (the passive
+        # gate only stands alone when no challenge frames were captured).
         MOTION_MIN_DIST   = 0.05  # max pairwise distance below this → static replay
         IDENTITY_MAX_DIST = 0.68  # ArcFace same-person ceiling; above this → different person
-        if liveness_ok and challenge_imgs:
+        if challenge_imgs:
+            liveness_ok = True
+            liveness_reason = None
             liveness_mode = "active"
             frame_reps = []
             for c_img in challenge_imgs:
-                reps = DeepFace.represent(c_img, model_name="ArcFace", enforce_detection=True)
+                reps = DeepFace.represent(c_img, model_name="ArcFace", enforce_detection=True, detector_backend="retinaface")
                 if not reps:
                     raise ValueError("No face detected in challenge frame")
                 frame_reps.append(reps[0]["embedding"])
@@ -1199,6 +1363,11 @@ def verify_face():
             if liveness_ok and max_pair_dist < MOTION_MIN_DIST:
                 liveness_ok = False
                 liveness_reason = "no_motion"
+
+        # Metrics only (no image data) — needed to tune thresholds on real traffic
+        log.info("verify-face: sim=%.1f dist=%.3f lap_var=%.0f mode=%s frames=%d ok=%s reason=%s",
+                 similarity, dist, lap_var, liveness_mode, len(challenge_imgs),
+                 liveness_ok, liveness_reason)
 
         if not liveness_ok:
             return jsonify({
@@ -1241,6 +1410,12 @@ if __name__ == "__main__":
     log.info("Pre-loading EasyOCR model…")
     get_reader()
     log.info("EasyOCR ready.")
+
+    if _pp_ping():
+        log.info("PP sidecar reachable at %s — PaddleOCR active for text fields", _PP_URL)
+    else:
+        log.warning("PP sidecar not reachable at %s — text fields use EasyOCR "
+                    "(start it: python pp_service.py)", _PP_URL)
 
     _local_patterns = ("localhost", "127.0.0.1", "::1", "[::1]")
     if any(p in o for o in _allowed_origins for p in _local_patterns) and not os.getenv("ALLOW_LOCALHOST"):

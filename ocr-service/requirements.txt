@@ -10,6 +10,10 @@ tf-keras>=2.16.0
 Pillow>=10.4.0
 scipy>=1.13.0
 ultralytics>=8.0.0
+# Arabic text-field reader (names/address) — benchmarked 81/74 CF vs EasyOCR 36/24.
+# GPU boxes: install paddlepaddle-gpu from the paddle cu129 index instead.
+paddlepaddle>=3.3.0
+paddleocr>=3.7.0
 
 # ── Development / testing ────────────────────────────────────────────────────
 pytest>=8.0.0
