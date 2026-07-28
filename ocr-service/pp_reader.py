@@ -146,6 +146,19 @@ def _postprocess(text: str, kind: str | None) -> str:
         return text
 
 
+def scan_card(bgr_card) -> dict:
+    """Det-first full-card scan (detfirst_rules): one PP pass over the cropped
+    card -> {firstName, lastName, address, nid, nid_checksum, serial, dob_text}.
+    Text fields get the same frozen post-process as read_field."""
+    if _ocr is None or bgr_card is None or bgr_card.size == 0:
+        return {}
+    import detfirst_rules as DF
+    out = DF.extract(bgr_card, _ocr)
+    for f in ("firstName", "lastName", "address"):
+        out[f] = _postprocess(out.get(f, ""), _FIELD_KIND.get(f))
+    return out
+
+
 def read_field(bgr_crop, field: str) -> str:
     """Read one YOLO field crop (BGR ndarray). field ∈ firstName|lastName|address."""
     if _ocr is None or bgr_crop is None or bgr_crop.size == 0:

@@ -9,6 +9,8 @@ API:
   GET  /health          → {"ok": true, "device": "gpu:0"}
   POST /read            → {"text": "..."}   body: {"field": "firstName|lastName|address",
                                                    "image": "<base64 JPEG/PNG>"}
+  POST /scan            → det-first full-card fields (detfirst_rules.extract)
+                          body: {"image": "<base64 cropped card>"}
 """
 from __future__ import annotations
 
@@ -47,6 +49,23 @@ def read():
         return jsonify({"text": pp_reader.read_field(img, field)})
     except Exception as e:
         log.exception("read failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/scan")
+def scan():
+    data = request.get_json(silent=True) or {}
+    b64 = data.get("image")
+    if not b64:
+        return jsonify({"error": "image required"}), 400
+    arr = np.frombuffer(base64.b64decode(b64), np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({"error": "bad image"}), 400
+    try:
+        return jsonify(pp_reader.scan_card(img))
+    except Exception as e:
+        log.exception("scan failed")
         return jsonify({"error": str(e)}), 500
 
 

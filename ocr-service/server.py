@@ -95,6 +95,30 @@ def _pp_read_field(bgr_crop, field: str) -> str:
         return ""
 
 
+def _pp_scan_card(bgr_card) -> dict:
+    """Det-first full-card scan via the sidecar (/scan). {} on any failure."""
+    try:
+        import json as _json
+        import urllib.request
+        okenc, buf = cv2.imencode(".jpg", bgr_card, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not okenc:
+            return {}
+        payload = _json.dumps({"image": base64.b64encode(buf.tobytes()).decode()}).encode()
+        req = urllib.request.Request(
+            f"{_PP_URL}/scan", data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=40) as r:
+            out = _json.loads(r.read())
+            if isinstance(out, dict) and "error" not in out:
+                log.info("pp scan: nid=%s(%s) fn=%r ln=%r",
+                         out.get("nid") or "-", "ok" if out.get("nid_checksum") else "?",
+                         out.get("firstName", ""), out.get("lastName", ""))
+                return out
+            return {}
+    except Exception as e:
+        log.warning("pp sidecar scan failed: %s", e)
+        return {}
+
+
 def _attach_verification(data: dict, back_nid: Optional[str] = None) -> dict:
     """Attach a deterministic verdict to an extracted-data dict (additive).
 
@@ -834,6 +858,13 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             log.info("capture too blurry (lap_var=%.1f < %.0f) — asking for a retake", _lap, _MIN_SHARP)
             raise ValueError("The photo is too blurry. Hold the phone steady and try again.")
 
+        # ── Step 1b: det-first full-card scan (geometry+content rules) ──────
+        # One PP pass over the card. Authoritative NID fallback (checksum-gated,
+        # reads Arabic-Indic natively — 96% checksum-valid on the frozen TEST)
+        # and the name/address fallback replacing the band crops, which
+        # mis-anchored by a full line on real captures.
+        scan = _pp_scan_card(cropped) if _PP_READER else {}
+
         # ── Step 2: detect fields on cropped card ────────────────────────────
         field_results = _yolo_fields(cropped, verbose=False)
         reader = get_reader()
@@ -913,60 +944,28 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         nid = "".join(str(d[0]) for d in digit_info)
                         log.info("YOLO digit NID: [%d digits]", len(nid))
 
-        # ── Step 2b: digit-row-anchored band crops — FALLBACK only ──────────
-        # On real phone captures the field detector is accurate and the fixed
-        # band fractions mis-anchor by a full text line (office test 2026-07-28:
-        # the firstName band read the card header on several people's IDs while
-        # the detector boxes were spot-on). Bands now only fill fields the box
-        # reads left empty or read with low detector confidence — that keeps
-        # them as the rescue path for the low-res dataset-card domain where the
-        # detector is weak (their original job, 81/74 CF benchmark).
-        if _PP_READER and nid_top_frac is None:
-            # No 'nid' field box — anchor on the digit ROW from the digit detector
-            # instead (this is what the benchmarked cropper does): the dominant
-            # horizontal run of ≥8 digit boxes in the lower card half.
-            try:
-                digs = []
-                for dr in _yolo_digits(cropped, verbose=False):
-                    for db in dr.boxes:
-                        bx = db.xyxy[0].tolist()
-                        digs.append(((bx[1] + bx[3]) / 2, bx[1]))
-                if len(digs) >= 8:
-                    import statistics as _st
-                    med = _st.median(y for y, _ in digs)
-                    row = [t for y, t in digs if abs(y - med) < 0.05 * cropped.shape[0]]
-                    if len(row) >= 8 and med > cropped.shape[0] * 0.5:
-                        nid_top_frac = min(row) / cropped.shape[0]
-                        log.info("band anchor from digit row: nid_top=%.2f", nid_top_frac)
-            except Exception as _ae:
-                log.warning("digit-row anchor failed: %s", _ae)
-
-        if _PP_READER and nid_top_frac is not None:
-            _BANDS = {"firstName": (0.255, 0.355), "lastName": (0.355, 0.455),
-                      "address": (0.455, 0.660)}
-            _NID_TOP_REF, _XB = 0.80, (0.28, 1.0)
-            hh, ww = cropped.shape[:2]
-            shift = min(max(nid_top_frac, 0.55), 0.95) - _NID_TOP_REF
+        # ── Step 2b: det-first scan fields — FALLBACK for names/address ─────
+        # A confident field-box read wins (the detector is near-perfect on real
+        # captures); the det-first scan fills anything empty or low-confidence.
+        # This replaces the fixed band crops, which mis-anchored by a full line
+        # on real captures (office test 2026-07-28: firstName band read the
+        # card header) — the scan anchors on CONTENT, not fractions.
+        if scan:
             _MIN_BOX_CONF = 0.5
             current = {"firstName": first_name, "lastName": second_name, "address": address}
-            for fld, (f0, f1) in _BANDS.items():
+            for fld in ("firstName", "lastName", "address"):
                 if current[fld] and field_conf.get(fld, 0.0) >= _MIN_BOX_CONF:
-                    continue  # confident box read wins; band is the fallback
-                by0 = int(min(max(f0 + shift, 0.0), 1.0) * hh)
-                by1 = int(min(max(f1 + shift, 0.0), 1.0) * hh)
-                if by1 - by0 < 8:
                     continue
-                band = cropped[by0:by1, int(_XB[0] * ww):int(_XB[1] * ww)]
-                t = _clean_arabic(_pp_read_field(band, fld))
-                if _HEADER_RE.search(t):
-                    t = ""  # band mis-anchored onto the card header
-                if t:
+                t = _clean_arabic(scan.get(fld) or "")
+                if t and not _HEADER_RE.search(t):
                     if fld == "firstName":
                         first_name = t
                     elif fld == "lastName":
                         second_name = t
                     else:
                         address = t
+            if not serial and scan.get("serial"):
+                serial = scan["serial"]
 
         # ── Step 3: validate NID — if invalid, try EasyOCR ──────────────────
         # The YOLO digit model only knows Western glyphs, so it fails on cards
@@ -978,13 +977,24 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             if recovered:
                 log.info("YOLO digit NID recovered %d→14 digits via checksum", len(nid))
                 nid = recovered
+        # Digit-YOLO can produce a structurally-valid but checksum-FAILING read
+        # (one misclassified digit). A checksum-valid scan NID is strictly
+        # better evidence — swap it in before the verifier sees the bad one.
+        if (re.fullmatch(r"[23]\d{13}", nid) and _nid_checksum_ok is not None
+                and not _nid_checksum_ok(nid) and scan.get("nid_checksum")):
+            log.info("digit-YOLO NID fails checksum — using checksum-valid scan NID")
+            nid = scan["nid"]
         if not re.fullmatch(r"[23]\d{13}", nid):
             log.warning("YOLO digit NID invalid (%d digits) — OCR fallback", len(nid))
             nid_fallback = None
-            # PP reads the digit row better than either the digit YOLO on hard
-            # captures or EasyOCR (office test: recovered 3/5 checksum-valid NIDs
-            # the digit model missed). Checksum-valid only — never a guess.
-            if _PP_READER and nid_crop is not None and nid_crop.size:
+            # Det-first scan NID first: checksum-gated, reads Arabic-Indic
+            # natively, 96% checksum-valid on the frozen TEST.
+            if scan.get("nid") and scan.get("nid_checksum"):
+                nid_fallback = scan["nid"]
+                log.info("det-first scan NID: checksum-valid")
+            # Then a targeted PP read of the tight nid crop (office test:
+            # recovered 3/5 the digit model missed). Checksum-valid only.
+            if not nid_fallback and _PP_READER and nid_crop is not None and nid_crop.size:
                 cand = _national_id([_to_western_digits(_pp_read_field(nid_crop, "nid_digit_row"))])
                 if cand and (_nid_checksum_ok is None or _nid_checksum_ok(cand)):
                     nid_fallback = cand
