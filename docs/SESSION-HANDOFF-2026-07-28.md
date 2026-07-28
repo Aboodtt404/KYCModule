@@ -49,21 +49,23 @@ ideal crops 81.3/74.0/63.6). Eval harness: `/home/abdelrahman/kyc-bakeoff/servin
 (throttle ≥2.2s/req — endpoint limit 30/min). The serving↔ceiling gap is
 localization on low-res eval cards; real phone captures should land higher.
 
-### 3. Rec fine-tune (`/home/abdelrahman/kyc-finetune`) — IN FLIGHT
-Goal: raise the reader ceiling. Corpus: 2223 train + 396 val tight line crops from
-TRAIN gold (TEST never touched). Two hard-won rules (memory: `kyc-rec-finetune`):
-tighten band crops with PP det before training, and store Arabic labels in VISUAL
-order (`label[::-1]`) because paddlex un-reverses arabic rec output.
+### 3. Rec fine-tune (`/home/abdelrahman/kyc-finetune`) — DONE, SHIPPED for names
+Corpus: 2223 train + 396 val tight line crops from TRAIN gold (TEST never touched).
+Two hard-won rules (memory: `kyc-rec-finetune`): tighten band crops with PP det before
+training, and store Arabic labels in VISUAL order (`label[::-1]`) because paddlex
+un-reverses arabic rec output.
 
-Run v3 (`finetune_v3.yaml`, warm start, val 80.6% @epoch5) was training at handoff
-time (~13 min/run). Next steps, in order:
-1. `tools/export_model.py -c ../finetune_v3.yaml -o Global.pretrained_model=output/v3/best_accuracy Global.save_inference_dir=output/v3/infer`
-2. Bench: PaddleOCR(text_recognition_model_dir=output/v3/infer) over the 220 TEST
-   crops (adapt `kyc-bakeoff/run_pp.py`), score with `score_bakeoff.py` semantics +
-   frozen post-process.
-3. **Ship gate:** beats stock 81.3/74.0 CF → point pp_service at the new model dir
-   (pp_reader init kwargs) and re-run `serving_eval.py`; else keep stock and record
-   the negative result honestly.
+Run v3 result (best val 82.8% @epoch37; frozen TEST, content-fair):
+firstName **83.6** (stock 81.3), lastName **76.7** (74.0), address 58.6 (61.4 —
+regressed; corpus had no address lines, and address bands are two-line crops with no
+per-line gold, so adding them is a pseudo-labeling project, not a quick rerun).
+
+**Shipped as per-field routing** in `ocr-service/pp_reader.py`: firstName/lastName →
+fine-tuned rec (`ocr-service/models/arabic_rec_ft_v3`, override `PP_FT_REC_DIR`),
+address → stock. Serving re-eval (220 TEST, 0 errors): 62.6/56.6/52.3 →
+**63.5/59.4/52.3** CF. Bench artifacts: `kyc-bakeoff/results_pp_v6det_ft3_crops.json`,
+scorer row `pp v6det ft3(crops)`. Raising address means fixing localization or the
+line-split labeling problem — backlog, not a rec-weights problem.
 
 ## Decisions / discipline that must survive
 - TEST (claude_gold_v2 + crop_cache) is eval-only, read frozen, never shipped to a

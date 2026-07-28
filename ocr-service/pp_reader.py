@@ -8,6 +8,10 @@ only reads the Arabic text fields (firstName / lastName / address).
 
 Post-process = punctuation-token strip + TRAIN-only gazetteer respace/snap, params
 frozen on a TRAIN-val slice (textread/pp_postproc_params.json). Zero TEST leakage.
+
+Name fields route to a rec fine-tuned on TRAIN name lines (models/arabic_rec_ft_v3:
+firstName 83.6 / lastName 76.7 CF on frozen TEST). The fine-tune corpus had no address
+lines and regressed address (58.6 vs 61.4), so address stays on the stock rec.
 """
 from __future__ import annotations
 
@@ -25,9 +29,13 @@ _DIR = Path(__file__).parent
 sys.path.insert(0, str(_DIR / "textread"))
 
 _ocr = None
+_ocr_ft = None  # fine-tuned rec pipeline (name fields); None → names use stock
 _gaz = None
 _params = None
 _device = None
+
+_FT_REC_DIR = os.getenv("PP_FT_REC_DIR", str(Path(__file__).parent / "models" / "arabic_rec_ft_v3"))
+_FT_FIELDS = {"firstName", "lastName"}
 
 PUNCT_TOKENS = {".", "،", "؛", ":", "·", "*", "٠", "-", "..", "۔"}
 _FIELD_KIND = {"firstName": "firstName", "lastName": "lastName", "address": "address"}
@@ -46,7 +54,7 @@ def available() -> bool:
 def init() -> bool:
     """Load models + gazetteer. GPU if present (with a VRAM guard for the shared
     tenant on GPU0), CPU otherwise. Returns True when the PP reader is active."""
-    global _ocr, _gaz, _params, _device
+    global _ocr, _ocr_ft, _gaz, _params, _device
     if _ocr is not None:
         return True
     try:
@@ -74,6 +82,14 @@ def init() -> bool:
             else:
                 raise
         _device = kwargs["device"]
+
+        if Path(_FT_REC_DIR).is_dir():
+            try:
+                _ocr_ft = PaddleOCR(**{**kwargs, "text_recognition_model_dir": _FT_REC_DIR})
+                log.info("pp_reader: fine-tuned name rec loaded from %s", _FT_REC_DIR)
+            except Exception as ft_err:
+                log.warning("pp_reader: fine-tuned rec failed to load (%s) — names use stock", ft_err)
+                _ocr_ft = None
 
         import gazetteer as G  # textread/ on sys.path
         _gaz = G.build_gazetteer()
@@ -147,7 +163,8 @@ def read_field(bgr_crop, field: str) -> str:
     if scale > 1.01:
         bgr_crop = cv2.resize(bgr_crop, (max(1, int(w * scale)), max(1, int(h * scale))),
                               interpolation=cv2.INTER_LANCZOS4)
-    res = _ocr.predict(bgr_crop)[0]
+    pipe = _ocr_ft if (_ocr_ft is not None and field in _FT_FIELDS) else _ocr
+    res = pipe.predict(bgr_crop)[0]
     texts = res.get("rec_texts") or []
     boxes = res.get("rec_boxes")
     if boxes is None:
