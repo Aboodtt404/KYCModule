@@ -103,8 +103,32 @@ Front scan praised. Three failures, all fixed the same day from the saved captur
   enforced, so an impostor gains nothing).
 - **Liveness prompts flashed too fast to read**: 900ms per instruction → 2.4s.
 
+## Office test round 2 — "random words on other people's IDs" (2026-07-28)
+Stage-traced all 9 saved front captures (tracer: scratchpad trace_front.py pattern —
+dump card box → field boxes → digit read → band overlay → PP reads per capture and
+LOOK at them). Two root causes, both fixed and verified by replaying every capture:
+- **Band crops mis-anchor by a full text line on real phone captures** (firstName
+  band sat on the printed card header — that's the "random words"). The field
+  detector boxes were near-perfect on the same captures. Priority flipped: highest-
+  conf box read (3%/10% padding) wins per field; bands only fill empty/low-conf
+  (<0.5) fields; any read matching the header regex (جمهوري/بطاقة/تحقيق/الشخصية) is
+  discarded. Bands stay as the rescue path for the low-res dataset domain.
+- **A failed NID discarded the whole YOLO extraction** and fell to multipass EasyOCR
+  full-card scan (the actual garbage source). Now: PP reads the nid crop as a
+  checksum-gated fallback (recovered 3/5), and if no valid NID remains the good
+  field reads are RETURNED with empty NID (verifier REJECTs → retake prompt).
+Replay of all 9: 9/9 correct names+addresses (was 4/9), 6/9 checksum-valid NIDs,
+0 random-word extractions. Remaining misreads are rec-level (سمر/عمر-class, smudge
+chars) and always flagged ABSTAIN, never silently accepted.
+
+Capture quality: `grabSharpestBlob` (hawiya camera.js) samples 5 frames over ~1s and
+keeps the sharpest (motion blur was the top failure); server blur gate on the card
+crop (`CAPTURE_MIN_SHARPNESS`, default 15 — catastrophic office capture scored 13.8,
+every usable one ≥17) returns "hold steady" → frontend routes back to the camera.
+Debug-capture replays: send `X-Debug-Replay: 1` to avoid re-saving.
+
 ## Backlog
-Office retest (face + back + fine-tuned-removal check) → card/field detector
+Office retest (face + back + box-priority + blur gate) → card/field detector
 retraining (serving gap) → address line-assembly conventions → date formatting on
 back reads (digits arrive un-slashed) → confidence-gate + escalation architecture
 (validated in research, never serving-wired) → stable domain / staging deploy.
