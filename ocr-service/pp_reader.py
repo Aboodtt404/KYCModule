@@ -9,11 +9,11 @@ only reads the Arabic text fields (firstName / lastName / address).
 Post-process = punctuation-token strip + TRAIN-only gazetteer respace/snap, params
 frozen on a TRAIN-val slice (textread/pp_postproc_params.json). Zero TEST leakage.
 
-A rec fine-tuned on TRAIN name lines lives in models/arabic_rec_ft_v3 (firstName 83.6 /
-lastName 76.7 CF on frozen TEST vs stock 81.3/74.0) but is OFF by default
-(PP_USE_FT_NAMES=1 to enable): on a real phone capture (2026-07-28) it produced garbage
-names where stock read fine — the TRAIN corpus is low-res dataset crops and the model
-overfits that domain. Do not re-enable without a real-capture eval set.
+A rec fine-tune on TRAIN name lines was tried 2026-07-28: it won on frozen TEST
+(83.6/76.7 vs 81.3/74.0 CF) but produced garbage names on a real phone capture — the
+dataset is low-res scans and the fine-tune overfits that domain. It was removed from
+serving; weights live in /home/abdelrahman/kyc-finetune/output/v3. Do not bring a
+fine-tune back without an eval set of real captures (see debug_captures/ in server.py).
 """
 from __future__ import annotations
 
@@ -31,13 +31,9 @@ _DIR = Path(__file__).parent
 sys.path.insert(0, str(_DIR / "textread"))
 
 _ocr = None
-_ocr_ft = None  # fine-tuned rec pipeline (name fields); None → names use stock
 _gaz = None
 _params = None
 _device = None
-
-_FT_REC_DIR = os.getenv("PP_FT_REC_DIR", str(Path(__file__).parent / "models" / "arabic_rec_ft_v3"))
-_FT_FIELDS = {"firstName", "lastName"}
 
 PUNCT_TOKENS = {".", "،", "؛", ":", "·", "*", "٠", "-", "..", "۔"}
 _FIELD_KIND = {"firstName": "firstName", "lastName": "lastName", "address": "address"}
@@ -56,7 +52,7 @@ def available() -> bool:
 def init() -> bool:
     """Load models + gazetteer. GPU if present (with a VRAM guard for the shared
     tenant on GPU0), CPU otherwise. Returns True when the PP reader is active."""
-    global _ocr, _ocr_ft, _gaz, _params, _device
+    global _ocr, _gaz, _params, _device
     if _ocr is not None:
         return True
     try:
@@ -84,14 +80,6 @@ def init() -> bool:
             else:
                 raise
         _device = kwargs["device"]
-
-        if os.getenv("PP_USE_FT_NAMES", "0") == "1" and Path(_FT_REC_DIR).is_dir():
-            try:
-                _ocr_ft = PaddleOCR(**{**kwargs, "text_recognition_model_dir": _FT_REC_DIR})
-                log.info("pp_reader: fine-tuned name rec loaded from %s", _FT_REC_DIR)
-            except Exception as ft_err:
-                log.warning("pp_reader: fine-tuned rec failed to load (%s) — names use stock", ft_err)
-                _ocr_ft = None
 
         import gazetteer as G  # textread/ on sys.path
         _gaz = G.build_gazetteer()
@@ -165,8 +153,7 @@ def read_field(bgr_crop, field: str) -> str:
     if scale > 1.01:
         bgr_crop = cv2.resize(bgr_crop, (max(1, int(w * scale)), max(1, int(h * scale))),
                               interpolation=cv2.INTER_LANCZOS4)
-    pipe = _ocr_ft if (_ocr_ft is not None and field in _FT_FIELDS) else _ocr
-    res = pipe.predict(bgr_crop)[0]
+    res = _ocr.predict(bgr_crop)[0]
     texts = res.get("rec_texts") or []
     boxes = res.get("rec_boxes")
     if boxes is None:
