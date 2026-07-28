@@ -52,6 +52,12 @@ try:
 except Exception:  # pragma: no cover - defensive
     _nid_checksum_ok = None
 
+try:
+    from rectify import rectify_card as _RECTIFY
+except Exception as _rerr:  # pragma: no cover - defensive
+    _RECTIFY = None
+    log.warning("rectify unavailable (%s) — falling back to crop+deskew", _rerr)
+
 # ── PaddleOCR text-field reader (names/address) — sidecar client ────────────
 # Paddle runs in its own process (pp_service.py, :5001): in-process it deadlocks/
 # segfaults against TensorFlow+torch (mixed CUDA/OpenMP runtimes). Guarded so a
@@ -838,35 +844,49 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         if image is None:
             return None
 
-        # ── Step 1: crop the ID card ─────────────────────────────────────────
-        card_results = _yolo_card(image_path, verbose=False)
+        # ── Step 1: rectify (document-scanner step) or crop the ID card ─────
+        # Landmark homography maps any-angle captures onto ONE canonical flat
+        # card (rectify.py) so the field layout is a constant. Falls back to
+        # the plain card-crop + deskew when landmarks are insufficient.
         cropped = None
-        best_conf = 0.0
-        for result in card_results:
-            for box in result.boxes:
-                conf = float(box.conf[0])
-                if conf > best_conf:
-                    best_conf = conf
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cropped = image[y1:y2, x1:x2]
-
-        if cropped is None or cropped.size == 0:
-            # Capture UIs guide the user to fill the frame with the card, so the
-            # full image is usually a usable card crop; running the field/band
-            # pipeline on it beats dropping straight to multi-pass EasyOCR.
-            log.info("YOLO: no ID card detected — treating full frame as the card")
-            cropped = image
+        if _RECTIFY is not None:
+            cropped = _RECTIFY(image, _yolo_fields)
+        if cropped is not None:
+            log.info("card rectified to canonical frame")
         else:
-            log.info("YOLO: ID card cropped (confidence=%.2f)", best_conf)
+            card_results = _yolo_card(image_path, verbose=False)
+            best_conf = 0.0
+            for result in card_results:
+                for box in result.boxes:
+                    conf = float(box.conf[0])
+                    if conf > best_conf:
+                        best_conf = conf
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        cropped = image[y1:y2, x1:x2]
 
-        # Deskew the cropped card so tilted photos don't degrade field detection
-        cropped = _deskew(cropped)
+            if cropped is None or cropped.size == 0:
+                # Capture UIs guide the user to fill the frame with the card, so the
+                # full image is usually a usable card crop; running the field/band
+                # pipeline on it beats dropping straight to multi-pass EasyOCR.
+                log.info("YOLO: no ID card detected — treating full frame as the card")
+                cropped = image
+            else:
+                log.info("YOLO: ID card cropped (confidence=%.2f)", best_conf)
+
+            # Deskew so tilted photos don't degrade field detection
+            cropped = _deskew(cropped)
 
         # Blur gate: a motion-blurred card yields garbage digits/text no matter
         # how good the readers are. Floor calibrated on office captures
         # 2026-07-28: catastrophic blur scored 13.8, every usable capture ≥ 17.
         _MIN_SHARP = float(os.getenv("CAPTURE_MIN_SHARPNESS", "15"))
-        _lap = float(cv2.Laplacian(cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+        # Laplacian variance is resolution-dependent — measure at a fixed width
+        # (the ~856px the threshold was calibrated at) so rectification to the
+        # large canonical canvas doesn't read as blur.
+        _g = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+        if _g.shape[1] != 856:
+            _g = cv2.resize(_g, (856, max(1, int(_g.shape[0] * 856 / _g.shape[1]))))
+        _lap = float(cv2.Laplacian(_g, cv2.CV_64F).var())
         if _lap < _MIN_SHARP:
             log.info("capture too blurry (lap_var=%.1f < %.0f) — asking for a retake", _lap, _MIN_SHARP)
             raise ValueError("The photo is too blurry. Hold the phone steady and try again.")
