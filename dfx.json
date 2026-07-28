@@ -11,12 +11,33 @@
       "type": "rust"
     },
     "frontend": {
-      "dependencies": ["rust_backend", "sms_verification_backend"],
+      "dependencies": [
+        "rust_backend",
+        "sms_verification_backend"
+      ],
       "frontend": {
         "entrypoint": "frontend/dist/index.html"
       },
-      "source": ["frontend/dist"],
+      "source": [
+        "frontend/dist"
+      ],
       "type": "assets"
+    },
+    "internet_identity": {
+      "type": "custom",
+      "candid": ".ii/internet_identity_latest.did",
+      "wasm": ".ii/internet_identity_dev_latest.wasm.gz",
+      "specified_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      }
+    },
+    "internet_identity_frontend": {
+      "type": "custom",
+      "candid": ".ii/internet_identity_frontend.did",
+      "wasm": ".ii/internet_identity_frontend.wasm.gz"
     }
   },
   "output_env_file": ".env",
