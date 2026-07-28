@@ -1,4 +1,5 @@
 import { canisterId, createActor } from "@/declarations/sms_verification_backend/index";
+import { AGENT_HOST } from "@/lib/agentHost";
 import { useQuery } from "@tanstack/react-query";
 export function useSmsVerificationActor() {
     const { data: actor, isLoading, error } = useQuery({
@@ -7,7 +8,7 @@ export function useSmsVerificationActor() {
             if (!canisterId) {
                 throw new Error("SMS verification backend canister ID not found. Make sure dfx is running and the canister is deployed.");
             }
-            return await createActor(canisterId);
+            return await createActor(canisterId, { agentOptions: { host: AGENT_HOST } });
         },
         staleTime: Infinity,
         gcTime: Infinity,

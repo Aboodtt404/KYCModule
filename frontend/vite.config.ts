@@ -73,9 +73,19 @@ export default defineConfig(({ mode }) => {
         '/face': {
           target: 'http://127.0.0.1:5000',
           changeOrigin: true
+        },
+        '/health': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true
+        },
+        '/egyptian-id-back': {
+          target: 'http://127.0.0.1:5000',
+          changeOrigin: true
         }
       },
-      host: '127.0.0.1'
+      host: '127.0.0.1',
+      // dev-only: accept the cloudflared quick-tunnel hostname
+      allowedHosts: true
     }
   };
 });

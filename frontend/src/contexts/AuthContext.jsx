@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { AuthClient } from "@dfinity/auth-client";
 import { createActor, canisterId } from "declarations/rust_backend";
+import { AGENT_HOST } from "@/lib/agentHost";
 
 const II_URL =
   process.env.DFX_NETWORK === "ic"
     ? "https://identity.ic0.app"
-    : `http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943`;
+    : import.meta.env.VITE_II_URL || `http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:4943`;
 
 const AuthContext = createContext(null);
 
@@ -19,7 +20,7 @@ export function AuthProvider({ children }) {
 
   const buildActor = useCallback((id) => {
     if (!canisterId) return null;
-    return createActor(canisterId, { agentOptions: { identity: id } });
+    return createActor(canisterId, { agentOptions: { identity: id, host: AGENT_HOST } });
   }, []);
 
   // Ask the canister whether this principal is in the admin list.

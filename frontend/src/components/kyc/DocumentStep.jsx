@@ -198,7 +198,9 @@ export default function DocumentStep({ submissionId, onNext, onUploaded, onReset
     try {
       // Stage 0 — Quick OCR server health check (3s timeout)
       // Catches the case where the server is down before wasting the user's time
-      const OCR_BASE = process.env.VITE_OCR_SERVER_URL || '';
+      // Explicit env override (production) — otherwise same-origin: the dev server
+      // proxies the OCR routes, so this works from localhost, tunnels, and phones.
+      const OCR_BASE = import.meta.env.VITE_OCR_SERVER_URL || process.env.VITE_OCR_SERVER_URL || window.location.origin;
       if (!OCR_BASE) {
         stopTimer(); setOcrStage(null); setIsProcessing(false);
         setValidationError('OCR server URL is not configured. Please contact support@mercaturaforum.com.');

@@ -1,8 +1,11 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { createActor, canisterId } from "declarations/rust_backend";
+import { AGENT_HOST } from "@/lib/agentHost";
 
 // Fallback anonymous actor for unauthenticated users (read-only / public calls)
-const anonymousActor = canisterId ? createActor(canisterId) : null;
+const anonymousActor = canisterId
+    ? createActor(canisterId, { agentOptions: { host: AGENT_HOST } })
+    : null;
 
 export const useActor = () => {
     const { actor, isAuthenticated } = useAuth();

@@ -1,6 +1,9 @@
 import { isDemoMode } from '@/demo/demoMode';
 
-const OCR_SERVER_BASE_URL = process.env.VITE_OCR_SERVER_URL || '';
+const OCR_SERVER_BASE_URL =
+    import.meta.env.VITE_OCR_SERVER_URL ||
+    process.env.VITE_OCR_SERVER_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
 export async function verifyFace(idImageBase64, liveImageBase64, challengeFramesBase64 = []) {
     // Demo mode: simulate a successful active-liveness match without a server
     if (isDemoMode()) {
