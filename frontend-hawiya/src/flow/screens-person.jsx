@@ -78,7 +78,11 @@ export function SelfieCapture({ videoRef, framesDone }) {
 }
 
 export function FaceProcessing() {
-  return <BusyScreen en="Matching you to your ID…" ar="جارٍ المطابقة مع صورة البطاقة…" />;
+  return (
+    <BusyScreen en="Matching you to your ID…" ar="جارٍ المطابقة مع صورة البطاقة…">
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 22 }}>Usually ~10 seconds · عادةً ١٠ ثوانٍ تقريبًا</div>
+    </BusyScreen>
+  );
 }
 
 const LIVENESS_COPY = {
@@ -279,18 +283,38 @@ export function DuplicateScreen({ front, go }) {
   );
 }
 
-export function ReviewScreen({ front, back, addr, phone, phoneVerified, submitKyc, error }) {
+const editInput = {
+  width: '100%', border: `1.5px solid ${C.line}`, borderRadius: 10, padding: '9px 12px',
+  fontSize: 14, fontFamily: 'inherit', background: '#fff', outline: 'none'
+};
+
+export function ReviewScreen({ front, back, addr, setAddr, phone, phoneVerified, submitKyc, error, fixes, setFixes }) {
+  const [editing, setEditing] = useState(false);
+  const fix = (k, fallback) => fixes?.[k] ?? fallback;
+  const setFix = (k) => (e) => setFixes((f) => ({ ...f, [k]: e.target.value }));
   return (
     <Pad style={{ padding: '20px 24px 28px' }}>
-      <div style={h1(29)}>Review & submit</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <div style={h1(29)}>Review & submit</div>
+        <button onClick={() => setEditing((v) => !v)}
+          style={{ border: 'none', background: 'none', color: C.primary, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          {editing ? 'Done · تم' : 'Edit · تعديل'}
+        </button>
+      </div>
       <div dir="rtl" style={arSub(18)}>راجع ثم أرسل</div>
       <ErrorNote error={error} />
       <Card style={{ marginTop: 14, padding: '4px 0' }}>
-        <Row label="Name" value={<span dir="rtl" style={{ fontWeight: 600 }}>{front?.full_name || '—'}</span>} />
+        <Row label="Name" value={editing
+          ? <input dir="rtl" style={editInput} value={fix('full_name', front?.full_name || '')} onChange={setFix('full_name')} />
+          : <span dir="rtl" style={{ fontWeight: 600 }}>{fix('full_name', front?.full_name) || '—'}</span>} />
         <Row label="الرقم القومي" value={<Mono style={{ fontSize: 13, fontWeight: 600 }}>{front?.national_id || '—'}</Mono>} />
         <Row label="Birth · Gender" value={`${front?.birth_date || '—'} · ${front?.gender || '—'}`} />
-        <Row label="العنوان" value={<span dir="rtl">{addr || '—'}</span>} />
-        {back?.occupation ? <Row label="Occupation" value={<span dir="rtl">{back.occupation}</span>} /> : null}
+        <Row label="العنوان" value={editing
+          ? <input dir="rtl" style={editInput} value={addr} onChange={(e) => setAddr(e.target.value)} />
+          : <span dir="rtl">{addr || '—'}</span>} />
+        {(back?.occupation || editing) ? <Row label="Occupation" value={editing
+          ? <input dir="rtl" style={editInput} value={fix('occupation', back?.occupation || '')} onChange={setFix('occupation')} />
+          : <span dir="rtl">{fix('occupation', back?.occupation)}</span>} /> : null}
         <Row label="Phone" value={phoneVerified
           ? <span style={{ color: C.okFg }}>+20 {phone} ✓</span>
           : <span style={{ color: C.warnFg }}>Skipped — verify later</span>} />
@@ -306,7 +330,11 @@ export function ReviewScreen({ front, back, addr, phone, phoneVerified, submitKy
 }
 
 export function Submitting() {
-  return <BusyScreen en="Submitting securely…" ar="جارٍ الإرسال بأمان…" />;
+  return (
+    <BusyScreen en="Submitting securely…" ar="جارٍ الإرسال بأمان…">
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 22 }}>Just a few seconds · ثوانٍ قليلة</div>
+    </BusyScreen>
+  );
 }
 
 export function StatusScreen({ reference, sessionId }) {

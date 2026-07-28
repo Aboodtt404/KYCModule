@@ -268,7 +268,11 @@ export function VerdictAbstain({ front, addr, setAddr, go }) {
 }
 
 export function BackProcessing() {
-  return <BusyScreen en="Checking both sides match…" ar="جارٍ مطابقة الوجهين…" />;
+  return (
+    <BusyScreen en="Checking both sides match…" ar="جارٍ مطابقة الوجهين…">
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 22 }}>Usually ~5 seconds · عادةً ٥ ثوانٍ تقريبًا</div>
+    </BusyScreen>
+  );
 }
 
 export function BackReview({ front, back, go }) {

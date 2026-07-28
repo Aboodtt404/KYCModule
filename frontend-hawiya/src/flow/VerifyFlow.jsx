@@ -39,6 +39,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const [faceResult, setFaceResult] = useState(null);
   const [livenessReason, setLivenessReason] = useState(null);
   const [addr, setAddr] = useState('');
+  const [fixes, setFixes] = useState({});   // user corrections at review — flagged in the payload
   const [phone, setPhone] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [otpError, setOtpError] = useState(false);
@@ -206,8 +207,10 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     };
     // Shape must match the canister's KycSubmissionPayload (kycData.ocrData.*);
     // complete_verification additionally validates a TOP-LEVEL ocrData.national_id.
+    const userEdited = Object.keys(fixes).filter((k) => fixes[k] !== undefined);
+    if (addr && addr !== (front?.address || '')) userEdited.push('address');
     const ocrData = {
-      full_name: front?.full_name || '',
+      full_name: fixes.full_name ?? (front?.full_name || ''),
       national_id: front?.national_id || '',
       birth_date: birth,
       age: ageFrom(birth),
@@ -217,7 +220,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       serial_number: front?.serial || '',
       national_id_back: back?.national_id || '',
       marital_status: back?.marital_status || '',
-      occupation: back?.occupation || '',
+      occupation: fixes.occupation ?? (back?.occupation || ''),
       issue_date: back?.issue_date || '',
       expiry_date: back?.expiry_date || '',
       ocr_verdict: front?.verification?.verdict || 'abstain'
@@ -233,7 +236,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       phone_verified: phoneVerified,
       face_similarity: faceResult?.similarity_score ?? null,
       liveness_mode: faceResult?.liveness_mode || null,
-      status: 'pending'
+      status: 'pending',
+      user_edited: userEdited
     };
     try {
       const actor = kycActor();
@@ -253,7 +257,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     go, error, setError, front, back, addr, setAddr, phone, setPhone,
     otpError, setOtpError, framesDone, faceResult, livenessReason, reference,
     videoRef, begin, captureFront, captureBack, startSelfie, sendOtp, submitOtp,
-    skipPhone, phoneVerified, submitKyc, sessionId
+    skipPhone, phoneVerified, submitKyc, sessionId, fixes, setFixes
   };
 
   return (
