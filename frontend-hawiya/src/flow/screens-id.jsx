@@ -59,34 +59,58 @@ export function SvcDown({ begin, error }) {
   );
 }
 
-export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, liveGuide = false }) {
+export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, liveGuide = false, autoCapture = true }) {
   const [detect, setDetect] = useState(null);
+  const [steady, setSteady] = useState(0);   // consecutive stable-card ticks
   const busyRef = useRef(false);
+  const lastBoxRef = useRef(null);
+  const steadyRef = useRef(0);
+  const firedRef = useRef(false);
+  const shutterRef = useRef(onShutter);
+  shutterRef.current = onShutter;   // parent re-creates the handler each render
 
-  // Live field labels: poll the detector with downscaled viewfinder frames.
-  // Never overlaps requests; stale results are simply replaced by the next tick.
+  // Live field labels + document-scanner auto-shutter: poll the detector with
+  // downscaled viewfinder frames; when the card box is confidently detected and
+  // STABLE for 3 consecutive ticks, capture automatically (grabSharpestBlob +
+  // the server blur gate handle focus). Never overlaps requests.
   useEffect(() => {
-    if (!liveGuide) return undefined;
+    if (!liveGuide && !autoCapture) return undefined;
+    firedRef.current = false;
+    steadyRef.current = 0;
     const t = setInterval(async () => {
       const v = videoRef.current;
-      if (!v || !v.videoWidth || busyRef.current) return;
+      if (!v || !v.videoWidth || busyRef.current || firedRef.current) return;
       busyRef.current = true;
       try {
         const blob = await grabSmallBlob(v);
         const res = await detectFields(blob, AbortSignal.timeout(3000));
         setDetect(res?.card ? res : null);
-      } catch { setDetect(null); }
+        const box = res?.card && (res.conf ?? 0) >= 0.55 ? res.card : null;
+        const prev = lastBoxRef.current;
+        lastBoxRef.current = box;
+        const stable = box && prev &&
+          Math.abs(box[0] - prev[0]) < 0.04 && Math.abs(box[1] - prev[1]) < 0.04 &&
+          Math.abs(box[2] - prev[2]) < 0.10 && Math.abs(box[3] - prev[3]) < 0.10 &&
+          box[2] > 0.4;                       // card fills a sane share of frame
+        steadyRef.current = stable ? steadyRef.current + 1 : 0;
+        setSteady(steadyRef.current);
+        if (autoCapture && steadyRef.current >= 3 && !firedRef.current) {
+          firedRef.current = true;
+          shutterRef.current();
+        }
+      } catch { setDetect(null); steadyRef.current = 0; setSteady(0); }
       finally { busyRef.current = false; }
     }, 700);
     return () => clearInterval(t);
-  }, [liveGuide, videoRef]);
+  }, [liveGuide, autoCapture, videoRef]);
 
+  const holdMsg = steady >= 3 ? 'Capturing… · جارٍ الالتقاط' : steady > 0 ? 'Hold still… · اثبت مكانك' : null;
   return (
     <Pad>
       <div style={h1(28)}>{title}</div>
       <div dir="rtl" style={arSub(18)}>{ar}</div>
       <ErrorNote error={error} />
-      <CardFrame videoRef={videoRef} caption={caption} detect={detect} showZones={liveGuide} />
+      <CardFrame videoRef={videoRef} caption={holdMsg || caption} detect={detect} showZones={liveGuide} />
       <ShutterButton onClick={onShutter} />
     </Pad>
   );
