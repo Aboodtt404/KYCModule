@@ -879,7 +879,12 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         # Blur gate: a motion-blurred card yields garbage digits/text no matter
         # how good the readers are. Floor calibrated on office captures
         # 2026-07-28: catastrophic blur scored 13.8, every usable capture ≥ 17.
-        _MIN_SHARP = float(os.getenv("CAPTURE_MIN_SHARPNESS", "15"))
+        # OFF by default (0): two calibration attempts both mis-fired on real
+        # captures (2026-07-28 — sharp phone frames score 8-12 in both
+        # measurement domains). The sharpest-of-5 client grab + checksum/verdict
+        # abstains already handle bad captures honestly. Re-enable via env only
+        # after calibrating on the debug_captures corpus.
+        _MIN_SHARP = float(os.getenv("CAPTURE_MIN_SHARPNESS", "0"))
         # Measure the ORIGINAL capture, not the rectified card: the homography
         # warp stretches the card onto the 1712px canonical canvas and smooths
         # pixels — sharp captures measured 8-11 post-warp vs the threshold
