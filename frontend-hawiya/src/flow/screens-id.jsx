@@ -1,0 +1,257 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
+import { Card, CardFrame, IconBadge, Mono, Row, ShutterButton, TitleAr, BusyScreen } from '@/components/ui';
+import { detectFields } from '@/lib/ocr';
+import { grabSmallBlob } from '@/lib/camera';
+
+const Pad = ({ children, style }) => (
+  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
+);
+
+const ErrorNote = ({ error }) => error ? (
+  <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>{error}</div>
+) : null;
+
+export function Welcome({ begin }) {
+  const steps = [
+    ['Scan your national ID — front & back', 'امسح بطاقتك من الأمام والخلف'],
+    ['Take a selfie with a short head turn', 'التقط صورة سيلفي مع حركة رأس بسيطة'],
+    ['Confirm your phone by SMS code', 'أكد رقم هاتفك برسالة نصية']
+  ];
+  return (
+    <Pad style={{ padding: '0 26px 30px' }}>
+      <div style={{ paddingTop: 46 }}>
+        <div style={{ width: 64, height: 64, borderRadius: 22, background: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: F.display, fontSize: 34, fontWeight: 800, color: C.surface }}>هـ</div>
+        <div style={{ ...h1(38), marginTop: 22 }}>Verify your<br />identity</div>
+        <div dir="rtl" style={{ ...arSub(22), marginTop: 6 }}>تحقق من هويتك في دقائق</div>
+      </div>
+      <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {steps.map(([en, ar], i) => (
+          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 13, background: '#fff', boxShadow: '0 2px 8px rgba(61,44,34,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: C.primary, flex: 'none' }}>{i + 1}</div>
+            <div style={{ fontSize: 13.5 }}>{en}<div dir="rtl" style={{ fontSize: 12, color: C.inkSoft }}>{ar}</div></div>
+          </div>
+        ))}
+      </div>
+      <div style={{ flex: 1 }} />
+      <div style={{ fontSize: 11, lineHeight: 1.6, color: C.inkSoft, marginBottom: 14 }}>
+        By continuing you consent to processing of your ID data for verification. Your consent is logged; you can request deletion at any time. Face images are never stored.
+      </div>
+      <button onClick={begin} style={btnPrimary}>Begin · ابدأ</button>
+    </Pad>
+  );
+}
+
+export function SvcDown({ begin, error }) {
+  return (
+    <Pad style={{ alignItems: 'center', justifyContent: 'center', padding: '0 30px 30px', textAlign: 'center' }}>
+      <IconBadge bg={C.errBg} fg={C.errFg} size={74}>!</IconBadge>
+      <div style={{ ...h1(30), marginTop: 20 }}>Verification is temporarily unavailable</div>
+      <div dir="rtl" style={arSub()}>الخدمة غير متاحة مؤقتًا</div>
+      <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 14, lineHeight: 1.6 }}>
+        {error || "Our document reader isn't responding. Nothing was submitted — please try again in a few minutes."}
+      </div>
+      <button onClick={begin} style={{ ...btnPrimary, width: 'auto', marginTop: 26, background: C.cocoa, borderRadius: 14, padding: '14px 34px', fontSize: 14, boxShadow: 'none' }}>
+        Try again · حاول مجددًا
+      </button>
+      <Mono style={{ fontSize: 10, color: C.inkFaint, marginTop: 18 }}>GET /health → unreachable</Mono>
+    </Pad>
+  );
+}
+
+export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, liveGuide = false }) {
+  const [detect, setDetect] = useState(null);
+  const busyRef = useRef(false);
+
+  // Live field labels: poll the detector with downscaled viewfinder frames.
+  // Never overlaps requests; stale results are simply replaced by the next tick.
+  useEffect(() => {
+    if (!liveGuide) return undefined;
+    const t = setInterval(async () => {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth || busyRef.current) return;
+      busyRef.current = true;
+      try {
+        const blob = await grabSmallBlob(v);
+        const res = await detectFields(blob, AbortSignal.timeout(3000));
+        setDetect(res?.card ? res : null);
+      } catch { setDetect(null); }
+      finally { busyRef.current = false; }
+    }, 700);
+    return () => clearInterval(t);
+  }, [liveGuide, videoRef]);
+
+  return (
+    <Pad>
+      <div style={h1(28)}>{title}</div>
+      <div dir="rtl" style={arSub(18)}>{ar}</div>
+      <ErrorNote error={error} />
+      <CardFrame videoRef={videoRef} caption={caption} detect={detect} showZones={liveGuide} />
+      <ShutterButton onClick={onShutter} />
+    </Pad>
+  );
+}
+
+export function FrontProcessing({ stage, healthOnly = false }) {
+  const items = ['Detecting card & fields', 'Extracting Arabic text', 'Running integrity checks'];
+  const mark = (i) => (stage > i ? '✓' : stage === i ? '●' : '○');
+  const color = (i) => (stage > i ? C.okFg : stage === i ? C.primary : C.inkFaint);
+  return (
+    <BusyScreen en={healthOnly ? 'One moment…' : 'Reading your ID…'} ar={healthOnly ? 'لحظة من فضلك…' : 'جارٍ قراءة البطاقة…'}>
+      {!healthOnly && (
+        <>
+          <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 12, alignSelf: 'stretch' }}>
+            {items.map((label, i) => (
+              <div key={i} style={{ display: 'flex', gap: 11, alignItems: 'center', fontSize: 13, color: color(i) }}>
+                <span style={{ width: 20, textAlign: 'center' }}>{mark(i)}</span>{label}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 26 }}>This usually takes 10–20 seconds</div>
+        </>
+      )}
+    </BusyScreen>
+  );
+}
+
+function reasonsFrom(front) {
+  const checks = front?.verification?.checks;
+  if (Array.isArray(checks)) {
+    const bad = checks.filter((c) => c && c.passed === false && c.reason).map((c) => c.reason);
+    if (bad.length) return bad;
+  }
+  return ["The national ID check digit doesn't add up — this usually means a digit was misread or the card is damaged."];
+}
+
+export function VerdictReject({ front, go }) {
+  return (
+    <Pad style={{ padding: '26px 26px 30px' }}>
+      <IconBadge bg={C.errBg} fg={C.errFg}>✕</IconBadge>
+      <TitleAr en="We couldn't verify this ID" ar="تعذّر التحقق من هذه البطاقة" />
+      <Card style={{ marginTop: 18, padding: '16px 18px', borderRadius: 16 }}>
+        <div style={{ fontSize: 11, color: C.inkSoft, textTransform: 'uppercase', letterSpacing: 0.6 }}>Why it failed</div>
+        {reasonsFrom(front).map((r, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: i ? 8 : 10 }}>
+            <span style={{ color: C.errFg, fontWeight: 700 }}>·</span>
+            <div style={{ fontSize: 13, lineHeight: 1.5 }}>{r}</div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 8 }}>
+          <span style={{ color: C.errFg, fontWeight: 700 }}>·</span>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>Try brighter, even lighting and hold the card flat.</div>
+        </div>
+      </Card>
+      <div style={{ marginTop: 14, background: C.warnBg, borderRadius: 14, padding: '12px 16px', fontSize: 12, color: C.warnFg, lineHeight: 1.5 }}>
+        <b>Nothing was saved.</b> A rejected scan is never stored or submitted.
+      </div>
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('front-cap')} style={btnPrimary}>Scan again · إعادة المسح</button>
+    </Pad>
+  );
+}
+
+const spaceNid = (nid) => (nid || '').replace(/^(\d)(\d{2})(\d{2})(\d{2})(\d{7})$/, '$1 $2 $3 $4 $5');
+
+function IdSummaryCard({ front, nidColor }) {
+  return (
+    <Card style={{ marginTop: 16, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', borderBottom: `1px solid ${C.line}` }}>
+        {front?.face_image
+          ? <img src={`data:image/jpeg;base64,${front.face_image}`} alt="" style={{ width: 44, height: 44, borderRadius: 13, objectFit: 'cover' }} />
+          : <div style={{ width: 44, height: 44, background: C.shell, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.inkFaint, fontSize: 10 }}>صورة</div>}
+        <div>
+          <div style={{ fontSize: 14.5, fontWeight: 600 }}>{front?.first_name || front?.full_name || '—'}</div>
+          <div dir="rtl" style={{ fontSize: 13.5, color: C.inkSoft }}>{front?.full_name || ''}</div>
+        </div>
+      </div>
+      <Row label="الرقم القومي" last
+        value={<Mono style={{ fontSize: 13, fontWeight: 600, color: nidColor }}>{spaceNid(front?.national_id)}</Mono>} />
+    </Card>
+  );
+}
+
+export function VerdictAccept({ front, go }) {
+  return (
+    <Pad style={{ padding: '26px 26px 30px' }}>
+      <IconBadge bg={C.okBg} fg={C.okFg}>✓</IconBadge>
+      <TitleAr en="ID verified" ar="تم التحقق من البطاقة" />
+      <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 10, lineHeight: 1.6 }}>
+        Every field was independently corroborated — no confirmation needed.
+      </div>
+      <IdSummaryCard front={front} nidColor={C.okFg} />
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('back-cap')} style={btnPrimary}>Continue · متابعة</button>
+    </Pad>
+  );
+}
+
+export function VerdictAbstain({ front, addr, setAddr, go }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <Pad style={{ padding: '20px 24px 28px' }}>
+      <div style={h1(29)}>Almost there — check your details</div>
+      <div dir="rtl" style={arSub(18)}>راجع بياناتك قبل المتابعة</div>
+      <div style={{ marginTop: 12, background: C.warnBg, borderRadius: 16, padding: '13px 15px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ width: 32, height: 32, borderRadius: 11, background: C.warnChip, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', fontSize: 15, fontWeight: 800, color: C.warnFg, fontFamily: F.display }}>!</div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, color: C.warnFg }}>
+          <b>One quick check.</b> The ID passed its integrity checks, but we couldn't corroborate every field — confirm or fix them below.
+        </div>
+      </div>
+      <Card style={{ marginTop: 13, padding: '4px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 18px', borderBottom: `1px solid ${C.line}` }}>
+          {front?.face_image
+            ? <img src={`data:image/jpeg;base64,${front.face_image}`} alt="" style={{ width: 44, height: 44, borderRadius: 13, objectFit: 'cover' }} />
+            : <div style={{ width: 44, height: 44, background: C.shell, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.inkFaint, fontSize: 10 }}>صورة</div>}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600 }}>{front?.first_name || '—'}</div>
+            <div dir="rtl" style={{ fontSize: 13.5, color: C.inkSoft }}>{front?.full_name || ''}</div>
+          </div>
+        </div>
+        <Row label="الرقم القومي"
+          value={<Mono style={{ fontSize: 13, fontWeight: 600, color: C.primary }}>{spaceNid(front?.national_id)}</Mono>} />
+        <Row label="Birth date · الميلاد" value={front?.birth_date || '—'} />
+        {editing ? (
+          <div style={{ padding: '10px 18px', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input value={addr} onChange={(e) => setAddr(e.target.value)} dir="rtl"
+              style={{ flex: 1, border: `1.5px solid ${C.primary}`, borderRadius: 10, padding: '9px 12px', fontSize: 13, background: '#fff7ef', outline: 'none', color: C.ink }} />
+            <button onClick={() => setEditing(false)}
+              style={{ border: 'none', background: C.primary, color: '#fff', borderRadius: 10, padding: '9px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: F.body }}>Save</button>
+          </div>
+        ) : (
+          <Row label="العنوان" last value={
+            <span dir="rtl" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              {addr || '—'}
+              <button dir="ltr" onClick={() => setEditing(true)}
+                style={{ border: 'none', background: 'none', fontSize: 11.5, color: C.primary, fontWeight: 600, cursor: 'pointer', fontFamily: F.body, padding: 0 }}>تعديل</button>
+            </span>
+          } />
+        )}
+      </Card>
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('back-cap')} style={{ ...btnPrimary, padding: 16 }}>Yes, that's me · نعم، هذا أنا</button>
+      <button onClick={() => go('front-cap')} style={{ ...btnGhost, marginTop: 10 }}>Scan again · المسح من جديد</button>
+    </Pad>
+  );
+}
+
+export function BackProcessing() {
+  return <BusyScreen en="Checking both sides match…" ar="جارٍ مطابقة الوجهين…" />;
+}
+
+export function BackMismatch({ front, back, go }) {
+  return (
+    <Pad style={{ padding: '26px 26px 30px' }}>
+      <IconBadge bg={C.warnBg} fg={C.warnFg}>≠</IconBadge>
+      <TitleAr en="The back doesn't match the front" ar="الوجه الخلفي لا يطابق الأمامي" size={29} />
+      <Card style={{ marginTop: 18, padding: '6px 0', borderRadius: 16 }}>
+        <Row label="Front · الأمام" value={<Mono style={{ fontSize: 13, fontWeight: 600 }}>{front?.national_id || '—'}</Mono>} />
+        <Row label="Back · الخلف" last value={<Mono style={{ fontSize: 13, fontWeight: 600, color: C.errFg }}>{back?.national_id || '—'}</Mono>} />
+      </Card>
+      <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 14, lineHeight: 1.6 }}>
+        Make sure you're scanning the back of the <b>same card</b>, then try again.
+      </div>
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('back-cap')} style={btnPrimary}>Re-scan the back · إعادة مسح الخلف</button>
+    </Pad>
+  );
+}

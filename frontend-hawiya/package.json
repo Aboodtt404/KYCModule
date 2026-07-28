@@ -1,0 +1,26 @@
+{
+  "name": "frontend-hawiya",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 3001",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dfinity/agent": "*",
+    "@dfinity/auth-client": "*",
+    "@dfinity/candid": "*",
+    "@dfinity/principal": "*",
+    "@icp-sdk/core": "*",
+    "qrcode.react": "*",
+    "react": "*",
+    "react-dom": "*",
+    "react-router-dom": "*"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "*",
+    "vite": "*"
+  }
+}
