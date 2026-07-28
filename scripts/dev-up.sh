@@ -17,14 +17,14 @@ fi
 # ── 1a. PaddleOCR sidecar (:5001) — must be up before the OCR server pings it ──
 if ! curl -s -m 2 http://127.0.0.1:5001/health >/dev/null 2>&1; then
   LOG "starting PP sidecar"
-  (cd "$ROOT/ocr-service" && setsid nohup ./.venv/bin/python pp_service.py > pp_service.log 2>&1 < /dev/null &)
+  (cd "$ROOT/ocr-service" && setsid nohup ./.venv/bin/python pp_service.py >> pp_service.log 2>&1 < /dev/null &)
   for i in $(seq 1 30); do curl -s -m 2 http://127.0.0.1:5001/health >/dev/null 2>&1 && break; sleep 3; done
 fi
 
 # ── 1b. OCR server (:5000) ────────────────────────────────────────────────────
 if ! curl -s -m 2 http://127.0.0.1:5000/health >/dev/null 2>&1; then
   LOG "starting OCR server"
-  (cd "$ROOT/ocr-service" && setsid nohup ./.venv/bin/python server.py > server.log 2>&1 < /dev/null &)
+  (cd "$ROOT/ocr-service" && setsid nohup ./.venv/bin/python server.py >> server.log 2>&1 < /dev/null &)
 fi
 
 # ── 2. vite (:3000 legacy app, :3001 hawiya) ─────────────────────────────────

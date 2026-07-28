@@ -19,13 +19,15 @@ export { kycCanisterId, smsCanisterId };
 // query racing it fails certificate verification (this is latency-dependent: invisible
 // on localhost, near-certain through a tunnel). `agentReady` resolves once the root key
 // is in place; await it before the first canister call of a page.
-// The rust_backend declarations use @icp-sdk/core, the sms ones use @dfinity/agent —
-// each actor gets an agent from its own package to avoid interface drift.
-import { HttpAgent as KycHttpAgent } from '@icp-sdk/core/agent';
-import { HttpAgent as SmsHttpAgent } from '@dfinity/agent';
+// BOTH declaration sets under src/declarations are generated on @icp-sdk/core —
+// the agent MUST come from the same package. A @dfinity/agent HttpAgent passes
+// queries (both APIs have .query) but crashes on updates: the @icp-sdk Actor
+// calls agent.update(), which @dfinity/agent doesn't have ("agent.update is
+// not a function" — Wael's send_sms failure, 2026-07-28).
+import { HttpAgent } from '@icp-sdk/core/agent';
 
-const kycAgent = new KycHttpAgent({ host: AGENT_HOST });
-const smsAgent = new SmsHttpAgent({ host: AGENT_HOST });
+const kycAgent = new HttpAgent({ host: AGENT_HOST });
+const smsAgent = new HttpAgent({ host: AGENT_HOST });
 export const agentReady =
   process.env.DFX_NETWORK !== 'ic'
     ? Promise.allSettled([kycAgent.fetchRootKey(), smsAgent.fetchRootKey()])
