@@ -256,6 +256,19 @@ def _clean_arabic(text: str) -> str:
 _HEADER_RE = re.compile(r"جمهوري|بطاق[ةه]|تحقيق|الشخصي[ةه]")
 
 
+def _nid_plausible(nid: str) -> bool:
+    """Checksum AND structure. Checksum alone false-accepts ~1/11 of arbitrary
+    digit windows — live office test 2026-07-28: an issue-date+NID digit run
+    yielded a checksum-passing window starting inside the date (month '30').
+    Month/day/governorate plausibility kills those."""
+    if not re.fullmatch(r"[23]\d{13}", nid or ""):
+        return False
+    if _nid_checksum_ok is not None and not _nid_checksum_ok(nid):
+        return False
+    mm, dd = int(nid[3:5]), int(nid[5:7])
+    return 1 <= mm <= 12 and 1 <= dd <= 31 and nid[7:9] in _GOV
+
+
 def _national_id(texts: list[str]) -> Optional[str]:
     # Normalise Arabic-Indic numerals (٠-٩) → Western so the NID regex matches —
     # many real card fronts print the NID in Arabic-Indic. Scan every 14-digit
@@ -273,7 +286,7 @@ def _national_id(texts: list[str]) -> Optional[str]:
             w = s[i:i + 14]
             if not re.fullmatch(r"[23]\d{13}", w):
                 continue
-            if _nid_checksum_ok is not None and _nid_checksum_ok(w):
+            if _nid_plausible(w):
                 return w
             if first_hit is None:
                 first_hit = w
@@ -294,7 +307,7 @@ def _recover_nid(digits: str) -> Optional[str]:
     cands = set()
     for drop in combinations(range(n), n - 14):
         cand = "".join(d for i, d in enumerate(digits) if i not in set(drop))
-        if re.fullmatch(r"[23]\d{13}", cand) and _nid_checksum_ok(cand):
+        if _nid_plausible(cand):
             cands.add(cand)
     return cands.pop() if len(cands) == 1 else None
 
@@ -491,7 +504,7 @@ def _odjects_back_pipeline(path: str) -> Optional[dict]:
     if _PP_READER:
         top_band = img[0:int(0.30 * img.shape[0])]
         cand = _national_id([_to_western_digits(_pp_read_field(top_band, "nid_back_band"))])
-        if cand and (_nid_checksum_ok is None or _nid_checksum_ok(cand)):
+        if cand and _nid_plausible(cand):
             out["national_id"] = cand
 
     for key, (_c, (x1, y1, x2, y2)) in best.items():
@@ -981,7 +994,7 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         # (one misclassified digit). A checksum-valid scan NID is strictly
         # better evidence — swap it in before the verifier sees the bad one.
         if (re.fullmatch(r"[23]\d{13}", nid) and _nid_checksum_ok is not None
-                and not _nid_checksum_ok(nid) and scan.get("nid_checksum")):
+                and not _nid_checksum_ok(nid) and _nid_plausible(scan.get("nid") or "")):
             log.info("digit-YOLO NID fails checksum — using checksum-valid scan NID")
             nid = scan["nid"]
         if not re.fullmatch(r"[23]\d{13}", nid):
@@ -989,14 +1002,14 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             nid_fallback = None
             # Det-first scan NID first: checksum-gated, reads Arabic-Indic
             # natively, 96% checksum-valid on the frozen TEST.
-            if scan.get("nid") and scan.get("nid_checksum"):
+            if _nid_plausible(scan.get("nid") or ""):
                 nid_fallback = scan["nid"]
                 log.info("det-first scan NID: checksum-valid")
             # Then a targeted PP read of the tight nid crop (office test:
             # recovered 3/5 the digit model missed). Checksum-valid only.
             if not nid_fallback and _PP_READER and nid_crop is not None and nid_crop.size:
                 cand = _national_id([_to_western_digits(_pp_read_field(nid_crop, "nid_digit_row"))])
-                if cand and (_nid_checksum_ok is None or _nid_checksum_ok(cand)):
+                if cand and _nid_plausible(cand):
                     nid_fallback = cand
                     log.info("PP NID fallback: found checksum-valid NID")
             if not nid_fallback and nid_crop is not None and nid_crop.size:

@@ -37,13 +37,17 @@ def checksum_ok(nid: str) -> bool:
 
 
 def nid_from_digits(s: str):
-    """Best 14-digit window: checksum-valid preferred, else first structural."""
+    """Best 14-digit window: checksum+date-valid preferred, else first structural.
+
+    Checksum alone false-accepts ~1/11 of arbitrary windows — a date fused with
+    the NID in one digit run produced a checksum-passing window with month '30'
+    (live office test 2026-07-28). Month/day plausibility closes that."""
     first = None
     for i in range(max(0, len(s) - 13)):
         w = s[i:i + 14]
         if not re.fullmatch(r"[23]\d{13}", w):
             continue
-        if checksum_ok(w):
+        if checksum_ok(w) and 1 <= int(w[3:5]) <= 12 and 1 <= int(w[5:7]) <= 31:
             return w, True
         if first is None:
             first = w
