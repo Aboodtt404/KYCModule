@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
 import { Card, CardFrame, IconBadge, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
@@ -29,16 +30,20 @@ export function Welcome({ begin }) {
   return (
     <Pad style={{ padding: '0 26px 30px' }}>
       <div style={{ paddingTop: 46 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 22, background: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: F.display, fontSize: 34, fontWeight: 800, color: C.surface }}>هـ</div>
+        <motion.div initial={{ scale: 0.5, opacity: 0, rotate: -8 }} animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+          style={{ width: 64, height: 64, borderRadius: 22, background: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: F.display, fontSize: 34, fontWeight: 800, color: C.surface }}>هـ</motion.div>
         <div style={{ ...h1(38), marginTop: 22 }}>Verify your<br />identity</div>
         <div dir="rtl" style={{ ...arSub(22), marginTop: 6 }}>تحقق من هويتك في دقائق</div>
       </div>
       <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {steps.map(([en, ar], i) => (
-          <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <motion.div key={i} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 + i * 0.12, duration: 0.4, ease: 'easeOut' }}
+            style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 38, height: 38, borderRadius: 13, background: '#fff', boxShadow: '0 2px 8px rgba(61,44,34,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: C.primary, flex: 'none' }}>{i + 1}</div>
             <div style={{ fontSize: 13.5 }}>{en}<div dir="rtl" style={{ fontSize: 12, color: C.inkSoft }}>{ar}</div></div>
-          </div>
+          </motion.div>
         ))}
       </div>
       <div style={{ flex: 1 }} />

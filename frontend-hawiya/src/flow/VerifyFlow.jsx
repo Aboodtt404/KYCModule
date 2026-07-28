@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
 import { health, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
@@ -277,6 +278,11 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
           <StepDots phase={phase} />
         </div>
       )}
+      <AnimatePresence mode="wait">
+      <motion.div key={step}
+        initial={{ opacity: 0, x: 26 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -26 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       {step === 'welcome' && <Welcome {...props} />}
       {(step === 'svc-down') && <SvcDown {...props} />}
       {step === 'front-proc-health' && <FrontProcessing stage={-1} healthOnly />}
@@ -308,6 +314,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       {step === 'review' && <ReviewScreen {...props} />}
       {step === 'submitting' && <Submitting />}
       {step === 'status' && <StatusScreen {...props} />}
+      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
