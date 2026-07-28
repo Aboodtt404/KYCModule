@@ -47,6 +47,11 @@ except Exception as _verr:  # pragma: no cover - defensive
     _VERIFIER = None
     log.warning("NIDVerifier unavailable (%s) — results will NOT carry a verdict", _verr)
 
+try:
+    from verifier.checksum import is_valid_checksum as _nid_checksum_ok
+except Exception:  # pragma: no cover - defensive
+    _nid_checksum_ok = None
+
 # ── PaddleOCR text-field reader (names/address) — sidecar client ────────────
 # Paddle runs in its own process (pp_service.py, :5001): in-process it deadlocks/
 # segfaults against TensorFlow+torch (mixed CUDA/OpenMP runtimes). Guarded so a
@@ -82,7 +87,9 @@ def _pp_read_field(bgr_crop, field: str) -> str:
         req = urllib.request.Request(
             f"{_PP_URL}/read", data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as r:
-            return _json.loads(r.read()).get("text", "") or ""
+            text = _json.loads(r.read()).get("text", "") or ""
+            log.info("pp read %s: %r", field, text)
+            return text
     except Exception as e:
         log.warning("pp sidecar read failed for %s: %s", field, e)
         return ""
@@ -222,18 +229,45 @@ def _clean_arabic(text: str) -> str:
 
 def _national_id(texts: list[str]) -> Optional[str]:
     # Normalise Arabic-Indic numerals (٠-٩) → Western so the NID regex matches —
-    # many real card fronts print the NID in Arabic-Indic.
+    # many real card fronts print the NID in Arabic-Indic. Scan every 14-digit
+    # window and prefer one that passes the mod-11 checksum: the multipass OCR
+    # variants happily produce digit soup, and structure alone can't tell a real
+    # NID from a hallucinated one.
     joined = re.sub(r"\s+", "", _to_western_digits(" ".join(texts)))
-    # First pass: raw OCR text
-    m = re.search(r"[23]\d{13}", joined)
-    if m:
-        return m.group(0)
-    # Second pass: fix common digit/letter confusions then retry.
-    # Strip non-ASCII first so Arabic text isn't corrupted by the translation table.
+    # Second pass fixes common digit/letter confusions; strip non-ASCII first so
+    # Arabic text isn't corrupted by the translation table.
     ascii_only = re.sub(r"[^\x00-\x7F]", "", joined)
     fixed = ascii_only.translate(_DIGIT_FIX)
-    m = re.search(r"[23]\d{13}", fixed)
-    return m.group(0) if m else None
+    first_hit = None
+    for s in (joined, fixed):
+        for i in range(max(0, len(s) - 13)):
+            w = s[i:i + 14]
+            if not re.fullmatch(r"[23]\d{13}", w):
+                continue
+            if _nid_checksum_ok is not None and _nid_checksum_ok(w):
+                return w
+            if first_hit is None:
+                first_hit = w
+    return first_hit
+
+
+def _recover_nid(digits: str) -> Optional[str]:
+    """Recover a 14-digit NID from an over-length YOLO digit read (15-16 digits).
+
+    Spurious extra detections are the common digit-model failure. Drop every
+    possible set of extra positions and accept ONLY when exactly one distinct
+    checksum-valid candidate remains — ambiguity means abstain, never guess.
+    """
+    n = len(digits)
+    if _nid_checksum_ok is None or not (14 < n <= 16):
+        return None
+    from itertools import combinations
+    cands = set()
+    for drop in combinations(range(n), n - 14):
+        cand = "".join(d for i, d in enumerate(digits) if i not in set(drop))
+        if re.fullmatch(r"[23]\d{13}", cand) and _nid_checksum_ok(cand):
+            cands.add(cand)
+    return cands.pop() if len(cands) == 1 else None
 
 def _derive(nid: str) -> dict:
     if not nid or len(nid) < 14:
@@ -848,6 +882,11 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         # (digit allowlist, Western+Arabic-Indic) and normalise, then fall back
         # to a whole-card read.
         if not re.fullmatch(r"[23]\d{13}", nid):
+            recovered = _recover_nid(nid)
+            if recovered:
+                log.info("YOLO digit NID recovered %d→14 digits via checksum", len(nid))
+                nid = recovered
+        if not re.fullmatch(r"[23]\d{13}", nid):
             log.warning("YOLO digit NID invalid (%d digits) — OCR fallback", len(nid))
             nid_fallback = None
             if nid_crop is not None and nid_crop.size:
@@ -1108,12 +1147,39 @@ def run_front_ocr(path: str) -> dict:
     return {"extracted_data": best_data, "method": method}
 
 
+_DEBUG_CAPTURE_DIR = os.getenv("DEBUG_CAPTURE_DIR",
+                               str(Path(__file__).parent / "debug_captures"))
+_DEBUG_CAPTURE_KEEP = 40
+
+
+def _save_debug_capture(data: bytes, tag: str) -> None:
+    """Keep the last N raw uploads so real-capture failures are reproducible.
+
+    Live captures are the only eval data we have for the real phone-camera
+    domain (the dataset cards don't cover it). Contains PII — the dir is
+    gitignored and pruned; set DEBUG_CAPTURE_DIR=off to disable.
+    """
+    if _DEBUG_CAPTURE_DIR.lower() in ("off", "0", ""):
+        return
+    try:
+        d = Path(_DEBUG_CAPTURE_DIR)
+        d.mkdir(exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        (d / f"{ts}_{tag}.jpg").write_bytes(data)
+        old = sorted(d.glob("*.jpg"))[:-_DEBUG_CAPTURE_KEEP]
+        for p in old:
+            p.unlink(missing_ok=True)
+    except Exception as e:  # pragma: no cover - never break OCR for debug I/O
+        log.warning("debug capture save failed: %s", e)
+
+
 def _run_ocr():
     t0 = time.time()
     if not request.data:
         return jsonify({"error": "No image data"}), 400
     if len(request.data) > _MAX_IMAGE_BYTES:
         return jsonify({"error": "Image too large (max 10 MB)"}), 413
+    _save_debug_capture(request.data, "front")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
         f.write(request.data)
@@ -1158,6 +1224,7 @@ def egyptian_id_back():
         return jsonify({"success": False, "error": "No image data"}), 400
     if len(request.data) > _MAX_IMAGE_BYTES:
         return jsonify({"success": False, "error": "Image too large (max 10 MB)"}), 413
+    _save_debug_capture(request.data, "back")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
         f.write(request.data)
         path = f.name
