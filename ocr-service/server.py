@@ -880,10 +880,11 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         # how good the readers are. Floor calibrated on office captures
         # 2026-07-28: catastrophic blur scored 13.8, every usable capture ≥ 17.
         _MIN_SHARP = float(os.getenv("CAPTURE_MIN_SHARPNESS", "15"))
-        # Laplacian variance is resolution-dependent — measure at a fixed width
-        # (the ~856px the threshold was calibrated at) so rectification to the
-        # large canonical canvas doesn't read as blur.
-        _g = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+        # Measure the ORIGINAL capture, not the rectified card: the homography
+        # warp stretches the card onto the 1712px canonical canvas and smooths
+        # pixels — sharp captures measured 8-11 post-warp vs the threshold
+        # calibrated at ~856px on raw crops (live bug 2026-07-28 evening).
+        _g = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         if _g.shape[1] != 856:
             _g = cv2.resize(_g, (856, max(1, int(_g.shape[0] * 856 / _g.shape[1]))))
         _lap = float(cv2.Laplacian(_g, cv2.CV_64F).var())
