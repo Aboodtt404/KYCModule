@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
-import { Card, CardFrame, IconBadge, Mono, Row, ShutterButton, TitleAr, BusyScreen } from '@/components/ui';
+import { Card, CardFrame, IconBadge, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
 import { buzz, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
 
@@ -144,7 +144,22 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
       </div>
       <ErrorNote error={error} />
       <CardFrame videoRef={videoRef} caption={holdMsg || caption} detect={detect} showZones={liveGuide} />
-      <ShutterButton onClick={onShutter} />
+      <div style={{ position: 'relative', alignSelf: 'center', marginTop: 20 }}>
+        <div style={{
+          position: 'absolute', inset: -7, borderRadius: '50%', pointerEvents: 'none',
+          background: `conic-gradient(${steady >= 3 ? C.okFg : C.accent} ${(Math.min(steady, 3) / 3) * 360}deg, transparent 0deg)`,
+          opacity: steady > 0 ? 1 : 0, transition: 'opacity .25s ease',
+          WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px))',
+          mask: 'radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px))'
+        }} />
+        <button onClick={onShutter} aria-label="Capture" style={{
+          width: 72, height: 72, borderRadius: '50%', background: '#fff', display: 'block',
+          border: `5px solid ${steady >= 3 ? C.okFg : C.primary}`, cursor: 'pointer',
+          transform: steady >= 3 ? 'scale(1.06)' : 'scale(1)',
+          transition: 'border-color .3s ease, transform .3s ease',
+          boxShadow: '0 6px 16px rgba(194,65,12,.3)'
+        }} />
+      </div>
     </Pad>
   );
 }

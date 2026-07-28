@@ -53,6 +53,20 @@ const PROMPTS = [
   ['Perfect!', 'ممتاز!']
 ];
 
+// Language-free motion guide: a head glyph that tilts the way we're asking.
+const HEAD_TILT = [0, 0, -24, 24, 0];   // deg per framesDone (index = frames captured)
+
+function HeadGuide({ framesDone }) {
+  const deg = HEAD_TILT[Math.min(framesDone, 4)];
+  return (
+    <div style={{ position: 'absolute', left: '50%', bottom: 54, transform: 'translateX(-50%)', width: 44, height: 44,
+      borderRadius: 14, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontSize: 24, display: 'inline-block', transition: 'transform .9s cubic-bezier(.45,0,.25,1)',
+        transform: `perspective(80px) rotateY(${deg}deg)` }}>🙂</span>
+    </div>
+  );
+}
+
 export function SelfieCapture({ videoRef, framesDone }) {
   const [en, ar] = PROMPTS[Math.min(framesDone, 4)];
   return (
@@ -61,7 +75,11 @@ export function SelfieCapture({ videoRef, framesDone }) {
         <video ref={videoRef} autoPlay playsInline muted
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 50% 40%,rgba(245,166,35,.12),transparent 60%)' }} />
-        <div style={{ position: 'absolute', left: '50%', top: '44%', transform: 'translate(-50%,-50%)', width: 210, height: 270, borderRadius: '50%', border: `3px solid ${framesDone >= 4 ? '#7bbf7e' : C.accent}` }} />
+        <div style={{ position: 'absolute', left: '50%', top: '44%', transform: 'translate(-50%,-50%)', width: 210, height: 270, borderRadius: '50%',
+          border: `3px solid ${framesDone >= 4 ? '#7bbf7e' : C.accent}`,
+          boxShadow: framesDone > 0 ? `0 0 0 5px rgba(123,191,126,${0.12 + framesDone * 0.12})` : 'none',
+          transition: 'box-shadow .6s ease, border-color .6s ease' }} />
+        <HeadGuide framesDone={framesDone} />
         <div style={{ position: 'absolute', left: 0, right: 0, top: '9%', textAlign: 'center', fontFamily: F.display, fontSize: 23, fontWeight: 700, color: C.surface }}>{en}</div>
         <div dir="rtl" style={{ position: 'absolute', left: 0, right: 0, top: '16%', textAlign: 'center', fontSize: 14, color: '#d8c7b2' }}>{ar}</div>
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 20, display: 'flex', justifyContent: 'center', gap: 9 }}>
