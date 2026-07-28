@@ -44,10 +44,12 @@ verification uses retinaface (opencv-5 haar data is gone) and active liveness DE
 when challenge frames exist (Laplacian gate alone false-flagged real users).
 
 Numbers (220 held-out TEST vs claude_gold_v2, content-fair, firstName/lastName/address):
-EasyOCR serving 35.6/24.2/19.1 → **PP serving 62.6/56.6/52.3** (reader ceiling on
-ideal crops 81.3/74.0/63.6). Eval harness: `/home/abdelrahman/kyc-bakeoff/serving_eval.py`
-(throttle ≥2.2s/req — endpoint limit 30/min). The serving↔ceiling gap is
-localization on low-res eval cards; real phone captures should land higher.
+EasyOCR serving 35.6/24.2/19.1 → PP serving (morning) 62.6/56.6/52.3 → **after the
+det-first + template-zone + box-priority + plausibility stack (evening):
+84.0/69.4/57.3** — firstName in serving now EXCEEDS the old ideal-crop reader
+ceiling (81.3/74.0/63.6); 3/220 requests were blur-gate rejections (correct).
+Eval harness: `/home/abdelrahman/kyc-bakeoff/serving_eval.py` (throttle ≥2.2s/req —
+endpoint limit 30/min; wait for office-test quiet before running).
 
 ### 3. Rec fine-tune (`/home/abdelrahman/kyc-finetune`) — trained, REVERTED on real captures
 Corpus: 2223 train + 396 val tight line crops from TRAIN gold (TEST never touched).
