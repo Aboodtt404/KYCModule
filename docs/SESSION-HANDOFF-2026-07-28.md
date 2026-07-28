@@ -58,9 +58,9 @@ un-reverses arabic rec output.
 Run v3 (best val 82.8% @epoch37; frozen TEST CF): firstName **83.6** (stock 81.3),
 lastName **76.7** (74.0), address 58.6 (61.4 — corpus had no address lines). Serving
 eval on the dataset cards improved to 63.5/59.4/52.3 — **but Abdelrahman's live phone
-test produced garbage names**, so per-field routing is now OFF by default
-(`PP_USE_FT_NAMES=1` in the sidecar env to re-enable; model kept at
-`ocr-service/models/arabic_rec_ft_v3`). Lesson: the TRAIN corpus is low-res dataset
+test produced garbage names**, so the fine-tune was removed from serving entirely
+(weights remain at `/home/abdelrahman/kyc-finetune/output/v3`; serving is exactly the
+pre-SFT stock reader). Lesson: the TRAIN corpus is low-res dataset
 crops; the fine-tune overfits that domain and loses on clean high-res captures the
 dataset never covered. **Do not re-enable without a real-capture eval set** — the
 server now saves the last 40 uploads to `ocr-service/debug_captures/` (gitignored,
