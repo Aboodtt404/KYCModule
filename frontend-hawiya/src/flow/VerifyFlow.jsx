@@ -74,19 +74,31 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
 
   // ── camera lifecycle per capture step ───────────────────────────────────
   useEffect(() => {
+    if (!['front-cap', 'back-cap', 'selfie-cap'].includes(step)) return undefined;
     const facing = step === 'selfie-cap' ? 'user' : 'environment';
-    if (['front-cap', 'back-cap', 'selfie-cap'].includes(step) && videoRef.current) {
-      openCamera(videoRef.current, facing).catch(() =>
-        setError('Camera unavailable — allow camera access or use HTTPS.'));
-    }
-    return () => closeCamera(videoRef.current);
+    // The step-transition animation mounts the screen (and its <video>) a beat
+    // AFTER the step changes — retry until the element exists.
+    let cancelled = false;
+    const tryOpen = (attempt = 0) => {
+      if (cancelled) return;
+      const v = videoRef.current;
+      if (v) {
+        openCamera(v, facing).catch(() =>
+          setError('Camera unavailable — allow camera access or use HTTPS.'));
+      } else if (attempt < 30) {
+        setTimeout(() => tryOpen(attempt + 1), 100);
+      }
+    };
+    tryOpen();
+    return () => { cancelled = true; closeCamera(videoRef.current); };
   }, [step]);
 
   // ── front of card ────────────────────────────────────────────────────────
   const captureFront = async () => {
     const video = videoRef.current;
     setError(null);
-    const blob = await grabSharpestBlob(video);
+    const blob = video && video.videoWidth ? await grabSharpestBlob(video) : null;
+    if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
     setShotUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
     setProcStage(0); go('front-proc');
@@ -115,7 +127,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const captureBack = async () => {
     const video = videoRef.current;
     setError(null);
-    const blob = await grabSharpestBlob(video);
+    const blob = video && video.videoWidth ? await grabSharpestBlob(video) : null;
+    if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
     go('back-proc');
     const ctl = new AbortController(); abortRef.current = ctl;
