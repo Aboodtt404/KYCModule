@@ -9,9 +9,11 @@ only reads the Arabic text fields (firstName / lastName / address).
 Post-process = punctuation-token strip + TRAIN-only gazetteer respace/snap, params
 frozen on a TRAIN-val slice (textread/pp_postproc_params.json). Zero TEST leakage.
 
-Name fields route to a rec fine-tuned on TRAIN name lines (models/arabic_rec_ft_v3:
-firstName 83.6 / lastName 76.7 CF on frozen TEST). The fine-tune corpus had no address
-lines and regressed address (58.6 vs 61.4), so address stays on the stock rec.
+A rec fine-tuned on TRAIN name lines lives in models/arabic_rec_ft_v3 (firstName 83.6 /
+lastName 76.7 CF on frozen TEST vs stock 81.3/74.0) but is OFF by default
+(PP_USE_FT_NAMES=1 to enable): on a real phone capture (2026-07-28) it produced garbage
+names where stock read fine — the TRAIN corpus is low-res dataset crops and the model
+overfits that domain. Do not re-enable without a real-capture eval set.
 """
 from __future__ import annotations
 
@@ -83,7 +85,7 @@ def init() -> bool:
                 raise
         _device = kwargs["device"]
 
-        if Path(_FT_REC_DIR).is_dir():
+        if os.getenv("PP_USE_FT_NAMES", "0") == "1" and Path(_FT_REC_DIR).is_dir():
             try:
                 _ocr_ft = PaddleOCR(**{**kwargs, "text_recognition_model_dir": _FT_REC_DIR})
                 log.info("pp_reader: fine-tuned name rec loaded from %s", _FT_REC_DIR)
