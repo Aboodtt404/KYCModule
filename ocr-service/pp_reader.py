@@ -131,9 +131,11 @@ def _rtl_join(items) -> str:
     return " ".join(out).strip()
 
 
-def _postprocess(text: str, kind: str) -> str:
+def _postprocess(text: str, kind: str | None) -> str:
     text = " ".join(t for t in (text or "").split() if t not in PUNCT_TOKENS)
-    if _gaz is None or _params is None:
+    # Unknown field kinds (back-of-card: occupation, dates, demo block) get the
+    # raw read — the gazetteer is names/places-only and would mis-snap them.
+    if kind is None or _gaz is None or _params is None:
         return text
     try:
         import gazetteer as G
@@ -161,4 +163,4 @@ def read_field(bgr_crop, field: str) -> str:
                   max(p[0] for p in poly), max(p[1] for p in poly)]
                  for poly in (res.get("rec_polys") or [])]
     items = [([float(v) for v in list(b)], t.strip()) for b, t in zip(boxes, texts) if t and t.strip()]
-    return _postprocess(_rtl_join(items), _FIELD_KIND.get(field, "address"))
+    return _postprocess(_rtl_join(items), _FIELD_KIND.get(field))

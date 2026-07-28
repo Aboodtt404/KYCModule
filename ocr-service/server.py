@@ -419,18 +419,29 @@ def _odjects_back_pipeline(path: str) -> Optional[dict]:
     if img is None:
         return None
     img = _deskew(img)
+    # Crop to the card FIRST — live captures put the card in a third of the
+    # frame (table, hands) and the field detector misses most boxes on the
+    # full scene (office test 2026-07-28: nid_back found on 0/2 real backs).
+    if _yolo_card is not None:
+        try:
+            cdet = _yolo_card(img, verbose=False)[0]
+            if cdet.boxes is not None and len(cdet.boxes):
+                cb = max(cdet.boxes, key=lambda b: float(b.conf[0]))
+                cx1, cy1, cx2, cy2 = [int(v) for v in cb.xyxy[0]]
+                if float(cb.conf[0]) >= 0.4 and (cx2 - cx1) > 100 and (cy2 - cy1) > 60:
+                    img = img[max(0, cy1):cy2, max(0, cx1):cx2]
+        except Exception as exc:  # noqa: BLE001
+            log.warning("back card crop failed: %s", exc)
     try:
         det = _yolo_fields(img, verbose=False)[0]
     except Exception as exc:  # noqa: BLE001
         log.warning("detect_odjects back inference failed: %s", exc)
         return None
-    if det.boxes is None or len(det.boxes) == 0:
-        return None
 
     reader = get_reader()
     best: dict[str, tuple[float, tuple]] = {}
     demo: tuple[float, tuple] | None = None
-    for b in det.boxes:
+    for b in (det.boxes if det.boxes is not None else []):
         name = det.names[int(b.cls[0])]
         conf = float(b.conf[0])
         xy   = tuple(int(v) for v in b.xyxy[0])
@@ -442,17 +453,60 @@ def _odjects_back_pipeline(path: str) -> Optional[dict]:
             demo = (conf, xy)
 
     out = {"national_id": "", "marital_status": "", "occupation": "", "issue_date": "", "expiry_date": ""}
+
+    # Primary NID source: the back prints the NID in ARABIC-INDIC numerals in
+    # the card's top band — the digit YOLO knows only Western glyphs and the
+    # field detector rarely finds nid_back on live captures. PP-read the band
+    # and take a checksum-valid 14-digit window; anything less stays empty
+    # (the verifier abstains) rather than guessed.
+    if _PP_READER:
+        top_band = img[0:int(0.30 * img.shape[0])]
+        cand = _national_id([_to_western_digits(_pp_read_field(top_band, "nid_back_band"))])
+        if cand and (_nid_checksum_ok is None or _nid_checksum_ok(cand)):
+            out["national_id"] = cand
+
     for key, (_c, (x1, y1, x2, y2)) in best.items():
         crop = img[max(0, y1):y2, max(0, x1):x2]
         if crop.size == 0:
             continue
-        txt = _to_western_digits(" ".join(reader.readtext(crop, detail=0, paragraph=False)).strip())
         if key == "national_id":
-            digits = re.sub(r"\D", "", txt)
-            out[key] = digits[:14] if len(digits) >= 14 else digits
-        elif key in ("issue_date", "expiry_date"):
+            if out["national_id"]:
+                continue
+            # The back NID uses the same digit font as the front — read it with
+            # the digit YOLO + checksum recovery (EasyOCR digit reads here were
+            # the research brief's 0/32 back-side failure).
+            nid = ""
+            if _yolo_digits is not None:
+                try:
+                    info = []
+                    for dr in _yolo_digits(crop, verbose=False):
+                        for db in dr.boxes:
+                            info.append((int(db.cls[0]), int(db.xyxy[0][0])))
+                    info.sort(key=lambda d: d[1])
+                    nid = "".join(str(d[0]) for d in info)
+                    if not re.fullmatch(r"[23]\d{13}", nid):
+                        nid = _recover_nid(nid) or nid
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("back NID digit read failed: %s", exc)
+            if not re.fullmatch(r"[23]\d{13}", nid or ""):
+                txt = _to_western_digits(" ".join(reader.readtext(crop, detail=0, paragraph=False)))
+                digits = re.sub(r"\D", "", txt)
+                nid = digits[:14] if len(digits) >= 14 else digits
+            out[key] = nid or ""
+            continue
+        # Arabic text + date fields: PP sidecar first (unknown field kinds get a
+        # raw read, no gazetteer), EasyOCR as fallback — same ranking as the front.
+        txt = _pp_read_field(crop, key) if _PP_READER else ""
+        if not txt:
+            txt = " ".join(reader.readtext(crop, detail=0, paragraph=False)).strip()
+        txt = _to_western_digits(txt)
+        if key in ("issue_date", "expiry_date"):
             m = _DATE_RE.search(txt) or re.search(r"\d{4}\s*/\s*\d{1,2}", txt)
-            out[key] = (m.group(0).replace(" ", "") if m else txt)
+            if m:
+                out[key] = m.group(0).replace(" ", "")
+            else:  # keep digits only — drop the printed label ("البطاقة سارية حتى")
+                digits = re.sub(r"\D", "", txt)
+                out[key] = digits or _clean_arabic(txt)
         else:  # occupation
             out[key] = _clean_arabic(txt)
 
@@ -461,13 +515,16 @@ def _odjects_back_pipeline(path: str) -> Optional[dict]:
         x1, y1, x2, y2 = demo[1]
         crop = img[max(0, y1):y2, max(0, x1):x2]
         if crop.size:
-            dtxt = " ".join(reader.readtext(crop, detail=0, paragraph=False))
+            dtxt = _pp_read_field(crop, "demo") if _PP_READER else ""
+            if not dtxt:
+                dtxt = " ".join(reader.readtext(crop, detail=0, paragraph=False))
             out["marital_status"] = _match_marital(dtxt)
     # …then a full-card text scan as fallback (the demo box can miss it).
     if not out["marital_status"]:
         full = " ".join(reader.readtext(img, detail=0, paragraph=False))
         out["marital_status"] = _match_marital(full)
 
+    log.info("back fields: %s", out)
     return out if any(out.values()) else None
 
 
@@ -563,7 +620,9 @@ except ImportError:
     _DEEPFACE = False
     log.warning("DeepFace not available — face extraction and /verify-face disabled")
 
-_FACE_THRESHOLD: int = max(30, min(99, int(os.getenv("FACE_THRESHOLD", "75"))))
+# Similarity is a sigmoid centred on ArcFace's same-person cosine boundary
+# (see verify_face): 50 == borderline same person. Default accepts exactly that.
+_FACE_THRESHOLD: int = max(30, min(99, int(os.getenv("FACE_THRESHOLD", "50"))))
 
 def _extract_face_from_id(image_path: str) -> Optional[str]:
     """
@@ -1383,11 +1442,6 @@ def verify_face():
             return jsonify({"error": "Could not extract face features. Please try again with a clearer photo.", "error_code": "ERR_EMBED_FAILED"}), 422
 
         dist = _cosine(id_rep, live_rep)
-        k, mid = 10, 0.6
-        similarity = 100 / (1 + np.exp(k * (dist - mid)))
-
-        THRESHOLD = _FACE_THRESHOLD
-        is_match = similarity >= THRESHOLD
 
         # Passive liveness: reject if the selfie looks like a photo of a screen/print.
         # Laplacian variance on the live image — printed photos have very low sharpness variance.
@@ -1430,6 +1484,24 @@ def verify_face():
             if liveness_ok and max_pair_dist < MOTION_MIN_DIST:
                 liveness_ok = False
                 liveness_reason = "no_motion"
+
+            # Match the ID against the BEST frame, not only the primary selfie:
+            # the identity-consistency check above already proved every frame is
+            # the same person, and a genuine ID-photo match can peak on any of
+            # them (the selfie may catch mid-blink / off-angle). An impostor
+            # gains nothing — all frames are of the impostor.
+            if liveness_ok and frame_reps:
+                dist = min([dist] + [_cosine(id_rep, fr) for fr in frame_reps])
+
+        # Similarity sigmoid centred on ArcFace's published same-person cosine
+        # boundary (0.68): similarity 50 == exactly borderline, >50 == ArcFace
+        # calls it the same person. The old centre (0.6) meant the default
+        # threshold demanded dist <= 0.49 — genuine users failed on real
+        # ID-photo-vs-selfie pairs (office test 2026-07-28: genuine dist 0.66).
+        k, mid = 10, 0.68
+        similarity = 100 / (1 + np.exp(k * (dist - mid)))
+        THRESHOLD = _FACE_THRESHOLD
+        is_match = similarity >= THRESHOLD
 
         # Metrics only (no image data) — needed to tune thresholds on real traffic
         log.info("verify-face: sim=%.1f dist=%.3f lap_var=%.0f mode=%s frames=%d ok=%s reason=%s",
