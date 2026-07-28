@@ -127,8 +127,29 @@ crop (`CAPTURE_MIN_SHARPNESS`, default 15 — catastrophic office capture scored
 every usable one ≥17) returns "hold steady" → frontend routes back to the camera.
 Debug-capture replays: send `X-Debug-Replay: 1` to avoid re-saving.
 
+## Det-first research (2026-07-28, `kyc-bakeoff/detfirst.py`)
+Question: can PP det+rec line boxes + geometry/content rules replace the YOLO field
+detector? Rules: NID row self-identifies (most digits, lower half, checksum-window),
+header by keyword OR geometry (centered/wide/top — rec garbles the text on low-res),
+then right-column Arabic lines top→bottom = firstName / lastName / address; serial =
+Latin line below NID. Results (content-fair):
+- REAL office captures: **5/5 perfect** — incl. fixing a box-crop misread (عمر not سمر)
+  and reading NIDs through blur that defeats the digit YOLO. Serial for free.
+- TRAIN-val 200: **80.6/73.7/67.3** — at the ideal-crop reader ceiling.
+- Frozen TEST 220 (one read): 65.3/58.9/50.9 vs bands' 67.6/68.0/58.2 — the gap is PP
+  det MISSING the tiny firstName word on low-res cards → all lines shift up one
+  (predicted fn == gold family name in most misses). Fixable on TRAIN only:
+  shift-guard (firstName is 1-2 tokens / y-position vs NID anchor) + 2× upscale.
+- **NID: 212/220 (96%) checksum-valid on TEST, 197/200 TRAIN, 5/5 real** — far beyond
+  the digit-YOLO path, and it reads Arabic-Indic NIDs natively.
+Proposed integration (not yet wired): one PP full-card pass in the sidecar —
+authoritative NID source (checksum-gated), name/address fallback replacing the band
+crops (which mis-anchor on real captures), cross-check vs field-box reads. Field
+detector stays primary for names on real captures.
+
 ## Backlog
-Office retest (face + back + box-priority + blur gate) → card/field detector
-retraining (serving gap) → address line-assembly conventions → date formatting on
-back reads (digits arrive un-slashed) → confidence-gate + escalation architecture
-(validated in research, never serving-wired) → stable domain / staging deploy.
+Office retest (face + back + box-priority + blur gate) → det-first serving
+integration (above) → card/field detector retraining (serving gap) → address
+line-assembly conventions → date formatting on back reads → confidence-gate +
+escalation architecture (validated in research, never serving-wired) → stable
+domain / staging deploy.
