@@ -227,6 +227,11 @@ def _clean_arabic(text: str) -> str:
     return text.strip()
 
 
+# Fixed card-header text ("جمهورية مصر العربية / بطاقة تحقيق الشخصية") — any field
+# read matching this landed on the header, not on a person's data.
+_HEADER_RE = re.compile(r"جمهوري|بطاق[ةه]|تحقيق|الشخصي[ةه]")
+
+
 def _national_id(texts: list[str]) -> Optional[str]:
     # Normalise Arabic-Indic numerals (٠-٩) → Western so the NID regex matches —
     # many real card fronts print the NID in Arabic-Indic. Scan every 14-digit
@@ -820,6 +825,15 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         # Deskew the cropped card so tilted photos don't degrade field detection
         cropped = _deskew(cropped)
 
+        # Blur gate: a motion-blurred card yields garbage digits/text no matter
+        # how good the readers are. Floor calibrated on office captures
+        # 2026-07-28: catastrophic blur scored 13.8, every usable capture ≥ 17.
+        _MIN_SHARP = float(os.getenv("CAPTURE_MIN_SHARPNESS", "15"))
+        _lap = float(cv2.Laplacian(cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+        if _lap < _MIN_SHARP:
+            log.info("capture too blurry (lap_var=%.1f < %.0f) — asking for a retake", _lap, _MIN_SHARP)
+            raise ValueError("The photo is too blurry. Hold the phone steady and try again.")
+
         # ── Step 2: detect fields on cropped card ────────────────────────────
         field_results = _yolo_fields(cropped, verbose=False)
         reader = get_reader()
@@ -830,6 +844,7 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         nid_crop = None   # tight NID region, kept for an OCR fallback
         nid_top_frac = None   # digit-row top as a fraction of card height (band anchor)
         serial = ""   # رقم المصنع — factory/serial number (front, bottom-left)
+        field_conf: dict[str, float] = {}   # best detector conf per text field
 
         for result in field_results:
             for box in result.boxes:
@@ -845,7 +860,12 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         serial = re.sub(r"[^A-Za-z0-9]", "", "".join(stxt)).upper()
 
                 elif class_name in ("firstName", "lastName", "address"):
-                    crop = cropped[y1:y2, x1:x2]
+                    conf = float(box.conf[0])
+                    if conf <= field_conf.get(class_name, 0.0):
+                        continue  # keep only the highest-confidence box per field
+                    # Slight padding — the detector crops the glyph ascenders tight.
+                    px, py = int((x2 - x1) * 0.03), int((y2 - y1) * 0.10)
+                    crop = cropped[max(0, y1 - py):y2 + py, max(0, x1 - px):x2 + px]
                     if crop.size == 0:
                         continue
                     # PaddleOCR (PP-OCRv6 det + arabic rec) — 81/74 vs EasyOCR's 36/24
@@ -857,6 +877,11 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         gray  = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
                         texts = reader.readtext(gray, detail=0, paragraph=True)
                         text  = _clean_arabic(" ".join(texts))
+                    if _HEADER_RE.search(text):
+                        text = ""  # box landed on the card header, not a field
+                    if not text:
+                        continue
+                    field_conf[class_name] = conf
                     if class_name == "firstName":
                         first_name = text
                     elif class_name == "lastName":
@@ -888,12 +913,14 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
                         nid = "".join(str(d[0]) for d in digit_info)
                         log.info("YOLO digit NID: [%d digits]", len(nid))
 
-        # ── Step 2b: digit-row-anchored band crops for the text fields ──────
-        # The field detector mislocates boxes on hard captures (it reads the card
-        # header as a name); the band geometry anchored to the NID digit row is
-        # the exact crop recipe the PP reader was benchmarked on (81/74 CF vs
-        # gold). Bands are the primary source; the YOLO box reads above remain
-        # as fallback when a band read comes back empty.
+        # ── Step 2b: digit-row-anchored band crops — FALLBACK only ──────────
+        # On real phone captures the field detector is accurate and the fixed
+        # band fractions mis-anchor by a full text line (office test 2026-07-28:
+        # the firstName band read the card header on several people's IDs while
+        # the detector boxes were spot-on). Bands now only fill fields the box
+        # reads left empty or read with low detector confidence — that keeps
+        # them as the rescue path for the low-res dataset-card domain where the
+        # detector is weak (their original job, 81/74 CF benchmark).
         if _PP_READER and nid_top_frac is None:
             # No 'nid' field box — anchor on the digit ROW from the digit detector
             # instead (this is what the benchmarked cropper does): the dominant
@@ -920,13 +947,19 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             _NID_TOP_REF, _XB = 0.80, (0.28, 1.0)
             hh, ww = cropped.shape[:2]
             shift = min(max(nid_top_frac, 0.55), 0.95) - _NID_TOP_REF
+            _MIN_BOX_CONF = 0.5
+            current = {"firstName": first_name, "lastName": second_name, "address": address}
             for fld, (f0, f1) in _BANDS.items():
+                if current[fld] and field_conf.get(fld, 0.0) >= _MIN_BOX_CONF:
+                    continue  # confident box read wins; band is the fallback
                 by0 = int(min(max(f0 + shift, 0.0), 1.0) * hh)
                 by1 = int(min(max(f1 + shift, 0.0), 1.0) * hh)
                 if by1 - by0 < 8:
                     continue
                 band = cropped[by0:by1, int(_XB[0] * ww):int(_XB[1] * ww)]
                 t = _clean_arabic(_pp_read_field(band, fld))
+                if _HEADER_RE.search(t):
+                    t = ""  # band mis-anchored onto the card header
                 if t:
                     if fld == "firstName":
                         first_name = t
@@ -948,7 +981,15 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
         if not re.fullmatch(r"[23]\d{13}", nid):
             log.warning("YOLO digit NID invalid (%d digits) — OCR fallback", len(nid))
             nid_fallback = None
-            if nid_crop is not None and nid_crop.size:
+            # PP reads the digit row better than either the digit YOLO on hard
+            # captures or EasyOCR (office test: recovered 3/5 checksum-valid NIDs
+            # the digit model missed). Checksum-valid only — never a guess.
+            if _PP_READER and nid_crop is not None and nid_crop.size:
+                cand = _national_id([_to_western_digits(_pp_read_field(nid_crop, "nid_digit_row"))])
+                if cand and (_nid_checksum_ok is None or _nid_checksum_ok(cand)):
+                    nid_fallback = cand
+                    log.info("PP NID fallback: found checksum-valid NID")
+            if not nid_fallback and nid_crop is not None and nid_crop.size:
                 crop_txt = reader.readtext(
                     nid_crop, detail=0, paragraph=False,
                     allowlist="0123456789٠١٢٣٤٥٦٧٨٩",
@@ -960,6 +1001,14 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             if nid_fallback:
                 nid = nid_fallback
                 log.info("EasyOCR NID fallback: found valid NID")
+            elif sum(bool(v) for v in (first_name, second_name, address)) >= 2:
+                # The field reads are good — do NOT throw them away for the
+                # multi-pass full-card scan (it produces random-word names;
+                # exactly what the office testers saw). Empty NID → the
+                # verifier REJECTs and the frontend asks for a retake, with
+                # the correctly-read name still shown.
+                nid = ""
+                log.info("no valid NID but field reads present — keeping YOLO extraction")
             else:
                 log.info("YOLO pipeline: no valid NID found — handing off to multi-pass")
                 return None
@@ -1026,6 +1075,8 @@ def _yolo_pipeline(image_path: str) -> Optional[dict]:
             "face_image":  None,   # filled in by caller after face extraction
         }
 
+    except ValueError:
+        raise  # deliberate quality rejection (blur gate) — surface to the client
     except Exception as exc:
         log.warning("YOLO pipeline error: %s", exc)
         return None
@@ -1220,6 +1271,8 @@ def _save_debug_capture(data: bytes, tag: str) -> None:
     """
     if _DEBUG_CAPTURE_DIR.lower() in ("off", "0", ""):
         return
+    if request.headers.get("X-Debug-Replay"):
+        return  # replaying a saved capture — don't re-save it
     try:
         d = Path(_DEBUG_CAPTURE_DIR)
         d.mkdir(exist_ok=True)
