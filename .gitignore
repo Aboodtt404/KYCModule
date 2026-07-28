@@ -51,3 +51,4 @@ ocr-service/__pycache__/
 *.log
 .env.local
 **/.env.local
+ocr-service/debug_captures/

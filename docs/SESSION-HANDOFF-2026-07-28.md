@@ -49,23 +49,29 @@ ideal crops 81.3/74.0/63.6). Eval harness: `/home/abdelrahman/kyc-bakeoff/servin
 (throttle ≥2.2s/req — endpoint limit 30/min). The serving↔ceiling gap is
 localization on low-res eval cards; real phone captures should land higher.
 
-### 3. Rec fine-tune (`/home/abdelrahman/kyc-finetune`) — DONE, SHIPPED for names
+### 3. Rec fine-tune (`/home/abdelrahman/kyc-finetune`) — trained, REVERTED on real captures
 Corpus: 2223 train + 396 val tight line crops from TRAIN gold (TEST never touched).
 Two hard-won rules (memory: `kyc-rec-finetune`): tighten band crops with PP det before
 training, and store Arabic labels in VISUAL order (`label[::-1]`) because paddlex
 un-reverses arabic rec output.
 
-Run v3 result (best val 82.8% @epoch37; frozen TEST, content-fair):
-firstName **83.6** (stock 81.3), lastName **76.7** (74.0), address 58.6 (61.4 —
-regressed; corpus had no address lines, and address bands are two-line crops with no
-per-line gold, so adding them is a pseudo-labeling project, not a quick rerun).
+Run v3 (best val 82.8% @epoch37; frozen TEST CF): firstName **83.6** (stock 81.3),
+lastName **76.7** (74.0), address 58.6 (61.4 — corpus had no address lines). Serving
+eval on the dataset cards improved to 63.5/59.4/52.3 — **but Abdelrahman's live phone
+test produced garbage names**, so per-field routing is now OFF by default
+(`PP_USE_FT_NAMES=1` in the sidecar env to re-enable; model kept at
+`ocr-service/models/arabic_rec_ft_v3`). Lesson: the TRAIN corpus is low-res dataset
+crops; the fine-tune overfits that domain and loses on clean high-res captures the
+dataset never covered. **Do not re-enable without a real-capture eval set** — the
+server now saves the last 40 uploads to `ocr-service/debug_captures/` (gitignored,
+`DEBUG_CAPTURE_DIR=off` to disable) and logs every PP field read, exactly so that
+eval set can be accumulated from live tests.
 
-**Shipped as per-field routing** in `ocr-service/pp_reader.py`: firstName/lastName →
-fine-tuned rec (`ocr-service/models/arabic_rec_ft_v3`, override `PP_FT_REC_DIR`),
-address → stock. Serving re-eval (220 TEST, 0 errors): 62.6/56.6/52.3 →
-**63.5/59.4/52.3** CF. Bench artifacts: `kyc-bakeoff/results_pp_v6det_ft3_crops.json`,
-scorer row `pp v6det ft3(crops)`. Raising address means fixing localization or the
-line-split labeling problem — backlog, not a rec-weights problem.
+Same live test exposed a digit-path failure (unrelated to the fine-tune): YOLO digits
+returned 15 detections → invalid → EasyOCR multipass hallucinated an NID → wrong
+birthdate. Fixed: over-length digit reads (15-16) are recovered by dropping digits and
+accepting a UNIQUE mod-11-checksum-valid candidate (`_recover_nid`), and `_national_id`
+now scans all 14-digit windows preferring checksum-valid ones.
 
 ## Decisions / discipline that must survive
 - TEST (claude_gold_v2 + crop_cache) is eval-only, read frozen, never shipped to a
