@@ -1598,12 +1598,20 @@ fn get_audit_log_page(limit: u64, offset: u64) -> (u64, Vec<(String, String)>) {
 #[update]
 fn cleanup_expired_sessions() -> Result<u64, String> {
     require_admin()?;
+    Ok(sweep_sessions())
+}
+
+/// Timer-driven session sweep: idle-dead sessions and anything older than the
+/// 24h absolute TTL (completed included) disappear without an admin lifting a
+/// finger. Armed hourly from init/post_upgrade.
+fn sweep_sessions() -> u64 {
     let now = ic_cdk::api::time();
     let expired_keys: Vec<BoundedString> = VERIFICATION_SESSIONS.with(|s| {
         s.borrow().iter()
             .filter_map(|(k, v)| {
                 serde_json::from_str::<VerificationSession>(&v.0).ok()
-                    .filter(|sess| session_expired(sess, now))
+                    .filter(|sess| session_expired(sess, now)
+                        || now.saturating_sub(sess.created_at) >= SESSION_TTL_NS)
                     .map(|_| k)
             })
             .collect()
@@ -1613,7 +1621,23 @@ fn cleanup_expired_sessions() -> Result<u64, String> {
         let mut store = s.borrow_mut();
         for k in expired_keys { store.remove(&k); }
     });
-    Ok(count)
+    count
+}
+
+fn arm_session_sweeper() {
+    ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(3600), || {
+        sweep_sessions();
+    });
+}
+
+#[ic_cdk::init]
+fn init() {
+    arm_session_sweeper();
+}
+
+#[ic_cdk::post_upgrade]
+fn post_upgrade() {
+    arm_session_sweeper();
 }
 
 /// Export all audit log entries between two nanosecond timestamps (inclusive). Admin only.

@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ic-cdk = "0.13.2"
+ic-cdk-timers = "0.6"
 ic-cdk-macros = "0.17.2"
 serde = { version = "1.0", features = ["derive"] }
 candid = "0.10"

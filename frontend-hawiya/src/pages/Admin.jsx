@@ -148,7 +148,8 @@ function Submissions({ actor }) {
     }));
   }, [actor, page]);
 
-  useEffect(() => { load().catch(() => {}); }, [load]);
+  const [loadErr, setLoadErr] = useState(null);
+  useEffect(() => { setLoadErr(null); load().catch((e) => setLoadErr(e.message || String(e))); }, [load]);
 
   const decide = async (id, status) => {
     try {
@@ -174,7 +175,8 @@ function Submissions({ actor }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.4fr 1fr 1fr 1.3fr', padding: '12px 20px', fontSize: 11, color: C.inkSoft, borderBottom: `1px solid ${C.line}` }}>
           <span>Applicant</span><span>National ID</span><span>OCR verdict</span><span>Status</span><span style={{ textAlign: 'right' }}>Actions</span>
         </div>
-        {rows.length === 0 && <div style={{ padding: '26px 20px', fontSize: 13, color: C.inkFaint }}>No submissions yet.</div>}
+        {loadErr && <div style={{ padding: '20px', fontSize: 12, color: C.errFg }}>Failed to load: {loadErr}</div>}
+        {!loadErr && rows.length === 0 && <div style={{ padding: '26px 20px', fontSize: 13, color: C.inkFaint }}>No submissions yet.</div>}
         {rows.map((r) => {
           const [vFg, vBg] = VERDICT_STYLE[r.verdict] || VERDICT_STYLE.abstain;
           return (
@@ -220,7 +222,8 @@ function Sessions({ actor }) {
       return { id, status: (j.status || 'pending').toLowerCase(), created: j.created_at, hb: j.last_heartbeat || j.updated_at };
     }));
   }, [actor]);
-  useEffect(() => { load().catch(() => {}); }, [load]);
+  const [loadErr, setLoadErr] = useState(null);
+  useEffect(() => { setLoadErr(null); load().catch((e) => setLoadErr(e.message || String(e))); }, [load]);
 
   const fmt = (ns) => {
     if (!ns) return '—';
@@ -295,7 +298,8 @@ function Clients({ actor }) {
       return { id, name: j.name || id, url: j.redirect_url || j.url || '', status: (j.status || 'active').toLowerCase() };
     }));
   }, [actor]);
-  useEffect(() => { load().catch(() => {}); }, [load]);
+  const [loadErr, setLoadErr] = useState(null);
+  useEffect(() => { setLoadErr(null); load().catch((e) => setLoadErr(e.message || String(e))); }, [load]);
 
   const register = async () => {
     const name = prompt('Client name?');

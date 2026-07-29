@@ -932,6 +932,7 @@ dependencies = [
  "hex",
  "ic-cdk 0.13.6",
  "ic-cdk-macros 0.17.2",
+ "ic-cdk-timers",
  "ic-stable-structures",
  "serde",
  "serde_json",
