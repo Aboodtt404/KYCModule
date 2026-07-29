@@ -64,6 +64,33 @@ except Exception as _berr:  # pragma: no cover - defensive
     _PDF417 = None
     log.warning("barcode417 unavailable (%s) — PDF417 stage disabled", _berr)
 
+try:
+    from pad_fft import screen_print_score as _PAD_FFT
+except Exception as _perr:  # pragma: no cover - defensive
+    _PAD_FFT = None
+    log.warning("pad_fft unavailable (%s) — spectral PAD stage disabled", _perr)
+
+
+def _pad_score(path: str) -> Optional[dict]:
+    """Spectral screen/print screening of the raw capture. LOG-ONLY until a
+    real replay corpus is scored (synthetic separation is perfect — 0/35
+    genuine flagged, 70/70 synthetic attacks caught, 2026-07-29 — but no real
+    photocopies/screen replays have gone through the flow yet). Never changes
+    a verdict; reported so office replay tests build the calibration corpus."""
+    if _PAD_FFT is None:
+        return None
+    try:
+        img = cv2.imread(path)
+        if img is None:
+            return None
+        pad = _PAD_FFT(img)
+        log.info("PAD spectral: peaks=%d energy=%.1f suspect=%s",
+                 pad["peaks"], pad["peak_energy"], pad["suspect"])
+        return pad
+    except Exception as exc:  # noqa: BLE001
+        log.warning("PAD spectral stage failed: %s", exc)
+        return None
+
 # ── PaddleOCR text-field reader (names/address) — sidecar client ────────────
 # Paddle runs in its own process (pp_service.py, :5001): in-process it deadlocks/
 # segfaults against TensorFlow+torch (mixed CUDA/OpenMP runtimes). Guarded so a
@@ -1395,6 +1422,7 @@ def _run_ocr():
             "processing_time": round(time.time() - t0, 2),
             "method": result["method"],
             "extracted_data": result["extracted_data"],
+            "pad": _pad_score(path),
             "face_verification": {
                 "face_detected": face_b64 is not None,
                 "face_image": face_b64,
@@ -1437,6 +1465,7 @@ def egyptian_id_back():
             "processing_time": round(time.time() - t0, 2),
             "extracted_data": result["extracted_data"],
             "barcode": result.get("barcode", {"decoded": False}),
+            "pad": _pad_score(path),
         })
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
