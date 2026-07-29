@@ -73,6 +73,31 @@ Office retest must produce: (a) hi-res back captures (does the strip decode
 live?), (b) a PAD corpus — same cards as photocopies and off-screen replays,
 (c) tilt bursts on real cards (calibrate holo thresholds, esp. hue_shift).
 
+## Passport OCR (built 2026-07-29 evening — 8181f79 + 99d8d3b)
+- `mrz.py`: pure ICAO 9303 TD3 logic — all five check digits (validated against
+  the ICAO specimen), century rules, composite-GATED confusion repair (naive
+  repair launders a misread check digit — caught by test). KNOWN CEILING:
+  L=21≡1 and G=16≡6 mod 10 make L↔1/G↔6 swaps INVISIBLE to every check digit;
+  only issuer format priors fix them (EGY doc number = letter+8 digits).
+- `passport_ocr.py`: morphological MRZ band location (never fixed crops) →
+  band deskew → EasyOCR allowlist over variants → best candidate pair by
+  valid_score → EGY prior. ACCEPT only when all checks pass and not expired.
+  Synthetic eval 12/12 ACCEPT byte-exact. `/passport` endpoint now saves debug
+  captures, decodes the page's PDF417, reads the VIZ NID (Arabic-Indic — the
+  NID is NOT in the Egyptian MRZ optional field; specimen shows filler),
+  cross-checks NID digits 2-7 == MRZ DOB (mismatch → ABSTAIN), extracts the
+  face, PAD-scores, and aliases extracted_data for legacy clients.
+- Hawiya: Welcome → "Use a passport instead" → landscape data-page capture
+  (flash discouraged — laminate glare) → check-digit chip review → selfie
+  chain reuses the passport photo. Egyptian passports have NO chip (no NFC).
+- Research (5-agent workflow, sources in run wf_451bd263-1fa): PassportEye
+  slow/~80%, FastMRZ AGPL — both rejected; tesseract+OCR-B traineddata is the
+  fallback if real captures score <95% check-pass. Names = holder's chosen
+  romanization of ONE undivided chain — fuzzy match only, never equality.
+- NEEDS REAL CAPTURES: validate MRZ read live + log whether newer passports
+  ever populate the MRZ optional field (the no-NID finding rests on one 2012
+  specimen).
+
 ## Standing discipline
 No mainnet without Kareem. TEST set stays frozen. GPU0 tenant untouchable (check
 free VRAM ≥7GB before anything heavy). Office retest is the highest-value input;
