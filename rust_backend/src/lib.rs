@@ -67,6 +67,47 @@ fn set_admin(principal: candid::Principal) -> Result<(), String> {
     Ok(())
 }
 
+/// The caller principal as the canister sees it — debugging aid for identity
+/// drift (local II mints new principals across logins/origins).
+#[query]
+fn whoami() -> String {
+    caller().to_text()
+}
+
+/// Controller sets a claim code; anyone presenting it becomes an admin. This is
+/// the recovery path for local II principal rotation — the UI offers a code
+/// field on the "not an admin" screen instead of requiring dfx each time.
+#[update]
+fn set_admin_code(code: String) -> Result<(), String> {
+    if !ic_cdk::api::is_controller(&caller()) {
+        return Err("Unauthorized: only the canister controller can set the code.".to_string());
+    }
+    if code.len() < 6 { return Err("Code too short (min 6 chars).".to_string()); }
+    COUNTERS.with(|c| {
+        c.borrow_mut().insert(BoundedString("admin_claim_code".into()), BoundedString(code));
+    });
+    Ok(())
+}
+
+#[update]
+fn claim_admin(code: String) -> Result<(), String> {
+    let stored = COUNTERS.with(|c| c.borrow().get(&BoundedString("admin_claim_code".into())).map(|v| v.0));
+    match stored {
+        Some(expected) if !expected.is_empty() && expected == code => {
+            let p = caller();
+            if p == candid::Principal::anonymous() {
+                return Err("Sign in first — anonymous callers cannot claim admin.".to_string());
+            }
+            ADMIN_MAP.with(|m| {
+                m.borrow_mut().insert(BoundedString(p.to_text()), BoundedString("1".into()));
+            });
+            audit("claim_admin", &p.to_text());
+            Ok(())
+        }
+        _ => Err("Invalid code.".to_string()),
+    }
+}
+
 // ── Serialisable data models ──────────────────────────────────────────────────
 // Fields are used only by serde for JSON deserialization, never read directly —
 // hence the allow(dead_code) attributes.

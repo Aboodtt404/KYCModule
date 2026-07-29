@@ -2,6 +2,9 @@ service : {
   "is_admin_check"               : () -> (bool) query;
   "get_stable_memory_used"       : () -> (nat64) query;
   "set_admin"                    : (principal) -> (variant { Ok; Err: text });
+  "set_admin_code"               : (text) -> (variant { Ok; Err: text });
+  "claim_admin"                  : (text) -> (variant { Ok; Err: text });
+  "whoami"                       : () -> (text) query;
 
   "upload"                       : (text, text, vec nat8, bool) -> ();
   "list"                         : () -> (vec record { path: text; mime_type: text; size: nat64; completed: bool; uploader: text; }) query;

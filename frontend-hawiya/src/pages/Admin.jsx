@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { C, F, h1, btnGhost } from '@/theme';
+import { C, F, h1, btnGhost, btnPrimary } from '@/theme';
 import { Chip, Mono, Wordmark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 
@@ -15,6 +15,47 @@ const tabStyle = (on) => ({
 });
 
 const parse = (txt) => { try { return JSON.parse(txt); } catch { return null; } };
+
+// Local II mints a fresh principal across logins/origins, so the admin list
+// goes stale. The controller sets a claim code once (set_admin_code); entering
+// it here admins the CURRENT principal — no dfx round-trip.
+function ClaimAdmin({ actor, principal }) {
+  const [code, setCode] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [seen, setSeen] = useState(null);
+  useEffect(() => { actor?.whoami?.().then(setSeen).catch(() => {}); }, [actor]);
+  const claim = async () => {
+    setMsg(null);
+    try {
+      const res = await actor.claim_admin(code.trim());
+      if (res && 'Err' in res) { setMsg(res.Err); return; }
+      window.location.reload();
+    } catch (e) { setMsg(e.message); }
+  };
+  return (
+    <div style={{ padding: 60, textAlign: 'center', maxWidth: 480, margin: '0 auto' }}>
+      <div style={h1(26)}>Not an admin</div>
+      <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 8 }}>
+        Signed in as <Mono style={{ fontSize: 11 }}>{principal}</Mono>
+      </div>
+      {seen && seen !== principal && (
+        <div style={{ fontSize: 11.5, color: C.warnFg, marginTop: 6 }}>
+          The canister sees <Mono style={{ fontSize: 10.5 }}>{seen}</Mono>
+        </div>
+      )}
+      <div style={{ marginTop: 26, fontSize: 12.5, color: C.inkSoft }}>
+        Enter the admin claim code to grant this identity access:
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
+        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="claim code"
+          onKeyDown={(e) => e.key === 'Enter' && claim()}
+          style={{ border: `1.5px solid ${C.line}`, borderRadius: 12, padding: '11px 14px', fontSize: 14, width: 220, outline: 'none' }} />
+        <button onClick={claim} style={{ ...btnPrimary, width: 'auto', padding: '11px 22px', fontSize: 13 }}>Claim</button>
+      </div>
+      {msg && <div style={{ marginTop: 12, fontSize: 12, color: C.errFg }}>{msg}</div>}
+    </div>
+  );
+}
 
 export default function Admin() {
   const { actor, isAuthenticated, isAdmin, principal, login, busy } = useAuth();
@@ -36,12 +77,7 @@ export default function Admin() {
   if (!isAdmin) {
     return (
       <Shell tab={tab} setTab={setTab} principal={principal}>
-        <div style={{ padding: 60, textAlign: 'center' }}>
-          <div style={h1(26)}>Not an admin</div>
-          <div style={{ fontSize: 13, color: C.inkSoft, marginTop: 8 }}>
-            Principal <Mono style={{ fontSize: 11 }}>{principal}</Mono> is not on the admin list.
-          </div>
-        </div>
+        <ClaimAdmin actor={actor} principal={principal} />
       </Shell>
     );
   }
