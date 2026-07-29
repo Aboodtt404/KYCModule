@@ -69,6 +69,7 @@ LOG "ii     : $II_URL"
 
 # ── 5. frontend env (vite watches .env.local and restarts itself) ────────────
 printf 'VITE_II_URL=%s\n' "$II_URL" > "$FE/.env.local"
+printf 'VITE_II_URL=%s\n' "$II_URL" > "$ROOT/frontend-hawiya/.env.local"
 
 # ── 6. re-point the II canisters at the new origins ──────────────────────────
 LOG "updating II backend origins (upgrade, keeps state)"
