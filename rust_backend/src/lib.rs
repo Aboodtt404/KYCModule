@@ -1215,7 +1215,7 @@ fn api_get_session(session_id: &str, client_id: &str) -> HttpResponse {
     }
 
     let now = ic_cdk::api::time();
-    let expired = session.status != "completed" && now.saturating_sub(session.created_at) >= SESSION_TTL_NS;
+    let expired = session_expired(&session, now);
 
     let mut out = serde_json::json!({
         "session_id": session.session_id,
@@ -1311,6 +1311,7 @@ async fn http_request_update(request: CanisterHttpRequestArgument) -> HttpRespon
             completed_at: None,
             data: None,
             client_id: Some(client_id.clone()),
+            last_active: ic_cdk::api::time(),
         };
         let json = match serde_json::to_string(&session) {
             Ok(j) => j,
@@ -1375,9 +1376,22 @@ struct VerificationSession {
     /// Set when the session was created by a partner via the HTTP API.
     #[serde(default)]
     client_id: Option<String>,
+    /// Last heartbeat/update (ns). 0 on legacy records -> created_at is used.
+    #[serde(default)]
+    last_active: u64,
 }
 
-const SESSION_TTL_NS: u64 = 24 * 60 * 60 * 1_000_000_000; // 24 hours
+const SESSION_TTL_NS: u64 = 24 * 60 * 60 * 1_000_000_000; // 24 hours (absolute cap)
+/// A session with no heartbeat for this long is dead — the phone beats every
+/// 5s while working, so anything idle for 10 minutes was abandoned.
+const SESSION_IDLE_TTL_NS: u64 = 10 * 60 * 1_000_000_000;
+
+fn session_expired(session: &VerificationSession, now: u64) -> bool {
+    if session.status == "completed" { return false; }
+    let last = session.last_active.max(session.created_at);
+    now.saturating_sub(session.created_at) >= SESSION_TTL_NS
+        || now.saturating_sub(last) >= SESSION_IDLE_TTL_NS
+}
 
 #[update]
 fn create_verification_session(session_id: String) -> Result<(), String> {
@@ -1389,6 +1403,7 @@ fn create_verification_session(session_id: String) -> Result<(), String> {
         completed_at: None,
         data: None,
         client_id: None,
+        last_active: ic_cdk::api::time(),
     };
     let json = serde_json::to_string(&session).map_err(|e| format!("Serialize error: {}", e))?;
     VERIFICATION_SESSIONS.with(|s| {
@@ -1402,7 +1417,7 @@ fn get_verification_status(session_id: String) -> Option<String> {
     VERIFICATION_SESSIONS.with(|s| {
         if let Some(json) = s.borrow().get(&BoundedString(session_id)) {
             if let Ok(session) = serde_json::from_str::<VerificationSession>(&json.0) {
-                let expired = ic_cdk::api::time().saturating_sub(session.created_at) >= SESSION_TTL_NS;
+                let expired = session_expired(&session, ic_cdk::api::time());
                 if !expired { return Some(json.0); }
             }
         }
@@ -1415,7 +1430,7 @@ fn verify_session(session_id: String) -> bool {
     VERIFICATION_SESSIONS.with(|sessions| {
         if let Some(json) = sessions.borrow().get(&BoundedString(session_id)) {
             if let Ok(session) = serde_json::from_str::<VerificationSession>(&json.0) {
-                let expired = ic_cdk::api::time().saturating_sub(session.created_at) >= SESSION_TTL_NS;
+                let expired = session_expired(&session, ic_cdk::api::time());
                 return !expired && session.status == "waiting";
             }
         }
@@ -1451,7 +1466,7 @@ fn complete_verification(session_id: String, kyc_data: String) -> Result<(), Str
         let current = store.get(&key).ok_or("Session not found.")?;
         let mut session: VerificationSession = serde_json::from_str(&current.0)
             .map_err(|e| format!("Parse error: {}", e))?;
-        if now.saturating_sub(session.created_at) >= SESSION_TTL_NS {
+        if session_expired(&session, now) {
             return Err("Session has expired.".to_string());
         }
         if session.status == "completed" {
@@ -1478,6 +1493,7 @@ fn update_session_status(session_id: String, status: &str, completed_at: Option<
         }
         session.status = status.to_string();
         session.completed_at = completed_at;
+        session.last_active = ic_cdk::api::time();
         let json = serde_json::to_string(&session).map_err(|e| format!("Serialize error: {}", e))?;
         store.insert(key, BoundedString(json));
         Ok(())
@@ -1546,7 +1562,7 @@ fn cleanup_expired_sessions() -> Result<u64, String> {
         s.borrow().iter()
             .filter_map(|(k, v)| {
                 serde_json::from_str::<VerificationSession>(&v.0).ok()
-                    .filter(|sess| now.saturating_sub(sess.created_at) >= SESSION_TTL_NS)
+                    .filter(|sess| session_expired(sess, now))
                     .map(|_| k)
             })
             .collect()
