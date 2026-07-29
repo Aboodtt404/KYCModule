@@ -3,8 +3,12 @@ import { C, F, cardStyle, h1, arSub, spinner } from '@/theme';
 
 // Brand wordmark
 export const Wordmark = ({ size = 22, onDark = false }) => (
-  <div style={{ fontFamily: F.display, fontSize: size, fontWeight: 800, lineHeight: 1, color: C.primary }}>
-    hawiya <span style={{ fontWeight: 400, color: onDark ? C.surface : C.ink }}>· هوية</span>
+  <div style={{ display: 'flex', alignItems: 'center', gap: Math.round(size * 0.42) }}>
+    <img src={onDark ? '/brand/hawiya-mark-dark.svg' : '/brand/hawiya-mark.svg'} alt=""
+      style={{ width: Math.round(size * 1.15), height: Math.round(size * 1.15), display: 'block' }} />
+    <div style={{ fontFamily: F.display, fontSize: size, fontWeight: 800, lineHeight: 1, color: C.primary }}>
+      hawiya <span style={{ fontWeight: 400, color: onDark ? C.surface : C.ink }}>· هوية</span>
+    </div>
   </div>
 );
 
