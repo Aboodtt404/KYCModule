@@ -1,7 +1,13 @@
 // Camera helpers — getUserMedia lifecycle + frame grabs.
-export async function openCamera(videoEl, facing = 'environment') {
+// hiRes: request 4K for the ID-side captures — the PDF417 strip on the back is
+// ~2px/module at 1080p (undecodable); ideal constraints degrade gracefully on
+// phones that can't deliver it.
+export async function openCamera(videoEl, facing = 'environment', { hiRes = false } = {}) {
+  const dims = hiRes
+    ? { width: { ideal: 3840 }, height: { ideal: 2160 } }
+    : { width: { ideal: 1920 }, height: { ideal: 1080 } };
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    video: { facingMode: facing, ...dims },
     audio: false
   });
   videoEl.srcObject = stream;
@@ -71,6 +77,50 @@ export async function grabSharpestBlob(videoEl, { samples = 5, intervalMs = 180,
     if (i < samples - 1) await new Promise((r) => setTimeout(r, intervalMs));
   }
   return best;
+}
+
+// Decode a camera JPEG into upright pixels and re-encode. ImageCapture stills
+// carry EXIF orientation that server-side cv2.imread IGNORES — without this the
+// OCR pipeline can receive a sideways card. Longest edge capped: 12MP adds
+// nothing over ~3200px for OCR/barcode but triples upload time.
+async function normalizeBlob(blob, maxEdge = 3200, quality = 0.92) {
+  const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((resolve) => c.toBlob(resolve, 'image/jpeg', quality));
+  } finally {
+    bmp.close();
+  }
+}
+
+// Best available still for the ID sides: ImageCapture.takePhoto() uses the FULL
+// photo sensor (typically 3-4x the video stream's resolution — what makes the
+// back strip's PDF417 resolvable) with autofocus. Falls back to the
+// sharpest-of-N video grab wherever takePhoto is unsupported (iOS Safari).
+export async function grabStillBlob(videoEl, opts = {}) {
+  const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+  if (track && typeof window !== 'undefined' && 'ImageCapture' in window) {
+    try {
+      const ic = new ImageCapture(track);
+      const caps = await ic.getPhotoCapabilities().catch(() => null);
+      const settings = {};
+      if (caps?.imageWidth?.max) settings.imageWidth = caps.imageWidth.max;
+      if (caps?.imageHeight?.max) settings.imageHeight = caps.imageHeight.max;
+      const shot = await Promise.race([
+        ic.takePhoto(settings).catch(() => ic.takePhoto()),
+        new Promise((r) => setTimeout(() => r(null), 2500)),
+      ]);
+      if (shot) {
+        const norm = await normalizeBlob(shot).catch(() => null);
+        if (norm) return norm;
+      }
+    } catch { /* fall through to video grab */ }
+  }
+  return grabSharpestBlob(videoEl, opts);
 }
 
 // Downscaled JPEG Blob for live detection frames (payload size)

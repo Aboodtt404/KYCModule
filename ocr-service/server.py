@@ -58,6 +58,12 @@ except Exception as _rerr:  # pragma: no cover - defensive
     _RECTIFY = None
     log.warning("rectify unavailable (%s) — falling back to crop+deskew", _rerr)
 
+try:
+    from barcode417 import decode_pdf417 as _PDF417
+except Exception as _berr:  # pragma: no cover - defensive
+    _PDF417 = None
+    log.warning("barcode417 unavailable (%s) — PDF417 stage disabled", _berr)
+
 # ── PaddleOCR text-field reader (names/address) — sidecar client ────────────
 # Paddle runs in its own process (pp_service.py, :5001): in-process it deadlocks/
 # segfaults against TensorFlow+torch (mixed CUDA/OpenMP runtimes). Guarded so a
@@ -578,11 +584,46 @@ def _odjects_back_pipeline(path: str) -> Optional[dict]:
 
 def run_back_ocr(path: str) -> dict:
     """
-    Core back-side extraction. Primary path is the detect_odjects.pt field
+    Core back-side extraction + PDF417 stage. Returns
+      {"extracted_data": {...}, "barcode": {...}}.
+    extracted_data keys: national_id, marital_status, occupation, issue_date,
+    expiry_date.
+    """
+    out = _run_back_extraction(path)
+    data = out["extracted_data"]
+
+    # ── PDF417 strip decode ──────────────────────────────────────────────
+    # A valid decode is a strong machine-issued-card signal, and any plausible
+    # NID in the payload is a THIRD independent NID leg. No decode is NEUTRAL:
+    # at 1080p captures the strip is ~2px/module (measured 2026-07-29) and no
+    # reader can resolve it — only hi-res client captures make this fire.
+    barcode = {"decoded": False}
+    img = cv2.imread(path)
+    if _PDF417 is not None and img is not None:
+        bc = _PDF417(img)
+        if bc:
+            nid_bc = next((n for n in bc.get("nids", []) if _nid_plausible(n)), "")
+            barcode = {"decoded": True, "n_chars": bc["n_chars"], "nid": nid_bc}
+            if nid_bc:
+                printed = data.get("national_id") or ""
+                if not _nid_plausible(printed):
+                    # printed-band read failed or is garbage — the barcode NID
+                    # is ECC-protected, take it
+                    data["national_id"] = nid_bc
+                    barcode["nid_source"] = "barcode"
+                elif printed != nid_bc:
+                    # both legs read but DISAGREE — fraud-grade signal, never
+                    # silently overwrite; surface for the verdict layer
+                    barcode["nid_mismatch"] = True
+    out["barcode"] = barcode
+    return out
+
+
+def _run_back_extraction(path: str) -> dict:
+    """
+    OCR back-side extraction. Primary path is the detect_odjects.pt field
     detector (real-trained, strong on issue/expiry/occupation/nid_back); falls
     back to multi-pass EasyOCR + heuristics if detection yields nothing.
-    Returns {"extracted_data": dict} with keys:
-      national_id, marital_status, occupation, issue_date, expiry_date.
     """
     primary = _odjects_back_pipeline(path)
     if primary is not None:
@@ -1395,6 +1436,7 @@ def egyptian_id_back():
             "success": True,
             "processing_time": round(time.time() - t0, 2),
             "extracted_data": result["extracted_data"],
+            "barcode": result.get("barcode", {"decoded": False}),
         })
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 400

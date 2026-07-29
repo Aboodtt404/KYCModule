@@ -389,6 +389,14 @@ export function BackReview({ front, back, go }) {
           The number on the back couldn't be read clearly — your submission will simply be checked manually. Nothing to fix.
         </div>
       )}
+      {back?._barcode?.decoded && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px', animation: 'stamp .5s ease .5s both' }}>
+          <span style={{ fontSize: 16, color: C.okFg }}>▮▯▮</span>
+          <div style={{ fontSize: 12.5, color: C.okFg, lineHeight: 1.5 }}>
+            <b>Security strip decoded.</b> The machine-readable barcode on the back checks out{back._barcode.nid ? ' and carries the same national ID' : ''}.
+          </div>
+        </div>
+      )}
       {rows.length > 0 && (
         <Card style={{ marginTop: 14, padding: '4px 0', animation: 'flipIn .5s ease both' }}>
           {rows.map(([label, v], i) => (

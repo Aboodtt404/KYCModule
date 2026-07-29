@@ -4,7 +4,7 @@ import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
 import { health, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
-import { buzz, closeCamera, grabB64, grabChallengeB64, grabSharpestBlob, openCamera } from '@/lib/camera';
+import { buzz, closeCamera, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
@@ -83,7 +83,9 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       if (cancelled) return;
       const v = videoRef.current;
       if (v) {
-        openCamera(v, facing).catch(() =>
+        // ID sides open at 4K when the phone supports it — the back strip's
+        // PDF417 needs the pixels; the selfie pipeline doesn't.
+        openCamera(v, facing, { hiRes: facing === 'environment' }).catch(() =>
           setError('Camera unavailable — allow camera access or use HTTPS.'));
       } else if (attempt < 30) {
         setTimeout(() => tryOpen(attempt + 1), 100);
@@ -97,7 +99,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const captureFront = async () => {
     const video = videoRef.current;
     setError(null);
-    const blob = video && video.videoWidth ? await grabSharpestBlob(video) : null;
+    const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
     if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
     setShotUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
@@ -127,18 +129,19 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const captureBack = async () => {
     const video = videoRef.current;
     setError(null);
-    const blob = video && video.videoWidth ? await grabSharpestBlob(video) : null;
+    const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
     if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
     go('back-proc');
     const ctl = new AbortController(); abortRef.current = ctl;
     try {
       const res = await readBack(blob, ctl.signal);
-      const b = res.extracted_data || {};
+      const b = { ...(res.extracted_data || {}), _barcode: res.barcode || null };
       setBack(b);
       const frontNid = (front?.national_id || '').replace(/\D/g, '');
       const backNid = (b.national_id || '').replace(/\D/g, '');
-      if (frontNid && backNid && frontNid !== backNid) go('back-mismatch');
+      // printed-band vs barcode disagreement is fraud-grade, same as front≠back
+      if ((frontNid && backNid && frontNid !== backNid) || res.barcode?.nid_mismatch) go('back-mismatch');
       else go('back-review');
     } catch (e) {
       go('back-cap'); setError(humanError(e, 'ocr'));
