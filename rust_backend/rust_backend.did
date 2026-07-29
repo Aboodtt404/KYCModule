@@ -17,7 +17,7 @@ service : {
   "update_kyc_status"            : (text, text) -> (variant { Ok: bool; Err: text });
   "get_kyc_submission"           : (text) -> (opt text) query;
   "get_all_kyc_submissions"      : () -> (vec record { text; text; });
-  "get_kyc_submissions_page"    : (nat64, nat64) -> (record { nat64; vec record { text; text; } }) query;
+  "get_kyc_submissions_page"    : (nat64, nat64) -> (nat64, vec record { text; text; }) query;
   "get_kyc_submissions_count"   : () -> (nat64) query;
   "get_kyc_status_counts"       : () -> (nat64, nat64, nat64) query;
   "delete_kyc_submission"        : (text) -> (variant { Ok; Err: text });
