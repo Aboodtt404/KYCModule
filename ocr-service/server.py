@@ -1478,12 +1478,34 @@ def egyptian_id_back():
     finally:
         _secure_delete(path)
 
+def _passport_viz_nid(path: str, mrz_birth: str) -> dict:
+    """Egyptian passports print the 14-digit NID in the VIZ ONLY (Arabic-Indic
+    digits under الرقم القومي) — it is NOT in the MRZ optional field. Read the
+    page with the ar+en reader, take the checksum+structure-valid 14-digit run,
+    and hard cross-check its embedded DOB (digits 2-7) against the MRZ DOB.
+    A mismatch is a fraud-grade signal; absence is NEUTRAL (small print, glare)."""
+    out = {"nid": "", "dob_match": None}
+    try:
+        texts = get_reader().readtext(path, detail=0, paragraph=False)
+        cand = _national_id(texts)
+        if cand and _nid_plausible(cand):
+            out["nid"] = cand
+            if mrz_birth and len(mrz_birth) == 10:  # YYYY-MM-DD
+                out["dob_match"] = cand[1:7] == (mrz_birth[2:4] + mrz_birth[5:7] + mrz_birth[8:10])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("passport VIZ NID read failed: %s", exc)
+    return out
+
+
 @app.post("/passport")
 @limiter.limit("30 per minute")
 def passport():
     t0 = time.time()
     if not request.data:
         return jsonify({"success": False, "error": "No image data"}), 400
+    if len(request.data) > _MAX_IMAGE_BYTES:
+        return jsonify({"success": False, "error": "Image too large (max 10 MB)"}), 413
+    _save_debug_capture(request.data, "passport")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
         f.write(request.data)
@@ -1493,6 +1515,27 @@ def passport():
         from passport_ocr import process_passport
         result = process_passport(path)
         result["processing_time"] = round(time.time() - t0, 2)
+        if result["success"] and result.get("data"):
+            data = result["data"]
+            # PDF417 redundancy leg — the Egyptian data page carries one
+            # encoding the MRZ + serial; decode is a bonus, absence neutral.
+            barcode = {"decoded": False}
+            img = cv2.imread(path)
+            if _PDF417 is not None and img is not None:
+                bc = _PDF417(img)
+                if bc:
+                    barcode = {"decoded": True, "n_chars": bc["n_chars"],
+                               "doc_number_match": data["document_number"] in (bc.get("text") or "")}
+            data["barcode"] = barcode
+            # VIZ NID leg (Arabic-Indic digits; NOT in the MRZ) + DOB cross-check
+            data["nid_viz"] = _passport_viz_nid(path, data.get("birth_date") or "")
+            if data["nid_viz"]["dob_match"] is False and data["verdict"] == "ACCEPT":
+                data["verdict"] = "ABSTAIN"  # NID on page disagrees with MRZ DOB
+            # face crop for the selfie-match step (same helper as the ID front)
+            data["face_image"] = _extract_face_from_id(path)
+            result["pad"] = _pad_score(path)
+            # legacy clients read extracted_data — alias, same object
+            result["extracted_data"] = data
         status = 200 if result["success"] else 422
         return jsonify(result), status
     except ImportError:
@@ -1503,7 +1546,7 @@ def passport():
         }), 501
     except Exception as exc:
         log.exception("Passport OCR route error")
-        return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({"success": False, "error": "Passport processing failed"}), 500
     finally:
         _secure_delete(path)
 

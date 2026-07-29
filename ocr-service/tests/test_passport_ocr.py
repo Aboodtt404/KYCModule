@@ -1,123 +1,65 @@
-"""
-Tests for passport_ocr.py pure functions.
-Heavy deps (easyocr, cv2) are stubbed so these run without GPU or model downloads.
-"""
+"""passport_ocr pipeline units that don't need OCR models.
+(MRZ parse/validate/repair logic is covered by tests/test_mrz.py.)"""
 import sys
-import types
+from pathlib import Path
 
-# ── stub heavy dependencies before import ────────────────────────────────────
-for mod in ("cv2", "easyocr", "numpy"):
-    if mod not in sys.modules:
-        stub = types.ModuleType(mod)
-        if mod == "numpy":
-            stub.ndarray = object
-            stub.array = lambda *a, **kw: None
-        sys.modules[mod] = stub
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from passport_ocr import _mrz_date, _mrz_name, _parse_td3  # noqa: E402
+import numpy as np
+
+import mrz
 
 
-# ── _mrz_date ────────────────────────────────────────────────────────────────
-
-class TestMrzDate:
-    def test_2000s_dob(self):
-        # yy=01 → 2001
-        assert _mrz_date("010315") == "15/03/2001"
-
-    def test_1900s_dob(self):
-        # yy=75 → 1975
-        assert _mrz_date("750820") == "20/08/1975"
-
-    def test_boundary_year_30(self):
-        # yy=30 → 2030 (boundary: <= 30 → 2000s)
-        assert _mrz_date("300101") == "01/01/2030"
-
-    def test_boundary_year_31(self):
-        # yy=31 → 1931
-        assert _mrz_date("310101") == "01/01/1931"
-
-    def test_zero_padded_day_month(self):
-        assert _mrz_date("950102") == "02/01/1995"
-
-    def test_invalid_returns_raw(self):
-        # Too short — should return original string, not crash
-        result = _mrz_date("XXXXXX")
-        assert isinstance(result, str)
+def _render_page_with_mrz(l1, l2, W=1600):
+    """Minimal page: white, two monospace MRZ lines near the bottom."""
+    import cv2
+    H = int(W / 1.42)
+    img = np.full((H, W, 3), 238, np.uint8)
+    for i, line in enumerate((l1, l2)):
+        y = int(H * (0.82 + 0.09 * i))
+        cv2.putText(img, line, (int(W * 0.03), y), cv2.FONT_HERSHEY_SIMPLEX,
+                    W / 1600 * 0.85, (30, 30, 30), 2, cv2.LINE_AA)
+    return img
 
 
-# ── _mrz_name ────────────────────────────────────────────────────────────────
-
-class TestMrzName:
-    def test_simple_name(self):
-        first, second, full = _mrz_name("SMITH<<JOHN<")
-        assert first == "JOHN"
-        assert second == ""
-        assert "JOHN" in full
-        assert "SMITH" in full
-
-    def test_name_with_second_given(self):
-        first, second, full = _mrz_name("HASSAN<<AHMED<IBRAHIM<")
-        assert first == "AHMED"
-        assert second == "IBRAHIM"
-
-    def test_no_given_name(self):
-        first, second, full = _mrz_name("NOUR<<")
-        assert first == ""
-        assert "NOUR" in full
-
-    def test_filler_brackets_stripped(self):
-        # '<' should be replaced with spaces, not kept
-        first, second, full = _mrz_name("IBRAHIM<<ALI<HASSAN<<")
-        assert "<" not in full
+def test_locate_mrz_finds_band():
+    from passport_ocr import locate_mrz
+    l1, l2 = mrz.compose_td3(surname="HASSAN", given_names="MOHAMED",
+                             doc_number="A23456789", birth_yymmdd="980122",
+                             expiry_yymmdd="310506")
+    img = _render_page_with_mrz(l1, l2)
+    box = locate_mrz(img)
+    assert box is not None
+    x0, y0, x1, y1 = box
+    H, W = img.shape[:2]
+    assert y0 > H * 0.6            # band is in the lower page
+    assert (x1 - x0) > W * 0.5     # spans most of the width
 
 
-# ── _parse_td3 ───────────────────────────────────────────────────────────────
+def test_locate_mrz_none_on_blank():
+    from passport_ocr import locate_mrz
+    assert locate_mrz(np.full((800, 1200, 3), 235, np.uint8)) is None
 
-class TestParseTd3:
-    # Real-looking (synthetic) Egyptian passport MRZ
-    LINE1 = "P<EGYHASSAN<<AHMED<IBRAHIM<<<<<<<<<<<<<<<<"
-    LINE2 = "A12345678<EGY9501011M3001015<<<<<<<<<<<<<<2"
 
-    def test_doc_type(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["doc_type"] == "P"
+def test_egy_doc_prior_fixes_invisible_pair():
+    # L->1 in an EGY doc number passes every check digit (mod-10 collision);
+    # only the letter+8digits format prior can restore it.
+    from passport_ocr import _egy_doc_prior
+    l1, l2 = mrz.compose_td3(surname="X", given_names="Y", doc_number="L12345678",
+                             birth_yymmdd="900101", expiry_yymmdd="300101")
+    corrupted = "1" + l2[1:]
+    p = mrz.parse_td3(l1, corrupted)
+    assert p["valid_score"] == 1.0 and p["document_number"] == "112345678"
+    fixed = _egy_doc_prior(p)
+    assert fixed["document_number"] == "L12345678"
+    assert fixed["valid_score"] == 1.0
+    assert fixed["doc_number_format_ok"] is True
 
-    def test_nationality(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["nationality"] == "EGY"
 
-    def test_document_number(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["document_number"] == "A12345678"
-
-    def test_birth_date_parsed(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["birth_date"] == "01/01/1995"  # 950101
-
-    def test_expiry_date_parsed(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["expiry_date"] == "01/01/2030"  # 300101
-
-    def test_gender_male(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert result["gender"] == "Male"
-
-    def test_gender_female(self):
-        line2 = self.LINE2[:20] + "F" + self.LINE2[21:]
-        result = _parse_td3(self.LINE1, line2)
-        assert result["gender"] == "Female"
-
-    def test_gender_unknown(self):
-        line2 = self.LINE2[:20] + "X" + self.LINE2[21:]
-        result = _parse_td3(self.LINE1, line2)
-        assert result["gender"] == "Unknown"
-
-    def test_full_name_contains_surname(self):
-        result = _parse_td3(self.LINE1, self.LINE2)
-        assert "HASSAN" in result["full_name"]
-
-    def test_short_lines_padded(self):
-        # Lines shorter than 44 chars should not crash (padded with '<')
-        result = _parse_td3("P<EGYFOO<<BAR", "A1234567")
-        assert isinstance(result, dict)
-        assert "doc_type" in result
+def test_candidate_pairs_prefer_p_line():
+    from passport_ocr import _candidate_pairs
+    lines = ["JUNKJUNKJUNKJUNKJUNKJUNKJUNKJUNK<<<<<<<<",
+             "P<EGYHASSAN<<MOHAMED<<<<<<<<<<<<<<<<<<<<<<<<",
+             "A234567890EGY9801222M31050652980122123456746"]
+    pairs = _candidate_pairs(lines)
+    assert pairs[0][0].startswith("P<")
