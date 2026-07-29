@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
 import { Card, CardFrame, IconBadge, Logo, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
-import { buzz, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
+import { buzz, grabChallengeB64, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
 
 const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
@@ -406,7 +406,88 @@ export function BackReview({ front, back, go }) {
         </Card>
       )}
       <div style={{ flex: 1 }} />
-      <button onClick={() => go('selfie-intro')} style={btnPrimary}>Continue · متابعة</button>
+      <button onClick={() => go('holo-check')} style={btnPrimary}>Continue · متابعة</button>
+    </Pad>
+  );
+}
+
+// Document liveness: torch on, guide a slow tilt, burst-capture frames. The
+// specular highlight sweeping the card (and holo patches flaring) is what the
+// server scores — see ocr-service/holo.py. ABSTAIN/log-only: whatever the
+// result, the flow continues; phones without a torch skip automatically.
+const HOLO_FRAMES = 5;
+export function HoloCheck({ videoRef, onBurst, onSkip }) {
+  const [shot, setShot] = useState(0);          // frames captured so far
+  const [phase, setPhase] = useState('starting'); // starting|tilting|no-torch
+  const [tick, setTick] = useState(0);          // drives the tilt-guide motif
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 700);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      // wait for the camera the lifecycle effect is opening
+      for (let i = 0; i < 40 && !videoRef.current?.videoWidth; i++) await wait(100);
+      if (cancelled) return;
+      const v = videoRef.current;
+      if (!v?.videoWidth) { onSkip(); return; }
+      // torch capability can appear a beat after the track starts
+      let torch = false;
+      for (let i = 0; i < 12 && !(torch = hasTorch(v)); i++) await wait(120);
+      if (cancelled) return;
+      if (!torch || !(await setTorch(v, true))) {
+        setPhase('no-torch');
+        await wait(1300);
+        if (!cancelled) onSkip();
+        return;
+      }
+      setPhase('tilting');
+      await wait(600); // let exposure settle under the torch
+      const frames = [];
+      for (let i = 0; i < HOLO_FRAMES && !cancelled; i++) {
+        frames.push(grabChallengeB64(v));
+        buzz(15);
+        setShot(i + 1);
+        if (i < HOLO_FRAMES - 1) await wait(650);
+      }
+      await setTorch(v, false).catch(() => {});
+      if (!cancelled && !doneRef.current) { doneRef.current = true; onBurst(frames); }
+    })();
+    return () => { cancelled = true; setTorch(videoRef.current, false).catch(() => {}); };
+  }, [videoRef]);
+
+  return (
+    <Pad>
+      <div style={h1(28)}>Card authenticity</div>
+      <div dir="rtl" style={arSub(18)}>فحص أصالة البطاقة</div>
+      <CardFrame videoRef={videoRef}
+        caption={phase === 'no-torch'
+          ? 'No flash on this phone — skipping · لا يوجد فلاش — سيتم التخطي'
+          : 'Tilt the card slowly, like pouring water · أمِل البطاقة ببطء'} />
+      {/* tilt-guide motif: a card silhouette rocking in 3D */}
+      <div style={{ alignSelf: 'center', marginTop: 22, perspective: 300 }}>
+        <div style={{
+          width: 84, height: 53, borderRadius: 8, background: C.shell,
+          border: `2px solid ${C.primary}`, transition: 'transform .65s ease',
+          transform: `rotateX(${[0, 22, 0, -22][tick % 4]}deg)`,
+          boxShadow: '0 6px 14px rgba(61,44,34,.18)'
+        }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignSelf: 'center', marginTop: 18 }}>
+        {Array.from({ length: HOLO_FRAMES }, (_, i) => (
+          <div key={i} style={{
+            width: 10, height: 10, borderRadius: '50%', transition: 'background .3s ease',
+            background: i < shot ? C.okFg : C.line
+          }} />
+        ))}
+      </div>
+      <div style={{ flex: 1 }} />
+      <button onClick={onSkip} style={btnGhost}>Skip · تخطي</button>
     </Pad>
   );
 }

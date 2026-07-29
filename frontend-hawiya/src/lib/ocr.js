@@ -45,6 +45,17 @@ export function verifyFace(idImageB64, liveImageB64, challengeFramesB64, signal)
   }).then(jsonOrThrow);
 }
 
+// Tilt-under-torch burst (document liveness) — base64 frames WITHOUT prefix.
+// ABSTAIN/log-only signal; callers must continue the flow whatever the result.
+export function holoCheck(framesB64, signal) {
+  return fetch(`${BASE}/holo-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ frames: framesB64 }),
+    signal
+  }).then(jsonOrThrow);
+}
+
 export const stripDataUrl = (dataUrl) => dataUrl.replace(/^data:[^,]*,/, '');
 
 // Live capture guidance: card + field boxes on a downscaled viewfinder frame.

@@ -18,6 +18,7 @@ const STEP_LABEL = {
   'verdict-abstain': 'Confirming details…', 'verdict-reject': 'Front needs a retake…',
   'back-cap': 'Scanning the back of the ID…', 'back-proc': 'Reading the back…',
   'back-review': 'Back read ✓', 'back-mismatch': 'Re-scanning the back…',
+  'holo-check': 'Checking card authenticity…',
   'selfie-intro': 'Getting ready for the selfie…', 'selfie-cap': 'Taking the liveness selfie…',
   'face-proc': 'Matching face to ID…', 'face-ok': 'Face verified ✓',
   'liveness-fail': 'Retrying the selfie…', 'phone': 'Entering phone number…',

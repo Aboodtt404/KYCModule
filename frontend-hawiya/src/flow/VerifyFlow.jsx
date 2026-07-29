@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
-import { health, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
+import { health, holoCheck, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
 import { buzz, closeCamera, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
-  VerdictAbstain, BackProcessing, BackMismatch, BackReview
+  VerdictAbstain, BackProcessing, BackMismatch, BackReview, HoloCheck
 } from './screens-id';
 import {
   SelfieIntro, SelfieCapture, FaceProcessing, LivenessFail, FaceOk,
@@ -51,6 +51,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const videoRef = useRef(null);
   const timersRef = useRef([]);
   const abortRef = useRef(null);
+  const holoRef = useRef(null);   // tilt-challenge result — log-only, rides in the payload
 
   const later = (ms, fn) => timersRef.current.push(setTimeout(fn, ms));
   useEffect(() => () => {
@@ -74,7 +75,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
 
   // ── camera lifecycle per capture step ───────────────────────────────────
   useEffect(() => {
-    if (!['front-cap', 'back-cap', 'selfie-cap'].includes(step)) return undefined;
+    if (!['front-cap', 'back-cap', 'selfie-cap', 'holo-check'].includes(step)) return undefined;
     const facing = step === 'selfie-cap' ? 'user' : 'environment';
     // The step-transition animation mounts the screen (and its <video>) a beat
     // AFTER the step changes — retry until the element exists.
@@ -145,6 +146,18 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       else go('back-review');
     } catch (e) {
       go('back-cap'); setError(humanError(e, 'ocr'));
+    }
+  };
+
+  // ── document liveness (tilt-under-torch) ─────────────────────────────────
+  // ABSTAIN/log-only: the flow moves on immediately; the score lands in the
+  // submission payload if the request comes back in time.
+  const finishHolo = (frames) => {
+    go('selfie-intro');
+    if (frames?.length >= 3) {
+      holoCheck(frames)
+        .then((r) => { holoRef.current = r?.holo || null; })
+        .catch(() => {});
     }
   };
 
@@ -260,7 +273,8 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       face_similarity: faceResult?.similarity_score ?? null,
       liveness_mode: faceResult?.liveness_mode || null,
       status: 'pending',
-      user_edited: userEdited
+      user_edited: userEdited,
+      document_liveness: holoRef.current?.hint || null
     };
     try {
       const actor = kycActor();
@@ -319,6 +333,9 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       {step === 'back-proc' && <BackProcessing />}
       {step === 'back-mismatch' && <BackMismatch {...props} />}
       {step === 'back-review' && <BackReview {...props} />}
+      {step === 'holo-check' && (
+        <HoloCheck videoRef={videoRef} onBurst={finishHolo} onSkip={() => go('selfie-intro')} />
+      )}
       {step === 'selfie-intro' && <SelfieIntro {...props} />}
       {step === 'selfie-cap' && <SelfieCapture {...props} />}
       {step === 'face-proc' && <FaceProcessing />}

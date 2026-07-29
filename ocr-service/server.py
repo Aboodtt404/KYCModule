@@ -1579,6 +1579,40 @@ def _prune_steps() -> None:
         _SESSION_STEPS.pop(k, None)
 
 
+try:
+    from holo import analyze as _HOLO_ANALYZE
+except Exception as _herr:  # pragma: no cover - defensive
+    _HOLO_ANALYZE = None
+    log.warning("holo unavailable (%s) — tilt challenge disabled", _herr)
+
+
+@app.post("/holo-check")
+@limiter.limit("12 per minute")
+def holo_check():
+    """Document-liveness tilt burst: {"frames": [b64 jpeg, ...]} captured with
+    the torch on while the user tilts the card. ABSTAIN/log-only signal —
+    see holo.py; a bad hint must never block a user on its own."""
+    if _HOLO_ANALYZE is None:
+        return jsonify({"success": False, "error": "unavailable"}), 503
+    data = request.get_json(silent=True) or {}
+    b64s = data.get("frames") or []
+    if not isinstance(b64s, list) or not (3 <= len(b64s) <= 8):
+        return jsonify({"success": False, "error": "expected 3-8 frames"}), 400
+    frames = []
+    for b in b64s:
+        if not isinstance(b, str) or len(b) > 3_000_000:
+            return jsonify({"success": False, "error": "frame too large"}), 413
+        try:
+            arr = np.frombuffer(base64.b64decode(b), np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception:  # noqa: BLE001
+            img = None
+        if img is None:
+            return jsonify({"success": False, "error": "bad frame"}), 400
+        frames.append(img)
+    return jsonify({"success": True, "holo": _HOLO_ANALYZE(frames)})
+
+
 @app.post("/session-step")
 @limiter.limit("240 per minute")
 def session_step_set():
