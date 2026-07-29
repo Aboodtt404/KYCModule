@@ -131,6 +131,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const captureBack = async () => {
     const video = videoRef.current;
     setError(null);
+    stripTriesRef.current = 0;   // fresh back scan → fresh strip attempts
     const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
     if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
@@ -156,23 +157,43 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   // ── dedicated strip re-scan ──────────────────────────────────────────────
   // Never blocks: any failure lands on the review with the check marked
   // unreadable; a decoded strip that CONTRADICTS the front is a mismatch.
+  // Each shutter press grabs a 2-shot burst (independent autofocus attempts)
+  // and the first failure earns ONE coached retry — a single silent shot was
+  // how the first office test slipped past this step with nothing decoded.
+  const stripTriesRef = useRef(0);
   const captureStrip = async () => {
     const video = videoRef.current;
     setError(null);
-    const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
-    if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
+    if (!video || !video.videoWidth) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
+    const shots = [];
+    const first = await grabStillBlob(video);
+    if (first) shots.push(first);
+    const second = await grabStillBlob(video).catch(() => null);
+    if (second) shots.push(second);
+    if (!shots.length) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);
     go('strip-proc');
-    try {
-      const r = await readStrip(blob);
-      if (r.barcode?.decoded) {
-        setBack((prev) => ({ ...(prev || {}), _barcode: r.barcode }));
-        const stripNid = (r.barcode.nid || '').replace(/\D/g, '');
-        const frontNid = (front?.national_id || '').replace(/\D/g, '');
-        if (stripNid && frontNid && stripNid !== frontNid) { go('back-mismatch'); return; }
-      }
+    let decoded = null;
+    for (const blob of shots) {
+      try {
+        const r = await readStrip(blob);
+        if (r.barcode?.decoded) { decoded = r.barcode; break; }
+      } catch { /* try the next shot */ }
+    }
+    if (decoded) {
+      setBack((prev) => ({ ...(prev || {}), _barcode: decoded }));
+      const stripNid = (decoded.nid || '').replace(/\D/g, '');
+      const frontNid = (front?.national_id || '').replace(/\D/g, '');
+      go(stripNid && frontNid && stripNid !== frontNid ? 'back-mismatch' : 'back-review');
+      return;
+    }
+    stripTriesRef.current += 1;
+    if (stripTriesRef.current < 2) {
+      go('strip-cap');   // go() clears error — set the coaching AFTER navigating
+      setError("Couldn't read it yet — get closer so the strip fills the frame, then hold steady. · لم نتمكن من قراءته بعد — اقترب أكثر حتى يملأ الشريط الإطار وأمسك الهاتف بثبات.");
+    } else {
       go('back-review');
-    } catch { go('back-review'); }
+    }
   };
 
   // ── document liveness (tilt-under-torch) ─────────────────────────────────
@@ -354,9 +375,9 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       {step === 'verdict-accept' && <VerdictAccept {...props} />}
       {step === 'verdict-abstain' && <VerdictAbstain {...props} />}
       {step === 'back-cap' && (
-        <CaptureScreen {...props} onShutter={captureBack}
+        <CaptureScreen {...props} onShutter={captureBack} minFrac={0.6}
           title="Now the back" ar="الوجه الخلفي للبطاقة"
-          caption="We check it matches the front · نتحقق من تطابقها مع الأمام" />
+          caption="Get close — the barcode strip needs the pixels · اقترب — الشريط يحتاج وضوحًا عاليًا" />
       )}
       {step === 'back-proc' && <BackProcessing />}
       {step === 'back-mismatch' && <BackMismatch {...props} />}

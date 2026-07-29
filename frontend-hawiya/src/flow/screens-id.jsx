@@ -74,9 +74,10 @@ export function SvcDown({ begin, error }) {
   );
 }
 
-export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, liveGuide = false, autoCapture = true }) {
+export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, liveGuide = false, autoCapture = true, minFrac = 0.4 }) {
   const [detect, setDetect] = useState(null);
   const [steady, setSteady] = useState(0);   // consecutive stable-card ticks
+  const [tooFar, setTooFar] = useState(false); // card seen but too small in frame
   const busyRef = useRef(false);
   const lastBoxRef = useRef(null);
   const steadyRef = useRef(0);
@@ -106,7 +107,8 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
         const stable = box && prev &&
           Math.abs(box[0] - prev[0]) < 0.04 && Math.abs(box[1] - prev[1]) < 0.04 &&
           Math.abs(box[2] - prev[2]) < 0.10 && Math.abs(box[3] - prev[3]) < 0.10 &&
-          box[2] > 0.4;                       // card fills a sane share of frame
+          box[2] > minFrac;                   // card fills enough of the frame
+        setTooFar(!!(box && box[2] <= minFrac));
         steadyRef.current = stable ? steadyRef.current + 1 : 0;
         setSteady(steadyRef.current);
         if (autoCapture && steadyRef.current >= 3 && !firedRef.current) {
@@ -133,7 +135,10 @@ export function CaptureScreen({ title, ar, caption, onShutter, videoRef, error, 
     if (await setTorch(videoRef.current, next)) setTorchOn(next);
   };
 
-  const holdMsg = steady >= 3 ? 'Capturing… · جارٍ الالتقاط' : steady > 0 ? 'Hold still… · اثبت مكانك' : null;
+  const holdMsg = steady >= 3 ? 'Capturing… · جارٍ الالتقاط'
+    : steady > 0 ? 'Hold still… · اثبت مكانك'
+    : tooFar ? 'Move closer — fill the frame · اقترب أكثر حتى تملأ البطاقة الإطار'
+    : null;
   return (
     <Pad>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>

@@ -12,6 +12,11 @@ export async function openCamera(videoEl, facing = 'environment', { hiRes = fals
   });
   videoEl.srcObject = stream;
   await videoEl.play().catch(() => {});
+  // Close-up captures (the barcode strip) need the lens actively refocusing;
+  // a no-op wherever the constraint is unsupported.
+  try {
+    await stream.getVideoTracks()[0]?.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+  } catch { /* unsupported */ }
   return stream;
 }
 
