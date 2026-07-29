@@ -93,16 +93,18 @@ export default function Desktop() {
   return (
     <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '40px 28px 56px' }}>
       <div style={{ width: 980, maxWidth: '100%', background: C.surface, borderRadius: 18, boxShadow: '0 18px 50px rgba(61,44,34,.16)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', background: C.shell, borderBottom: `1px solid ${C.lineStrong}` }}>
-          <Wordmark size={20} />
-          <div style={{ flex: 1 }} />
-          {principal && <Mono style={{ fontSize: 10.5, color: C.inkSoft, background: C.surface, padding: '6px 12px', borderRadius: 99 }}>{principal.slice(0, 5)}…{principal.slice(-3)}</Mono>}
-        </div>
+        {step !== 'login' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px', background: C.shell, borderBottom: `1px solid ${C.lineStrong}` }}>
+            <Wordmark size={20} />
+            <div style={{ flex: 1 }} />
+            {principal && <Mono style={{ fontSize: 10.5, color: C.inkSoft, background: C.surface, padding: '6px 12px', borderRadius: 99 }}>{principal.slice(0, 5)}…{principal.slice(-3)}</Mono>}
+          </div>
+        )}
 
         {step === 'login' && (
           <div style={{ minHeight: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
             <div style={{ width: 400, background: '#fff', borderRadius: 22, padding: '38px 34px', boxShadow: '0 4px 20px rgba(61,44,34,.08)', textAlign: 'center' }}>
-              <div style={{ width: 58, height: 58, borderRadius: 20, background: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: F.display, fontSize: 30, fontWeight: 800, color: C.surface, margin: '0 auto' }}>هـ</div>
+              <img src="/brand/hawiya-appicon.svg" alt="Hawiya" style={{ width: 58, height: 58, borderRadius: 20, margin: '0 auto', display: 'block', boxShadow: '0 5px 14px rgba(194,65,12,.25)' }} />
               <div style={{ ...h1(30), marginTop: 18 }}>Sign in to verify</div>
               <div dir="rtl" style={arSub(18)}>سجّل الدخول للتحقق</div>
               <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 12, lineHeight: 1.6 }}>
