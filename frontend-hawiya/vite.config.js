@@ -27,9 +27,14 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true, // dev-only: accept cloudflared quick-tunnel hostnames
       proxy: {
         '/api': { target: 'http://127.0.0.1:4943', changeOrigin: true },
+        // EVERY OCR-server endpoint the app calls must be listed here — a
+        // missing entry 404s at the dev server and reads as a silent feature
+        // failure on the phone (the strip scan + holo check shipped broken
+        // exactly this way, 2026-07-29).
         '/ocr': OCR, '/egyptian-id': OCR, '/egyptian-id-back': OCR,
         '/passport': OCR, '/verify-face': OCR, '/detect-id-card': OCR,
-        '/face': OCR, '/health': OCR, '/detect-fields': OCR
+        '/face': OCR, '/health': OCR, '/detect-fields': OCR,
+        '/barcode-strip': OCR, '/holo-check': OCR, '/session-step': OCR
       }
     }
   };

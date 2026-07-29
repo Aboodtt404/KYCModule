@@ -1660,6 +1660,9 @@ def session_step_set():
     if len(_SESSION_STEPS) > 500 and sid not in _SESSION_STEPS:
         return jsonify({"ok": False}), 429
     _SESSION_STEPS[sid] = (time.time(), step)
+    # The step trail in this log is the flight recorder for office tests —
+    # keep it (labels + opaque ids only, no PII).
+    log.info("step %s -> %s", sid[:16], step)
     return jsonify({"ok": True})
 
 

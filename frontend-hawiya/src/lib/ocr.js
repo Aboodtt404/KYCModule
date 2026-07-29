@@ -69,12 +69,25 @@ export function detectFields(blob, signal) {
   return fetch(`${BASE}/detect-fields`, { method: 'POST', body: blob, signal }).then(jsonOrThrow);
 }
 
-// Live session-step mirror (desktop watches the phone's progress).
+// Live session-step mirror (desktop watches the phone's progress). Without a
+// desktop session a per-tab pseudo-id keeps the breadcrumbs flowing — that
+// server-side step trail is the only flight recorder we have when an office
+// test goes somewhere unexpected.
+function pseudoSessionId() {
+  try {
+    let id = sessionStorage.getItem('hawiya-run');
+    if (!id) {
+      id = `dev-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+      sessionStorage.setItem('hawiya-run', id);
+    }
+    return id;
+  } catch { return 'dev-anonymous-tab'; }
+}
+
 export function reportStep(sessionId, step) {
-  if (!sessionId) return;
   fetch(`${BASE}/session-step`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, step })
+    body: JSON.stringify({ session_id: sessionId || pseudoSessionId(), step })
   }).catch(() => { /* mirror is best-effort */ });
 }
 

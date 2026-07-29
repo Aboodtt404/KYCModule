@@ -87,8 +87,14 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       if (v) {
         // ID sides open at 4K when the phone supports it — the back strip's
         // PDF417 needs the pixels; the selfie pipeline doesn't.
-        openCamera(v, facing, { hiRes: facing === 'environment' }).catch(() =>
-          setError('Camera unavailable — allow camera access or use HTTPS.'));
+        // Open failures RETRY too: Android throws NotReadableError when the
+        // previous step's track isn't fully released yet — transient, not a
+        // permissions problem.
+        openCamera(v, facing, { hiRes: facing === 'environment' }).catch(() => {
+          if (cancelled) return;
+          if (attempt < 8) setTimeout(() => tryOpen(attempt + 1), 400);
+          else setError('Camera unavailable — allow camera access or use HTTPS.');
+        });
       } else if (attempt < 30) {
         setTimeout(() => tryOpen(attempt + 1), 100);
       }
