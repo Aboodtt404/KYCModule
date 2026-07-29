@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
-import { health, holoCheck, readFront, readBack, readStrip, reportStep, verifyFace } from '@/lib/ocr';
+import { health, holoCheck, readFront, readBack, readPassport, readStrip, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
 import { buzz, closeCamera, cropCenterBand, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
   VerdictAbstain, BackProcessing, BackMismatch, BackReview, HoloCheck,
-  StripScan, StripProcessing
+  StripScan, StripProcessing, PassportProcessing, PassportReview
 } from './screens-id';
 import {
   SelfieIntro, SelfieCapture, FaceProcessing, LivenessFail, FaceOk,
@@ -24,7 +24,7 @@ const uuid = () =>
   });
 
 const PHASE = (step) =>
-  /^(front|verdict)/.test(step) ? 1 :
+  /^(front|verdict|passport)/.test(step) ? 1 :
   /^back/.test(step) ? 2 :
   /^(selfie|face|liveness)/.test(step) ? 3 :
   /^(phone|otp)/.test(step) ? 4 :
@@ -36,6 +36,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const [step, setStep] = useState('welcome');
   const [procStage, setProcStage] = useState(-1);
   const [front, setFront] = useState(null);        // extracted_data from /egyptian-id
+  const [passport, setPassport] = useState(null);  // data from /passport (docType 'passport')
   const [idFaceB64, setIdFaceB64] = useState(null);
   const [back, setBack] = useState(null);
   const [faceResult, setFaceResult] = useState(null);
@@ -73,10 +74,36 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     try { await health(); go('front-cap'); }
     catch { go('svc-down'); }
   };
+  const beginPassport = async () => {
+    go('front-proc-health');
+    try { await health(); go('passport-cap'); }
+    catch { go('svc-down'); }
+  };
+
+  // ── passport data page ─────────────────────────────────────────────────
+  const capturePassport = async () => {
+    const video = videoRef.current;
+    setError(null);
+    const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
+    if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
+    closeCamera(video);
+    go('passport-proc');
+    const ctl = new AbortController(); abortRef.current = ctl;
+    try {
+      const res = await readPassport(blob, ctl.signal);
+      if (!res.success || !res.data) throw new Error(res.error || 'Could not read the passport');
+      setPassport(res.data);
+      setIdFaceB64(res.data.face_image || null);
+      go('passport-review');
+    } catch (e) {
+      go('passport-cap');
+      setError(humanError(e, 'ocr'));
+    }
+  };
 
   // ── camera lifecycle per capture step ───────────────────────────────────
   useEffect(() => {
-    if (!['front-cap', 'back-cap', 'selfie-cap', 'holo-check', 'strip-cap'].includes(step)) return undefined;
+    if (!['front-cap', 'back-cap', 'selfie-cap', 'holo-check', 'strip-cap', 'passport-cap'].includes(step)) return undefined;
     const facing = step === 'selfie-cap' ? 'user' : 'environment';
     // The step-transition animation mounts the screen (and its <video>) a beat
     // AFTER the step changes — retry until the element exists.
@@ -301,7 +328,25 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     // complete_verification additionally validates a TOP-LEVEL ocrData.national_id.
     const userEdited = Object.keys(fixes).filter((k) => fixes[k] !== undefined);
     if (addr && addr !== (front?.address || '')) userEdited.push('address');
-    const ocrData = {
+    // Passport submissions map MRZ fields into the same payload shape; the
+    // NID comes from the VIZ read when found (it is NOT in the Egyptian MRZ).
+    const ocrData = passport ? {
+      full_name: passport.full_name || '',
+      national_id: passport.nid_viz?.nid || '',
+      birth_date: passport.birth_date || '',
+      age: ageFrom(passport.birth_date || ''),
+      address: addr || '',
+      governorate: 'غير محدد',
+      gender: passport.sex || 'غير محدد',
+      serial_number: '',
+      document_type: 'passport',
+      passport_number: passport.document_number || '',
+      nationality: passport.nationality || '',
+      expiry_date: passport.expiry_date || '',
+      mrz_valid_score: passport.mrz?.valid_score ?? null,
+      passport_expired: !!passport.expired,
+      ocr_verdict: (passport.verdict || 'abstain').toLowerCase()
+    } : {
       full_name: fixes.full_name ?? (front?.full_name || ''),
       national_id: front?.national_id || '',
       birth_date: birth,
@@ -348,10 +393,16 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
 
   const phase = PHASE(step);
   const showHeader = !['welcome', 'svc-down', 'status', 'submitting'].includes(step);
+  // Downstream screens (review etc.) are NID-shaped — give them a compatible
+  // view of the passport read. State handlers use the real `front` closure.
+  const frontForUi = passport ? {
+    full_name: passport.full_name, national_id: passport.nid_viz?.nid || '',
+    birth_date: passport.birth_date, gender: passport.sex, address: ''
+  } : front;
   const props = {
-    go, error, setError, front, back, addr, setAddr, phone, setPhone,
+    go, error, setError, front: frontForUi, back, addr, setAddr, phone, setPhone,
     otpError, setOtpError, framesDone, faceResult, livenessReason, reference,
-    videoRef, begin, captureFront, captureBack, startSelfie, sendOtp, submitOtp,
+    videoRef, begin, beginPassport, captureFront, captureBack, startSelfie, sendOtp, submitOtp,
     skipPhone, phoneVerified, submitKyc, sessionId, fixes, setFixes, shotUrl
   };
 
@@ -380,6 +431,13 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
           caption="Fit the card inside the frame · ضع البطاقة داخل الإطار" />
       )}
       {step === 'front-proc' && <FrontProcessing stage={procStage} shotUrl={shotUrl} />}
+      {step === 'passport-cap' && (
+        <CaptureScreen {...props} onShutter={capturePassport} autoCapture={false}
+          title="Passport data page" ar="صفحة البيانات في الجواز"
+          caption="Whole page in frame, no flash — glare hides the code · الصفحة كاملة داخل الإطار بدون فلاش" />
+      )}
+      {step === 'passport-proc' && <PassportProcessing />}
+      {step === 'passport-review' && <PassportReview passport={passport} go={go} />}
       {step === 'verdict-reject' && <VerdictReject {...props} />}
       {step === 'verdict-accept' && <VerdictAccept {...props} />}
       {step === 'verdict-abstain' && <VerdictAbstain {...props} />}

@@ -20,6 +20,8 @@ const STEP_LABEL = {
   'back-review': 'Back read ✓', 'back-mismatch': 'Re-scanning the back…',
   'holo-check': 'Checking card authenticity…',
   'strip-cap': 'Scanning the barcode strip…', 'strip-proc': 'Reading the barcode strip…',
+  'passport-cap': 'Scanning the passport…', 'passport-proc': 'Reading the passport MRZ…',
+  'passport-review': 'Passport read ✓',
   'selfie-intro': 'Getting ready for the selfie…', 'selfie-cap': 'Taking the liveness selfie…',
   'face-proc': 'Matching face to ID…', 'face-ok': 'Face verified ✓',
   'liveness-fail': 'Retrying the selfie…', 'phone': 'Entering phone number…',

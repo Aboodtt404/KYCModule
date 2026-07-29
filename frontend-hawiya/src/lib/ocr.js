@@ -45,6 +45,11 @@ export function verifyFace(idImageB64, liveImageB64, challengeFramesB64, signal)
   }).then(jsonOrThrow);
 }
 
+// Passport data page — TD3 MRZ read + ICAO check-digit validation
+export function readPassport(blob, signal) {
+  return fetch(`${BASE}/passport`, { method: 'POST', body: blob, signal }).then(jsonOrThrow);
+}
+
 // Dedicated barcode-strip re-scan (user fills the frame with the black strip)
 export function readStrip(blob, signal) {
   return fetch(`${BASE}/barcode-strip`, { method: 'POST', body: blob, signal }).then(jsonOrThrow);

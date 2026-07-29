@@ -21,7 +21,7 @@ const ErrorNote = ({ error }) => {
   );
 };
 
-export function Welcome({ begin }) {
+export function Welcome({ begin, beginPassport }) {
   const steps = [
     ['Scan your national ID — front & back', 'امسح بطاقتك من الأمام والخلف'],
     ['Take a selfie with a short head turn', 'التقط صورة سيلفي مع حركة رأس بسيطة'],
@@ -52,7 +52,90 @@ export function Welcome({ begin }) {
       <div style={{ fontSize: 11, lineHeight: 1.6, color: C.inkSoft, marginBottom: 14 }}>
         By continuing you consent to processing of your ID data for verification. Your consent is logged; you can request deletion at any time. Face images are never stored.
       </div>
-      <button onClick={begin} style={btnPrimary}>Begin · ابدأ</button>
+      <button onClick={begin} style={btnPrimary}>Begin with National ID · ابدأ بالبطاقة</button>
+      {beginPassport && (
+        <button onClick={beginPassport} style={{ ...btnGhost, marginTop: 10 }}>
+          Use a passport instead · استخدم جواز السفر
+        </button>
+      )}
+    </Pad>
+  );
+}
+
+export function PassportProcessing() {
+  return (
+    <BusyScreen en="Reading the passport…" ar="جارٍ قراءة جواز السفر…">
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 22 }}>
+        Validating the machine-readable zone · جارٍ التحقق من المنطقة المقروءة آليًا
+      </div>
+    </BusyScreen>
+  );
+}
+
+// Passport read result: MRZ fields + the ICAO integrity picture. ACCEPT means
+// every check digit validated — combinatorially strong evidence the read is
+// exact. Names are the holder's own romanization of one undivided Arabic name
+// chain (never split into real surname/given for Egyptian passports).
+export function PassportReview({ passport, go }) {
+  const p = passport || {};
+  const checks = p.mrz?.checks || {};
+  const chipFor = (v) => (v === true ? 'ok' : v === false ? 'bad' : 'na');
+  const legs = [
+    ['Document number', checks.doc_number],
+    ['Birth date', checks.birth_date],
+    ['Expiry date', checks.expiry_date],
+    ['Overall (composite)', checks.composite],
+  ];
+  const allOk = p.mrz?.valid_score === 1.0;
+  const rows = [
+    ['Name (as in passport)', p.full_name],
+    ['Passport No.', p.document_number],
+    ['Nationality', p.nationality],
+    ['Date of birth', p.birth_date],
+    ['Sex', p.sex],
+    ['Expires', p.expiry_date],
+    p.nid_viz?.nid ? ['National ID (from page)', p.nid_viz.nid] : null,
+  ].filter(Boolean);
+  return (
+    <Pad style={{ padding: '26px 26px 30px' }}>
+      <IconBadge bg={allOk ? C.okBg : C.warnBg} fg={allOk ? C.okFg : C.warnFg}>{allOk ? '✓' : '!'}</IconBadge>
+      <TitleAr en="Passport read" ar="تمت قراءة جواز السفر" size={29} />
+      {p.expired && (
+        <div style={{ marginTop: 12, background: C.errBg, borderRadius: 12, padding: '10px 14px', fontSize: 12.5, color: C.errFg }}>
+          This passport is expired — the review team will follow up. · جواز السفر منتهي الصلاحية
+        </div>
+      )}
+      <Card style={{ marginTop: 14, padding: '12px 15px', animation: 'stamp .5s ease .3s both' }}>
+        <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: C.inkFaint, marginBottom: 9 }}>
+          Machine-readable zone checks · فحوصات المنطقة الآلية
+        </div>
+        {legs.map(([label, v]) => (
+          <div key={label} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0' }}>
+            <CheckChip state={chipFor(v)} />
+            <div style={{ fontSize: 12.5, color: C.ink }}>{label}</div>
+          </div>
+        ))}
+        <div style={{ marginTop: 8, borderRadius: 10, padding: '9px 12px', fontSize: 12, lineHeight: 1.5,
+                      background: allOk ? C.okBg : C.shell, color: allOk ? C.okFg : C.inkSoft }}>
+          {allOk
+            ? <><b>All integrity digits check out.</b> The passport's built-in check digits confirm every field was read exactly. · <span dir="rtl">تم التحقق من جميع أرقام السلامة</span></>
+            : <>Some fields couldn't be fully verified — our team completes the check manually. · <span dir="rtl">تُستكمل المراجعة يدويًا</span></>}
+        </div>
+        {p.nid_viz?.dob_match === false && (
+          <div style={{ marginTop: 8, background: C.errBg, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: C.errFg }}>
+            The national ID printed on the page disagrees with the passport's birth date — flagged for review.
+          </div>
+        )}
+      </Card>
+      <Card style={{ marginTop: 12, padding: '4px 0', animation: 'flipIn .5s ease both' }}>
+        {rows.map(([label, v], i) => (
+          <Row key={label} label={label} last={i === rows.length - 1}
+            value={label.startsWith('Passport') || label.startsWith('National') ? <Mono>{v}</Mono> : v} />
+        ))}
+      </Card>
+      <div style={{ flex: 1 }} />
+      <button onClick={() => go('selfie-intro')} style={btnPrimary}>Continue · متابعة</button>
+      <button onClick={() => go('passport-cap')} style={{ ...btnGhost, marginTop: 10 }}>Scan again · المسح من جديد</button>
     </Pad>
   );
 }
