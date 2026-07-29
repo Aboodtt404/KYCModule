@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AuthClient } from '@dfinity/auth-client';
-import { II_URL, kycActor } from './agent';
+import { II_URL, authedKycActor, kycActor } from './agent';
 
 const AuthContext = createContext(null);
 
@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const actor = useMemo(() => kycActor(identity || undefined), [identity]);
+  const [actor, setActor] = useState(() => kycActor());
 
   const adopt = useCallback(async (client) => {
     const id = client.getIdentity();
@@ -19,7 +19,9 @@ export function AuthProvider({ children }) {
     if (p.isAnonymous()) return;
     setIdentity(id);
     setPrincipal(p.toText());
-    try { setIsAdmin(await kycActor(id).is_admin_check()); } catch { setIsAdmin(false); }
+    const a = await authedKycActor(id);
+    setActor(a);
+    try { setIsAdmin(await a.is_admin_check()); } catch { setIsAdmin(false); }
   }, []);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     await authClient?.logout();
-    setIdentity(null); setPrincipal(null); setIsAdmin(false);
+    setIdentity(null); setPrincipal(null); setIsAdmin(false); setActor(kycActor());
   }, [authClient]);
 
   const value = useMemo(() => ({

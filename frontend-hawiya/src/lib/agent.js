@@ -43,6 +43,17 @@ export function kycActor(identity) {
   return _kycAnon;
 }
 
+// Authenticated actor with the root key properly fetched — a bare agentOptions
+// actor never fetches it, so on local networks every QUERY fails certificate
+// verification (the "not on the admin list" bug: is_admin_check threw and the
+// catch read as false).
+export async function authedKycActor(identity) {
+  if (!kycCanisterId) return null;
+  const agent = new HttpAgent({ host: AGENT_HOST, identity });
+  if (process.env.DFX_NETWORK !== 'ic') await agent.fetchRootKey().catch(() => {});
+  return createKycActor(kycCanisterId, { agent });
+}
+
 export function smsActor(identity) {
   if (!smsCanisterId) return null;
   if (identity) return createSmsActor(smsCanisterId, { agentOptions: { host: AGENT_HOST, identity } });
