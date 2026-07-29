@@ -91,7 +91,8 @@ function Submissions({ actor }) {
   const load = useCallback(async (p = page) => {
     const [c, res] = await Promise.all([
       actor.get_kyc_status_counts(),
-      actor.get_kyc_submissions_page(BigInt(p * PAGE), BigInt(PAGE))
+      // Canister signature is (limit, offset) — page size FIRST.
+      actor.get_kyc_submissions_page(BigInt(PAGE), BigInt(p * PAGE))
     ]);
     setCounts(c.map(Number));
     const [tot, entries] = Array.isArray(res) ? res : [res[0], res[1]];
