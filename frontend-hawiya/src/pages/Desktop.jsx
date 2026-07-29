@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useNavigate } from 'react-router-dom';
 import { C, F, btnPrimary, btnGhost, h1, arSub } from '@/theme';
-import { Card, Chip, Mono, Row, Wordmark } from '@/components/ui';
+import { Card, Chip, Logo, Mono, Row, Wordmark } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { agentReady, kycActor } from '@/lib/agent';
 import { getStep } from '@/lib/ocr';
@@ -104,7 +104,7 @@ export default function Desktop() {
         {step === 'login' && (
           <div style={{ minHeight: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
             <div style={{ width: 400, background: '#fff', borderRadius: 22, padding: '38px 34px', boxShadow: '0 4px 20px rgba(61,44,34,.08)', textAlign: 'center' }}>
-              <img src="/brand/hawiya-appicon.svg" alt="Hawiya" style={{ width: 58, height: 58, borderRadius: 20, margin: '0 auto', display: 'block', boxShadow: '0 5px 14px rgba(194,65,12,.25)' }} />
+              <Logo size={58} style={{ display: 'block', margin: '0 auto' }} />
               <div style={{ ...h1(30), marginTop: 18 }}>Sign in to verify</div>
               <div dir="rtl" style={arSub(18)}>سجّل الدخول للتحقق</div>
               <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 12, lineHeight: 1.6 }}>

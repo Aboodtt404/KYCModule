@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
-import { Card, CardFrame, IconBadge, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
+import { Card, CardFrame, IconBadge, Logo, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
 import { buzz, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
 
@@ -32,8 +32,8 @@ export function Welcome({ begin }) {
       <div style={{ paddingTop: 46 }}>
         <motion.div initial={{ scale: 0.5, opacity: 0, rotate: -8 }} animate={{ scale: 1, opacity: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-          style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img src="/brand/hawiya-appicon.svg" alt="Hawiya" style={{ width: 64, height: 64, borderRadius: 22, boxShadow: '0 6px 18px rgba(194,65,12,.28)' }} />
+          style={{ width: 64, height: 64 }}>
+          <Logo size={64} />
         </motion.div>
         <div style={{ ...h1(38), marginTop: 22 }}>Verify your<br />identity</div>
         <div dir="rtl" style={{ ...arSub(22), marginTop: 6 }}>تحقق من هويتك في دقائق</div>

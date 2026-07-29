@@ -2,13 +2,28 @@ import React from 'react';
 import { C, F, cardStyle, h1, arSub, spinner } from '@/theme';
 
 // Brand wordmark
+// Brand mark exactly as in the design source (Hawiya KYC Prototype.dc.html):
+// corner brackets + the هـ glyph. Light = ink brackets / orange glyph;
+// dark = gold brackets / cream glyph (heavier stroke).
+export const Logo = ({ size = 58, onDark = false, style }) => {
+  const stroke = onDark ? '#f5a623' : C.ink;
+  const glyph = onDark ? C.surface : C.primary;
+  const sw = onDark ? 13 : 11;
+  const seg = (d) => <path d={d} stroke={stroke} strokeWidth={sw} strokeLinecap="round" fill="none" />;
+  return (
+    <svg width={size} height={size} viewBox="0 0 150 150" fill="none" style={style}>
+      {seg('M14 46 L14 26 C14 19 19 14 26 14 L46 14')}
+      {seg('M104 14 L124 14 C131 14 136 19 136 26 L136 46')}
+      {seg('M136 104 L136 124 C136 131 131 136 124 136 L104 136')}
+      {seg('M46 136 L26 136 C19 136 14 131 14 124 L14 104')}
+      <text x="75" y="100" textAnchor="middle" fontFamily="Zain,sans-serif" fontSize="66" fontWeight="800" fill={glyph}>هـ</text>
+    </svg>
+  );
+};
+
 export const Wordmark = ({ size = 22, onDark = false }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: Math.round(size * 0.42) }}>
-    <img src={onDark ? '/brand/hawiya-mark-dark.svg' : '/brand/hawiya-mark.svg'} alt=""
-      style={{ width: Math.round(size * 1.15), height: Math.round(size * 1.15), display: 'block' }} />
-    <div style={{ fontFamily: F.display, fontSize: size, fontWeight: 800, lineHeight: 1, color: C.primary }}>
-      hawiya <span style={{ fontWeight: 400, color: onDark ? C.surface : C.ink }}>· هوية</span>
-    </div>
+  <div style={{ fontFamily: F.display, fontSize: size, fontWeight: 800, lineHeight: 1, color: C.primary }}>
+    hawiya <span style={{ fontWeight: 400, color: onDark ? C.surface : C.ink }}>· هوية</span>
   </div>
 );
 
