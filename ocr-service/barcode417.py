@@ -59,6 +59,31 @@ def _nid_candidates(text: str) -> list[str]:
     return out
 
 
+# two-digit alternatives FIRST — "0?[1-9]" would otherwise eat one digit of "24"
+_DATE_FULL_RE = re.compile(r"(?:19|20)\d{2}[/.-](?:1[0-2]|0?[1-9])[/.-](?:3[01]|[12]\d|0?[1-9])")
+_DATE_YYMMDD_RE = re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\d)")
+_LATIN_RE = re.compile(r"[A-Z][A-Z< ]{3,}[A-Z<]")
+
+
+def parse_payload(text: str) -> dict:
+    """Best-effort structure from a decoded payload. The issuer encrypts part
+    of the content and the layout is undocumented — extract only what is
+    self-evidencing: date-shaped runs, MRZ-style Latin name segments (A-Z and
+    '<' fillers), and how much of the payload is printable at all."""
+    text = text or ""
+    dates = [m.group(0) for m in _DATE_FULL_RE.finditer(text)]
+    dates += [m.group(0) for m in _DATE_YYMMDD_RE.finditer(text) if m.group(0) not in dates]
+    dates = list(dict.fromkeys(dates))
+    latin = [s.strip() for s in _LATIN_RE.findall(text)]
+    latin = [s for s in dict.fromkeys(latin) if len(s.replace("<", " ").split()) >= 1][:4]
+    printable = sum(1 for ch in text if 32 <= ord(ch) < 127)
+    return {
+        "dates": dates[:4],
+        "latin": latin,
+        "printable_ratio": round(printable / len(text), 2) if text else 0.0,
+    }
+
+
 def _regions(gray: np.ndarray):
     """Candidate crops likely to contain the strip, most specific first."""
     h = gray.shape[0]

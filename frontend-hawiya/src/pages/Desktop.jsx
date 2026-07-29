@@ -19,6 +19,7 @@ const STEP_LABEL = {
   'back-cap': 'Scanning the back of the ID…', 'back-proc': 'Reading the back…',
   'back-review': 'Back read ✓', 'back-mismatch': 'Re-scanning the back…',
   'holo-check': 'Checking card authenticity…',
+  'strip-cap': 'Scanning the barcode strip…', 'strip-proc': 'Reading the barcode strip…',
   'selfie-intro': 'Getting ready for the selfie…', 'selfie-cap': 'Taking the liveness selfie…',
   'face-proc': 'Matching face to ID…', 'face-ok': 'Face verified ✓',
   'liveness-fail': 'Retrying the selfie…', 'phone': 'Entering phone number…',

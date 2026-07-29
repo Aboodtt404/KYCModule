@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
-import { health, holoCheck, readFront, readBack, reportStep, verifyFace } from '@/lib/ocr';
+import { health, holoCheck, readFront, readBack, readStrip, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
 import { buzz, closeCamera, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
-  VerdictAbstain, BackProcessing, BackMismatch, BackReview, HoloCheck
+  VerdictAbstain, BackProcessing, BackMismatch, BackReview, HoloCheck,
+  StripScan, StripProcessing
 } from './screens-id';
 import {
   SelfieIntro, SelfieCapture, FaceProcessing, LivenessFail, FaceOk,
@@ -75,7 +76,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
 
   // ── camera lifecycle per capture step ───────────────────────────────────
   useEffect(() => {
-    if (!['front-cap', 'back-cap', 'selfie-cap', 'holo-check'].includes(step)) return undefined;
+    if (!['front-cap', 'back-cap', 'selfie-cap', 'holo-check', 'strip-cap'].includes(step)) return undefined;
     const facing = step === 'selfie-cap' ? 'user' : 'environment';
     // The step-transition animation mounts the screen (and its <video>) a beat
     // AFTER the step changes — retry until the element exists.
@@ -143,10 +144,35 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       const backNid = (b.national_id || '').replace(/\D/g, '');
       // printed-band vs barcode disagreement is fraud-grade, same as front≠back
       if ((frontNid && backNid && frontNid !== backNid) || res.barcode?.nid_mismatch) go('back-mismatch');
+      // strip didn't decode from the whole-card frame → offer a dedicated
+      // strip-fill scan (3x the pixels-per-module) before the review
+      else if (!res.barcode?.decoded) go('strip-cap');
       else go('back-review');
     } catch (e) {
       go('back-cap'); setError(humanError(e, 'ocr'));
     }
+  };
+
+  // ── dedicated strip re-scan ──────────────────────────────────────────────
+  // Never blocks: any failure lands on the review with the check marked
+  // unreadable; a decoded strip that CONTRADICTS the front is a mismatch.
+  const captureStrip = async () => {
+    const video = videoRef.current;
+    setError(null);
+    const blob = video && video.videoWidth ? await grabStillBlob(video) : null;
+    if (!blob) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
+    closeCamera(video);
+    go('strip-proc');
+    try {
+      const r = await readStrip(blob);
+      if (r.barcode?.decoded) {
+        setBack((prev) => ({ ...(prev || {}), _barcode: r.barcode }));
+        const stripNid = (r.barcode.nid || '').replace(/\D/g, '');
+        const frontNid = (front?.national_id || '').replace(/\D/g, '');
+        if (stripNid && frontNid && stripNid !== frontNid) { go('back-mismatch'); return; }
+      }
+      go('back-review');
+    } catch { go('back-review'); }
   };
 
   // ── document liveness (tilt-under-torch) ─────────────────────────────────
@@ -274,7 +300,9 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       liveness_mode: faceResult?.liveness_mode || null,
       status: 'pending',
       user_edited: userEdited,
-      document_liveness: holoRef.current?.hint || null
+      document_liveness: holoRef.current?.hint || null,
+      strip_decoded: !!back?._barcode?.decoded,
+      strip_nid: back?._barcode?.nid || ''
     };
     try {
       const actor = kycActor();
@@ -332,6 +360,11 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       )}
       {step === 'back-proc' && <BackProcessing />}
       {step === 'back-mismatch' && <BackMismatch {...props} />}
+      {step === 'strip-cap' && (
+        <StripScan videoRef={videoRef} error={error}
+          onShutter={captureStrip} onSkip={() => go('back-review')} />
+      )}
+      {step === 'strip-proc' && <StripProcessing />}
       {step === 'back-review' && <BackReview {...props} />}
       {step === 'holo-check' && (
         <HoloCheck videoRef={videoRef} onBurst={finishHolo} onSkip={() => go('selfie-intro')} />

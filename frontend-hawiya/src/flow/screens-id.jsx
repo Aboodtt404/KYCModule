@@ -363,10 +363,106 @@ export function BackProcessing() {
   );
 }
 
+// Dedicated strip re-scan: shown when the whole-card back capture couldn't
+// decode the PDF417. Filling the frame with just the black strip multiplies
+// pixels-per-module ~3x — the difference between undecodable and easy.
+export function StripScan({ videoRef, onShutter, onSkip, error }) {
+  const [torchable, setTorchable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => { if (hasTorch(videoRef.current)) { setTorchable(true); clearInterval(t); } }, 300);
+    const stop = setTimeout(() => clearInterval(t), 4000);
+    return () => { clearInterval(t); clearTimeout(stop); setTorch(videoRef.current, false).catch(() => {}); };
+  }, [videoRef]);
+  const toggleTorch = async () => {
+    const next = !torchOn;
+    if (await setTorch(videoRef.current, next)) setTorchOn(next);
+  };
+  const corner = (pos) => ({
+    position: 'absolute', width: 22, height: 22,
+    ...(pos.includes('l') ? { left: -2, borderLeft: `3px solid ${C.accent}` } : { right: -2, borderRight: `3px solid ${C.accent}` }),
+    ...(pos.includes('t') ? { top: -2, borderTop: `3px solid ${C.accent}` } : { bottom: -2, borderBottom: `3px solid ${C.accent}` }),
+    borderRadius: pos === 'lt' ? '8px 0 0 0' : pos === 'rt' ? '0 8px 0 0' : pos === 'lb' ? '0 0 0 8px' : '0 0 8px 0'
+  });
+  return (
+    <Pad>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <div>
+          <div style={h1(28)}>One more detail</div>
+          <div dir="rtl" style={arSub(18)}>الشريط الأسود خلف البطاقة</div>
+        </div>
+        {torchable && (
+          <button onClick={toggleTorch} aria-label="Toggle flashlight"
+            style={{ border: `1.5px solid ${torchOn ? C.primary : C.line}`, background: torchOn ? C.warnBg : '#fff',
+                     borderRadius: 12, width: 42, height: 42, fontSize: 19, cursor: 'pointer', flex: 'none' }}>
+            🔦
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 10, fontSize: 12.5, color: C.inkSoft, lineHeight: 1.55 }}>
+        Get close so the <b>black barcode strip fills the frame</b> — it lets us verify your card against its machine-readable data. · اقترب حتى يملأ <b>الشريط الأسود</b> الإطار.
+      </div>
+      <ErrorNote error={error} />
+      {/* wide strip-shaped guide */}
+      <div style={{ position: 'relative', width: '100%', maxWidth: 340, aspectRatio: '3.4', alignSelf: 'center', marginTop: 26, borderRadius: 10, overflow: 'hidden', background: C.dark }}>
+        <video ref={videoRef} autoPlay playsInline muted
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div style={corner('lt')} /><div style={corner('rt')} /><div style={corner('lb')} /><div style={corner('rb')} />
+      </div>
+      <div style={{ marginTop: 24, alignSelf: 'center' }}>
+        <button onClick={onShutter} aria-label="Capture strip" style={{
+          width: 72, height: 72, borderRadius: '50%', background: '#fff', display: 'block',
+          border: `5px solid ${C.primary}`, cursor: 'pointer', boxShadow: '0 6px 16px rgba(194,65,12,.3)'
+        }} />
+      </div>
+      <div style={{ flex: 1 }} />
+      <button onClick={onSkip} style={btnGhost}>Skip — review what was read · تخطي</button>
+    </Pad>
+  );
+}
+
+export function StripProcessing() {
+  return (
+    <BusyScreen en="Reading the strip…" ar="جارٍ قراءة الشريط…">
+      <div style={{ fontSize: 11, color: C.inkFaint, marginTop: 22 }}>A second or two · ثانية أو اثنتان</div>
+    </BusyScreen>
+  );
+}
+
+// Per-check status chip for the integrity panel: ok / na (unreadable) / bad.
+// 'bad' should never actually render here — NID disagreements route to the
+// mismatch screen before this — kept defensively.
+const CheckChip = ({ state }) => {
+  const map = {
+    ok: { txt: '✓', bg: C.okBg, fg: C.okFg },
+    na: { txt: '—', bg: C.shell, fg: C.inkSoft },
+    bad: { txt: '✗', bg: C.errBg, fg: C.errFg },
+  }[state] || { txt: '—', bg: C.shell, fg: C.inkSoft };
+  return (
+    <span style={{ flex: 'none', width: 26, height: 26, borderRadius: 8, background: map.bg, color: map.fg,
+                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
+      {map.txt}
+    </span>
+  );
+};
+
 export function BackReview({ front, back, go }) {
   const frontNid = (front?.national_id || '').replace(/\D/g, '');
   const backNid = (back?.national_id || '').replace(/\D/g, '');
-  const matched = frontNid && backNid && frontNid === backNid;
+  const matched = !!(frontNid && backNid && frontNid === backNid);
+  const strip = back?._barcode;
+  const stripNid = (strip?.nid || '').replace(/\D/g, '');
+  const stripFields = strip?.fields || {};
+  const checks = [
+    { en: 'Number matches, front ↔ back', ar: 'تطابق الرقم أمامًا وخلفًا',
+      state: (frontNid && backNid) ? (matched ? 'ok' : 'bad') : 'na',
+      naNote: 'back number unreadable — checked manually' },
+    { en: 'Machine strip confirms the number', ar: 'الشريط الآلي يؤكد الرقم',
+      state: (strip?.decoded && stripNid && frontNid) ? (stripNid === frontNid ? 'ok' : 'bad')
+        : strip?.decoded ? 'na' : 'na',
+      naNote: strip?.decoded ? 'strip decoded — number not readable in it' : 'strip unreadable — checked manually' },
+  ];
+  const allOk = checks.every((c) => c.state === 'ok');
   const rows = [
     ['المهنة · Occupation', back?.occupation],
     ['الحالة الاجتماعية · Marital', back?.marital_status],
@@ -377,28 +473,50 @@ export function BackReview({ front, back, go }) {
     <Pad style={{ padding: '26px 26px 30px' }}>
       <IconBadge bg={C.okBg} fg={C.okFg}>✓</IconBadge>
       <TitleAr en="Back of ID read" ar="تمت قراءة ظهر البطاقة" size={29} />
-      {matched ? (
-        <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px', animation: 'stamp .5s ease .35s both' }}>
-          <span style={{ fontSize: 16, color: C.okFg }}>⇄</span>
-          <div style={{ fontSize: 12.5, color: C.okFg, lineHeight: 1.5 }}>
-            <b>Front and back match.</b> The national ID number on both sides is identical — a strong integrity signal.
+
+      {/* integrity panel: what was cross-checked and how each leg came out */}
+      <Card style={{ marginTop: 14, padding: '12px 15px', animation: 'stamp .5s ease .3s both' }}>
+        <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase', color: C.inkFaint, marginBottom: 9 }}>
+          ID validity checks · فحوصات صلاحية البطاقة
+        </div>
+        {checks.map((c) => (
+          <div key={c.en} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 0' }}>
+            <CheckChip state={c.state} />
+            <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.4 }}>
+              {c.en} <span dir="rtl" style={{ color: C.inkSoft }}>· {c.ar}</span>
+              {c.state === 'na' && (
+                <div style={{ fontSize: 10.5, color: C.inkFaint }}>{c.naNote}</div>
+              )}
+            </div>
           </div>
+        ))}
+        <div style={{ marginTop: 8, borderRadius: 10, padding: '9px 12px', fontSize: 12, lineHeight: 1.5,
+                      background: allOk ? C.okBg : C.shell, color: allOk ? C.okFg : C.inkSoft }}>
+          {allOk
+            ? <><b>ID validity confirmed.</b> The number agrees across the front, the printed back, and the machine-readable strip. · <span dir="rtl">تم تأكيد صلاحية البطاقة</span></>
+            : <>Checks that couldn't run are completed manually by our team — nothing for you to fix. · <span dir="rtl">تُستكمل الفحوصات يدويًا</span></>}
         </div>
-      ) : (
-        <div style={{ marginTop: 14, background: C.shell, borderRadius: 14, padding: '11px 15px', fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>
-          The number on the back couldn't be read clearly — your submission will simply be checked manually. Nothing to fix.
-        </div>
+      </Card>
+
+      {/* what the strip itself contained, when it decoded */}
+      {strip?.decoded && (
+        <Card style={{ marginTop: 12, padding: '4px 0', animation: 'flipIn .5s ease .15s both' }}>
+          <Row label="Strip · الرقم القومي" value={<Mono>{stripNid || '—'}</Mono>} />
+          {stripFields.dates?.length > 0 && (
+            <Row label="Strip · dates" value={stripFields.dates.join(' · ')} />
+          )}
+          {stripFields.latin?.length > 0 && (
+            <Row label="Strip · name (Latin)" value={stripFields.latin.join(' ')} />
+          )}
+          <Row label="" last value={
+            <span style={{ fontSize: 10.5, color: C.inkFaint }}>
+              Parts of the strip are encrypted by the issuer — that's expected.
+            </span>} />
+        </Card>
       )}
-      {back?._barcode?.decoded && (
-        <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', background: C.okBg, borderRadius: 14, padding: '11px 15px', animation: 'stamp .5s ease .5s both' }}>
-          <span style={{ fontSize: 16, color: C.okFg }}>▮▯▮</span>
-          <div style={{ fontSize: 12.5, color: C.okFg, lineHeight: 1.5 }}>
-            <b>Security strip decoded.</b> The machine-readable barcode on the back checks out{back._barcode.nid ? ' and carries the same national ID' : ''}.
-          </div>
-        </div>
-      )}
+
       {rows.length > 0 && (
-        <Card style={{ marginTop: 14, padding: '4px 0', animation: 'flipIn .5s ease both' }}>
+        <Card style={{ marginTop: 12, padding: '4px 0', animation: 'flipIn .5s ease both' }}>
           {rows.map(([label, v], i) => (
             <Row key={label} label={label} last={i === rows.length - 1}
               value={<span dir="rtl">{v}</span>} />

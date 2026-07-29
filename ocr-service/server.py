@@ -60,8 +60,10 @@ except Exception as _rerr:  # pragma: no cover - defensive
 
 try:
     from barcode417 import decode_pdf417 as _PDF417
+    from barcode417 import parse_payload as _PDF417_FIELDS
 except Exception as _berr:  # pragma: no cover - defensive
     _PDF417 = None
+    _PDF417_FIELDS = None
     log.warning("barcode417 unavailable (%s) — PDF417 stage disabled", _berr)
 
 try:
@@ -630,7 +632,8 @@ def run_back_ocr(path: str) -> dict:
         bc = _PDF417(img)
         if bc:
             nid_bc = next((n for n in bc.get("nids", []) if _nid_plausible(n)), "")
-            barcode = {"decoded": True, "n_chars": bc["n_chars"], "nid": nid_bc}
+            barcode = {"decoded": True, "n_chars": bc["n_chars"], "nid": nid_bc,
+                       "fields": _PDF417_FIELDS(bc.get("text", "")) if _PDF417_FIELDS else {}}
             if nid_bc:
                 printed = data.get("national_id") or ""
                 if not _nid_plausible(printed):
@@ -1584,6 +1587,39 @@ try:
 except Exception as _herr:  # pragma: no cover - defensive
     _HOLO_ANALYZE = None
     log.warning("holo unavailable (%s) — tilt challenge disabled", _herr)
+
+
+@app.post("/barcode-strip")
+@limiter.limit("30 per minute")
+def barcode_strip():
+    """Dedicated strip re-scan: the client asks the user to FILL THE FRAME with
+    the black strip when the whole-card capture didn't decode (framing the
+    strip alone multiplies pixels-per-module ~3x). Raw JPEG body like the other
+    capture endpoints; returns the same `barcode` block shape as
+    /egyptian-id-back so the client can merge whichever attempt succeeded."""
+    t0 = time.time()
+    if not request.data:
+        return jsonify({"success": False, "error": "No image data"}), 400
+    if len(request.data) > _MAX_IMAGE_BYTES:
+        return jsonify({"success": False, "error": "Image too large (max 10 MB)"}), 413
+    if _PDF417 is None:
+        return jsonify({"success": False, "error": "unavailable"}), 503
+    _save_debug_capture(request.data, "strip")
+    arr = np.frombuffer(request.data, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({"success": False, "error": "Could not decode image"}), 400
+    barcode = {"decoded": False}
+    bc = _PDF417(img)
+    if bc:
+        nid_bc = next((n for n in bc.get("nids", []) if _nid_plausible(n)), "")
+        barcode = {"decoded": True, "n_chars": bc["n_chars"], "nid": nid_bc,
+                   "fields": _PDF417_FIELDS(bc.get("text", "")) if _PDF417_FIELDS else {}}
+    return jsonify({
+        "success": True,
+        "processing_time": round(time.time() - t0, 2),
+        "barcode": barcode,
+    })
 
 
 @app.post("/holo-check")

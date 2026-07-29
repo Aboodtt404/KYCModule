@@ -45,6 +45,11 @@ export function verifyFace(idImageB64, liveImageB64, challengeFramesB64, signal)
   }).then(jsonOrThrow);
 }
 
+// Dedicated barcode-strip re-scan (user fills the frame with the black strip)
+export function readStrip(blob, signal) {
+  return fetch(`${BASE}/barcode-strip`, { method: 'POST', body: blob, signal }).then(jsonOrThrow);
+}
+
 // Tilt-under-torch burst (document liveness) — base64 frames WITHOUT prefix.
 // ABSTAIN/log-only signal; callers must continue the flow whatever the result.
 export function holoCheck(framesB64, signal) {
