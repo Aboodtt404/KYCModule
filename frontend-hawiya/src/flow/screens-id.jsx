@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { C, F, btnPrimary, btnGhost, h1, arSub, spinner } from '@/theme';
 import { Card, CardFrame, IconBadge, Logo, Mono, Row, TitleAr, BusyScreen } from '@/components/ui';
 import { detectFields } from '@/lib/ocr';
-import { buzz, grabChallengeB64, grabSmallBlob, hasTorch, setTorch } from '@/lib/camera';
+import { buzz, grabChallengeB64, grabSmallBlob, hasTorch, setTorch, setZoom } from '@/lib/camera';
 
 const Pad = ({ children, style }) => (
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '22px 24px 30px', ...style }}>{children}</div>
@@ -371,13 +371,107 @@ export function BackProcessing() {
 // Dedicated strip re-scan: shown when the whole-card back capture couldn't
 // decode the PDF417. Filling the frame with just the black strip multiplies
 // pixels-per-module ~3x — the difference between undecodable and easy.
+// v2 after the first office round (users hovered at whole-card distance and
+// close focus was soft): camera ZOOM instead of physical closeness, plus a
+// native-resolution meter that gates on strip width AND sharpness — it
+// auto-fires only when the frame can actually decode, and coaches until then.
+// Calibrated on office captures 2026-07-29: blurry/far strips measure edge
+// density 7-8, a decode-grade strip ~16.
 export function StripScan({ videoRef, onShutter, onSkip, error }) {
   const [torchable, setTorchable] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [meter, setMeter] = useState('none'); // none|far|soft|ready
+  const firedRef = useRef(false);
+  const streakRef = useRef(0);
+  const shutterRef = useRef(onShutter);
+  shutterRef.current = onShutter;
+
   useEffect(() => {
     const t = setInterval(() => { if (hasTorch(videoRef.current)) { setTorchable(true); clearInterval(t); } }, 300);
     const stop = setTimeout(() => clearInterval(t), 4000);
     return () => { clearInterval(t); clearTimeout(stop); setTorch(videoRef.current, false).catch(() => {}); };
+  }, [videoRef]);
+
+  // Zoom in once the track is live — sampling gain without the focus wall.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 40 && !cancelled; i++) {
+        if (videoRef.current?.videoWidth) { await setZoom(videoRef.current, 2.0); return; }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [videoRef]);
+
+  // Native-res meter over the center band the viewfinder shows. Downscaled
+  // sampling would blur away exactly the alternation being measured.
+  useEffect(() => {
+    const cvs = document.createElement('canvas');
+    const iv = setInterval(() => {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth || firedRef.current) return;
+      const W = v.videoWidth, BH = 64;
+      const sy = Math.max(0, Math.round((v.videoHeight - BH) / 2));
+      cvs.width = W; cvs.height = BH;
+      const ctx = cvs.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(v, 0, sy, W, BH, 0, 0, W, BH);
+      let data;
+      try { ({ data } = ctx.getImageData(0, 0, W, BH)); } catch { return; }
+      const colMean = new Float32Array(W);
+      const colEd = new Float32Array(W);
+      for (let y = 0; y < BH; y++) {
+        let prev = 0;
+        for (let x = 0; x < W; x++) {
+          const p = (y * W + x) * 4;
+          const g = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+          colMean[x] += g;
+          if (x) colEd[x] += Math.abs(g - prev);
+          prev = g;
+        }
+      }
+      // Box-smooth (31px): at decode-grade module sizes single columns are
+      // pure white inside bars — unsmoothed gates shred the run.
+      const half = 15;
+      const pM = new Float64Array(W + 1), pE = new Float64Array(W + 1);
+      for (let x = 0; x < W; x++) {
+        pM[x + 1] = pM[x] + colMean[x] / BH;
+        pE[x + 1] = pE[x] + colEd[x] / BH;
+      }
+      const smMean = new Float32Array(W), smEd = new Float32Array(W);
+      for (let x = 0; x < W; x++) {
+        const a = Math.max(0, x - half), b = Math.min(W, x + half + 1);
+        smMean[x] = (pM[b] - pM[a]) / (b - a);
+        smEd[x] = (pE[b] - pE[a]) / (b - a);
+      }
+      // widest window that is ≥85% strip-like columns (two-pointer)
+      const strippy = new Uint8Array(W);
+      for (let x = 0; x < W; x++) strippy[x] = smMean[x] < 195 && smEd[x] > 6.5 ? 1 : 0;
+      let l = 0, zeros = 0, bestLen = 0, bestL = 0, bestR = 0;
+      for (let r = 0; r < W; r++) {
+        zeros += 1 - strippy[r];
+        while (zeros > 0.15 * (r - l + 1)) { zeros -= 1 - strippy[l]; l++; }
+        if (r - l + 1 > bestLen) { bestLen = r - l + 1; bestL = l; bestR = r; }
+      }
+      const widthFrac = bestLen / W;
+      // Sharpness = p90 of RAW per-column gradient in the window. Mean gradient
+      // can't tell big-sharp-modules from small-blurry ones (both ~11); the
+      // PEAK at transitions can (sharp ≥25 on calibration, real failures ≤15).
+      let sharp = 0;
+      if (bestLen > 30) {
+        const win = Array.from(colEd.subarray(bestL, bestR + 1), (v) => v / BH).sort((a, b) => a - b);
+        sharp = win[Math.floor(win.length * 0.9)];
+      }
+      const state = widthFrac < 0.3 ? 'none' : widthFrac < 0.55 ? 'far' : sharp < 25 ? 'soft' : 'ready';
+      streakRef.current = state === 'ready' ? streakRef.current + 1 : 0;
+      setMeter(state);
+      if (streakRef.current >= 2 && !firedRef.current) {
+        firedRef.current = true;
+        buzz(40);
+        shutterRef.current();
+      }
+    }, 500);
+    return () => clearInterval(iv);
   }, [videoRef]);
   const toggleTorch = async () => {
     const next = !torchOn;
@@ -405,7 +499,7 @@ export function StripScan({ videoRef, onShutter, onSkip, error }) {
         )}
       </div>
       <div style={{ marginTop: 10, fontSize: 12.5, color: C.inkSoft, lineHeight: 1.55 }}>
-        Get close so the <b>black barcode strip fills the frame</b> — it lets us verify your card against its machine-readable data. · اقترب حتى يملأ <b>الشريط الأسود</b> الإطار.
+        Aim at the <b>black barcode strip</b> — it captures by itself the moment it's readable. · صوّب على <b>الشريط الأسود</b> وسيلتقط تلقائيًا.
       </div>
       <ErrorNote error={error} />
       {/* wide strip-shaped guide */}
@@ -414,7 +508,15 @@ export function StripScan({ videoRef, onShutter, onSkip, error }) {
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         <div style={corner('lt')} /><div style={corner('rt')} /><div style={corner('lb')} /><div style={corner('rb')} />
       </div>
-      <div style={{ marginTop: 24, alignSelf: 'center' }}>
+      {/* live coaching from the meter */}
+      <div style={{ marginTop: 12, alignSelf: 'center', fontSize: 12.5, fontWeight: 600, transition: 'color .3s',
+                    color: meter === 'ready' ? C.okFg : meter === 'soft' ? C.warnFg : C.inkSoft }}>
+        {meter === 'none' && 'Aim at the black strip · صوّب على الشريط الأسود'}
+        {meter === 'far' && 'Closer — let the strip fill the width · اقترب حتى يملأ الشريط العرض'}
+        {meter === 'soft' && 'Hold steady — focusing… · اثبت — جارٍ ضبط التركيز'}
+        {meter === 'ready' && 'Got it — capturing · تم — جارٍ الالتقاط'}
+      </div>
+      <div style={{ marginTop: 16, alignSelf: 'center' }}>
         <button onClick={onShutter} aria-label="Capture strip" style={{
           width: 72, height: 72, borderRadius: '50%', background: '#fff', display: 'block',
           border: `5px solid ${C.primary}`, cursor: 'pointer', boxShadow: '0 6px 16px rgba(194,65,12,.3)'

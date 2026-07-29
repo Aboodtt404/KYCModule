@@ -4,7 +4,7 @@ import { C } from '@/theme';
 import { Wordmark, StepDots } from '@/components/ui';
 import { health, holoCheck, readFront, readBack, readStrip, reportStep, verifyFace } from '@/lib/ocr';
 import { agentReady, kycActor, smsActor } from '@/lib/agent';
-import { buzz, closeCamera, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
+import { buzz, closeCamera, cropCenterBand, grabB64, grabChallengeB64, grabStillBlob, openCamera } from '@/lib/camera';
 import { humanError } from '@/lib/errors';
 import {
   Welcome, SvcDown, CaptureScreen, FrontProcessing, VerdictReject, VerdictAccept,
@@ -172,9 +172,12 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
     setError(null);
     if (!video || !video.videoWidth) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     const shots = [];
-    const first = await grabStillBlob(video);
+    // Crop each still to the viewfinder's center band — the upload contains
+    // exactly what the user framed (and the strip screen zooms, so the band
+    // carries the full sampling gain).
+    const first = await grabStillBlob(video).then(cropCenterBand).catch(() => null);
     if (first) shots.push(first);
-    const second = await grabStillBlob(video).catch(() => null);
+    const second = await grabStillBlob(video).then(cropCenterBand).catch(() => null);
     if (second) shots.push(second);
     if (!shots.length) { setError('Camera is still starting — give it a second and try again. · الكاميرا لا تزال تبدأ — انتظر لحظة وحاول مجددًا.'); return; }
     closeCamera(video);

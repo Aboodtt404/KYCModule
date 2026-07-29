@@ -148,6 +148,37 @@ export function grabChallengeB64(videoEl, maxW = 480, quality = 0.7) {
   return c.toDataURL('image/jpeg', quality).replace(/^data:[^,]*,/, '');
 }
 
+// Crop a captured still to the horizontal center band the strip viewfinder
+// showed (a 3.4:1 cover-crop slice) — the upload then contains exactly what
+// the user framed, nothing else.
+export async function cropCenterBand(blob, aspect = 3.4, margin = 1.6, quality = 0.92) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    try {
+      const bandH = Math.min(bmp.height, Math.round((bmp.width / aspect) * margin));
+      const y0 = Math.max(0, Math.round((bmp.height - bandH) / 2));
+      const c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bandH;
+      c.getContext('2d').drawImage(bmp, 0, y0, bmp.width, bandH, 0, 0, bmp.width, bandH);
+      return (await new Promise((r) => c.toBlob(r, 'image/jpeg', quality))) || blob;
+    } finally { bmp.close(); }
+  } catch { return blob; }
+}
+
+// Camera zoom (optical/digital via the track). Zooming beats moving closer for
+// the barcode strip: sampling doubles WITHOUT hitting the lens's minimum focus
+// distance — the wall the strip captures kept dying on.
+export async function setZoom(videoEl, factor) {
+  try {
+    const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+    const caps = track?.getCapabilities?.();
+    if (!caps?.zoom) return false;
+    const z = Math.max(caps.zoom.min ?? 1, Math.min(factor, caps.zoom.max ?? 1));
+    await track.applyConstraints({ advanced: [{ zoom: z }] });
+    return true;
+  } catch { return false; }
+}
+
 // Tiny haptic tick — capture confirmations feel physical on phones that support it.
 export function buzz(ms = 30) {
   try { navigator.vibrate?.(ms); } catch { /* unsupported */ }
