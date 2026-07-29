@@ -49,16 +49,29 @@ round 1-2). Everything committed on `latest`. Stack bring-up: `./scripts/dev-up.
   stacked bugs: swapped (limit, offset) args, root-key trap, candid tuple drift.
 - Admin store wiped 2026-07-29 for a clean testing round (5 subs + all sessions).
 
-## NEXT: main-pipeline integrity work (researched, approved, not built)
-1. **PDF417/MRZ decode** — the black strip on the back IS a PDF417 barcode encoding
-   an ICAO 9303 MRZ (name Latin-transliterated + truncated → partial match only;
-   own check digits). Use zxing-cpp python bindings; test on saved back captures
-   first. Third independent NID leg: front OCR ↔ back top-band ↔ MRZ.
-2. **FFT screen/print detector** on the rectified card (moiré peaks = screen
-   recapture; halftone periodicity = print). Needs an office-made corpus: real cards
-   + photocopies + screen replays (debug_captures collects automatically).
-3. **Tilt-under-torch hologram challenge** — document liveness reusing the selfie
-   choreography + torch; ship as ABSTAIN signal first.
+## Integrity stack (BUILT 2026-07-29 afternoon — all three ship log-only/neutral)
+1. **PDF417 strip decode** (`barcode417.py`, bebf494) — the back strip IS PDF417
+   (partially issuer-encrypted; NOT plain ICAO MRZ text — treat any plaintext NID
+   in the payload as the prize). Wired into `/egyptian-id-back` as a `barcode`
+   block; plausible barcode NID fills a failed printed-band read; disagreement
+   routes to the mismatch screen. KEY FACT: at 1080p the strip is ~2px/module —
+   undecodable (0/10 saved captures) — so the client now opens ID cameras at 4K
+   and uses ImageCapture.takePhoto (EXIF-normalized client-side, longest edge
+   capped 3200px). Needs an office recapture to confirm the first live decode.
+2. **FFT screen/print detector** (`pad_fft.py`, 1b297b8) — native-res tile
+   spectra (NEVER whole-card resize — it low-passes the evidence), JPEG 8x8
+   harmonics masked as spots at multiples of 64 (whole-axis masking swallows
+   45° halftones — their cos·cos grid factors into axis cosines). 0/35 genuine
+   flagged, 70/70 synthetic attacks caught. `pad` block in both ID endpoints,
+   LOG-ONLY until the office feeds real photocopies + screen replays through.
+3. **Tilt-under-torch challenge** (`holo.py` + HoloCheck screen, e610517) —
+   after back-review; torch highlight sweeping the card = card-like, no
+   highlight = flat (paper), big static blob = screen-like. Auto-skips no-torch
+   phones, never blocks; hint rides in the payload as `document_liveness`.
+
+Office retest must produce: (a) hi-res back captures (does the strip decode
+live?), (b) a PAD corpus — same cards as photocopies and off-screen replays,
+(c) tilt bursts on real cards (calibrate holo thresholds, esp. hue_shift).
 
 ## Standing discipline
 No mainnet without Kareem. TEST set stays frozen. GPU0 tenant untouchable (check
