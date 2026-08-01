@@ -49,6 +49,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
   const [error, setError] = useState(null);
   const [framesDone, setFramesDone] = useState(0);
   const [reference, setReference] = useState(null);
+  const [redirectUrl, setRedirectUrl] = useState(null); // partner sessions: return-to-app leg
   const [shotUrl, setShotUrl] = useState(null);   // captured frame, shown during the scan reveal
   const videoRef = useRef(null);
   const timersRef = useRef([]);
@@ -386,6 +387,14 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
         : await actor.submit_kyc(id, JSON.stringify({ kycData }));
       if (res && 'Err' in res) throw new Error(res.Err);
       setReference(`KYC-${id.slice(0, 4).toUpperCase()}-${id.slice(4, 8).toUpperCase()}`);
+      // Partner-created sessions carry a return URL — offer the way back.
+      if (sessionId) {
+        try {
+          const raw = await actor.get_verification_status(sessionId);
+          const sess = raw?.[0] ? JSON.parse(raw[0]) : (typeof raw === 'string' ? JSON.parse(raw) : null);
+          if (sess?.redirect_url && /^https?:\/\//.test(sess.redirect_url)) setRedirectUrl(sess.redirect_url);
+        } catch { /* return leg is optional */ }
+      }
       go('status');
       onCompleted?.();
     } catch (e) { go('review'); setError(humanError(e, 'submit')); }
@@ -467,7 +476,7 @@ export default function VerifyFlow({ sessionId = null, onCompleted = null }) {
       {step === 'duplicate' && <DuplicateScreen {...props} />}
       {step === 'review' && <ReviewScreen {...props} />}
       {step === 'submitting' && <Submitting />}
-      {step === 'status' && <StatusScreen {...props} />}
+      {step === 'status' && <StatusScreen {...props} redirectUrl={redirectUrl} />}
       </motion.div>
       </AnimatePresence>
     </div>

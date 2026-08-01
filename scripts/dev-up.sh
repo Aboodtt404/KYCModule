@@ -9,7 +9,10 @@ FE="$ROOT/frontend"
 LOG() { printf '\e[36m[dev-up]\e[0m %s\n' "$*"; }
 
 # ── 0. replica ────────────────────────────────────────────────────────────────
-if ! dfx ping >/dev/null 2>&1; then
+# NOTE (2026-07-30): another tenant runs a SEPARATE root-owned replica on
+# 127.0.0.1:4987 — ours is the one on :4943. Never bridge the two: same
+# well-known canister ids, different worlds.
+if ! curl -s -m 2 http://127.0.0.1:4943/api/v2/status >/dev/null 2>&1; then
   LOG "starting local replica"
   (cd "$ROOT" && dfx start --background >/dev/null 2>&1)
 fi

@@ -19,6 +19,8 @@ function Home() {
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
   { path: '/verify', element: <VerifyFlow /> },
+  // Partner API sessions link here (verification_url) — same handoff screen
+  { path: '/verify/:sessionId', element: <MobileVerify /> },
   { path: '/mobile-verify/:sessionId', element: <MobileVerify /> },
   { path: '/admin', element: <Admin /> }
 ]);

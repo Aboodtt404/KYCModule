@@ -384,7 +384,7 @@ function TypedText({ text, speed = 55 }) {
   return <>{(text || '').slice(0, n)}<span style={{ opacity: n < (text || '').length ? 0.5 : 0 }}>▌</span></>;
 }
 
-export function StatusScreen({ reference, sessionId }) {
+export function StatusScreen({ reference, sessionId, redirectUrl }) {
   return (
     <Pad style={{ padding: '36px 26px 30px' }}>
       <div style={{ alignSelf: 'center', animation: 'stamp .55s ease both' }}>
@@ -409,6 +409,12 @@ export function StatusScreen({ reference, sessionId }) {
         </div>
       </Card>
       <div style={{ flex: 1 }} />
+      {redirectUrl && (
+        <a href={`${redirectUrl}${redirectUrl.includes('?') ? '&' : '?'}kyc_session_id=${encodeURIComponent(sessionId || '')}&kyc_status=received`}
+          style={{ ...btnPrimary, textAlign: 'center', textDecoration: 'none', display: 'block' }}>
+          Return to the app · العودة إلى التطبيق
+        </a>
+      )}
     </Pad>
   );
 }

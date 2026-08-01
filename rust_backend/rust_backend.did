@@ -52,6 +52,8 @@ service : {
   "configure_frontend_url"      : (text) -> (variant { Ok; Err: text });
   "register_api_client"         : (text, text, text) -> (variant { Ok: record { text; text }; Err: text });
   "list_api_clients"            : () -> (vec record { text; text });
+  "list_webhook_queue"          : () -> (vec record { text; text }) query;
+  "configure_insecure_webhooks" : (bool) -> (variant { Ok; Err: text });
   "set_api_client_status"       : (text, text) -> (variant { Ok; Err: text });
   "delete_api_client"           : (text) -> (variant { Ok; Err: text });
   "http_request_update"         : (record { method: text; url: text; headers: vec record { text; text; }; body: vec nat8; }) -> (record { status_code: nat16; headers: vec record { text; text; }; body: vec nat8; upgrade: opt bool; });

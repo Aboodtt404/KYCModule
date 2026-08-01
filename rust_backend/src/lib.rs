@@ -306,10 +306,18 @@ thread_local! {
     );
 
     /// Partner API clients: client_id → JSON {name, website, contact_email,
-    /// key_hash, status, created_at, request_count}. The raw API key is never
-    /// stored — only its SHA-256 hash.
+    /// key_hash, status, created_at, request_count, webhook_url?, webhook_secret?}.
+    /// The raw API key is never stored — only its SHA-256 hash.
     static API_CLIENTS: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
         StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(15))))
+    );
+
+    /// Outbound webhook deliveries: delivery_id → JSON {client_id, event, url,
+    /// body, attempts, next_ns, status}. Pending rows are retried with backoff
+    /// by the webhook pump timer; delivered rows are removed, dead ones kept
+    /// 7 days for admin inspection.
+    static WEBHOOK_QUEUE: RefCell<StableBTreeMap<BoundedString, BoundedString, Memory>> = RefCell::new(
+        StableBTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(16))))
     );
 }
 
@@ -685,6 +693,21 @@ async fn update_kyc_status(submission_id: String, new_status: String) -> Result<
         audit("update_kyc_status", &format!("{}=>{}", submission_id, new_status));
         Ok::<(String, String), String>((name, email))
     })?;
+
+    // Partner sessions carry the submission id as their session id — notify
+    // the partner that the human review landed (approved/rejected).
+    if new_status == "approved" || new_status == "rejected" {
+        let session = VERIFICATION_SESSIONS.with(|s|
+            s.borrow().get(&BoundedString(submission_id.clone())).map(|v| v.0));
+        if let Some(json) = session {
+            if let Ok(sess) = serde_json::from_str::<VerificationSession>(&json) {
+                if let Some(client_id) = sess.client_id.as_deref() {
+                    enqueue_webhook(client_id, "kyc.review.completed",
+                        kyc_v1_result(&sess, Some(new_status.clone())));
+                }
+            }
+        }
+    }
 
     // Await email so the caller knows whether the user was notified.
     let email_sent = send_status_email(&submission_id, &name, &email, &new_status)
@@ -1165,6 +1188,200 @@ fn authorize_api_key_and_count(key: &str) -> Option<String> {
     Some(client_id)
 }
 
+// ── Webhooks (partner event delivery) ─────────────────────────────────────────
+//
+// Partners register a webhook URL self-service (POST /api/v1/webhook with their
+// API key). Events are queued in stable memory and delivered by HTTPS outcall,
+// HMAC-SHA256-signed with the partner's webhook secret:
+//   X-KYC-Signature: sha256=<hex hmac of the raw body>
+//   X-KYC-Event:     kyc.session.completed | kyc.review.completed | kyc.session.expired
+//   X-KYC-Delivery:  <delivery id>
+// A timer pump retries with backoff (1m, 5m, 30m, 2h, 6h); after 5 failures the
+// delivery is marked dead and kept 7 days for inspection. Delivery is at-least-
+// once — partners must dedupe on X-KYC-Delivery.
+
+const WEBHOOK_BACKOFF_NS: [u64; 5] = [
+    60 * 1_000_000_000,
+    5 * 60 * 1_000_000_000,
+    30 * 60 * 1_000_000_000,
+    2 * 3600 * 1_000_000_000,
+    6 * 3600 * 1_000_000_000,
+];
+const WEBHOOK_DEAD_RETENTION_NS: u64 = 7 * 24 * 3600 * 1_000_000_000;
+
+fn hmac_sign(secret: &str, body: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(body);
+    format!("sha256={}", hex::encode(mac.finalize().into_bytes()))
+}
+
+fn client_webhook(client_id: &str) -> Option<(String, String)> {
+    API_CLIENTS.with(|c| {
+        let v = c.borrow().get(&BoundedString(client_id.to_string()))?;
+        let j: serde_json::Value = serde_json::from_str(&v.0).ok()?;
+        let url = j.get("webhook_url")?.as_str()?.to_string();
+        let secret = j.get("webhook_secret")?.as_str()?.to_string();
+        if url.is_empty() { None } else { Some((url, secret)) }
+    })
+}
+
+/// Queue an event for a partner. Silently a no-op when the partner has no
+/// webhook configured — polling GET /api/v1/sessions/{id} always works.
+fn enqueue_webhook(client_id: &str, event: &str, payload: serde_json::Value) {
+    let Some((url, _)) = client_webhook(client_id) else { return };
+    let seq = COUNTERS.with(|c| {
+        let mut store = c.borrow_mut();
+        let key = BoundedString("webhook_seq".into());
+        let n: u64 = store.get(&key).and_then(|v| v.0.parse().ok()).unwrap_or(0) + 1;
+        store.insert(key, BoundedString(n.to_string()));
+        n
+    });
+    let delivery_id = format!("wh_{:012}", seq);
+    let body = serde_json::json!({
+        "delivery_id": delivery_id,
+        "event": event,
+        "created_at_ns": ic_cdk::api::time(),
+        "data": payload,
+    });
+    let row = serde_json::json!({
+        "client_id": client_id,
+        "event": event,
+        "url": url,
+        "body": body.to_string(),
+        "attempts": 0,
+        "next_ns": 0,          // due immediately
+        "status": "pending",
+        "created_at": ic_cdk::api::time(),
+    });
+    WEBHOOK_QUEUE.with(|q| {
+        q.borrow_mut().insert(BoundedString(delivery_id.clone()), BoundedString(row.to_string()));
+    });
+    audit("webhook_enqueued", &format!("{} {} -> {}", delivery_id, event, client_id));
+    // fire promptly rather than waiting for the next interval tick
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(1), || {
+        ic_cdk::spawn(pump_webhooks());
+    });
+}
+
+async fn deliver_one(delivery_id: String, row: serde_json::Value) {
+    let url = row.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let body = row.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let event = row.get("event").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let client_id = row.get("client_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let attempts = row.get("attempts").and_then(|v| v.as_u64()).unwrap_or(0);
+    // secret is read at DELIVERY time so a rotated secret applies to retries
+    let secret = client_webhook(&client_id).map(|(_, s)| s).unwrap_or_default();
+
+    let headers = vec![
+        ic_cdk::api::management_canister::http_request::HttpHeader {
+            name: "Content-Type".into(), value: "application/json".into() },
+        ic_cdk::api::management_canister::http_request::HttpHeader {
+            name: "X-KYC-Event".into(), value: event.clone() },
+        ic_cdk::api::management_canister::http_request::HttpHeader {
+            name: "X-KYC-Delivery".into(), value: delivery_id.clone() },
+        ic_cdk::api::management_canister::http_request::HttpHeader {
+            name: "X-KYC-Signature".into(), value: hmac_sign(&secret, body.as_bytes()) },
+    ];
+    let request = ic_cdk::api::management_canister::http_request::CanisterHttpRequestArgument {
+        url: url.clone(),
+        method: ic_cdk::api::management_canister::http_request::HttpMethod::POST,
+        headers,
+        body: Some(body.into_bytes()),
+        max_response_bytes: Some(1000),
+        transform: None,
+    };
+    let ok = matches!(
+        ic_cdk::api::management_canister::http_request::http_request(request, 15_000_000_000).await,
+        Ok((resp,)) if resp.status >= 200u32 && resp.status < 300u32
+    );
+
+    let key = BoundedString(delivery_id.clone());
+    if ok {
+        WEBHOOK_QUEUE.with(|q| { q.borrow_mut().remove(&key); });
+        audit("webhook_delivered", &delivery_id);
+        return;
+    }
+    let attempts = attempts + 1;
+    let mut row = row;
+    row["attempts"] = serde_json::json!(attempts);
+    if (attempts as usize) > WEBHOOK_BACKOFF_NS.len() {
+        row["status"] = serde_json::json!("dead");
+        audit("webhook_dead", &format!("{} after {} attempts", delivery_id, attempts));
+    } else {
+        row["next_ns"] = serde_json::json!(
+            ic_cdk::api::time() + WEBHOOK_BACKOFF_NS[(attempts as usize) - 1]);
+    }
+    WEBHOOK_QUEUE.with(|q| { q.borrow_mut().insert(key, BoundedString(row.to_string())); });
+}
+
+async fn pump_webhooks() {
+    let now = ic_cdk::api::time();
+    let due: Vec<(String, serde_json::Value)> = WEBHOOK_QUEUE.with(|q| {
+        q.borrow().iter()
+            .filter_map(|(k, v)| {
+                let j: serde_json::Value = serde_json::from_str(&v.0).ok()?;
+                let pending = j.get("status").and_then(|s| s.as_str()) == Some("pending");
+                let due = j.get("next_ns").and_then(|n| n.as_u64()).unwrap_or(0) <= now;
+                if pending && due { Some((k.0, j)) } else { None }
+            })
+            .take(10) // bounded work per tick
+            .collect()
+    });
+    for (id, row) in due {
+        deliver_one(id, row).await;
+    }
+}
+
+fn purge_dead_webhooks(now: u64) {
+    let old: Vec<BoundedString> = WEBHOOK_QUEUE.with(|q| {
+        q.borrow().iter()
+            .filter_map(|(k, v)| {
+                let j: serde_json::Value = serde_json::from_str(&v.0).ok()?;
+                let dead = j.get("status").and_then(|s| s.as_str()) == Some("dead");
+                let created = j.get("created_at").and_then(|n| n.as_u64()).unwrap_or(0);
+                if dead && now.saturating_sub(created) > WEBHOOK_DEAD_RETENTION_NS {
+                    Some(k)
+                } else { None }
+            })
+            .collect()
+    });
+    WEBHOOK_QUEUE.with(|q| {
+        let mut store = q.borrow_mut();
+        for k in old { store.remove(&k); }
+    });
+}
+
+fn arm_webhook_pump() {
+    ic_cdk_timers::set_timer_interval(std::time::Duration::from_secs(60), || {
+        ic_cdk::spawn(pump_webhooks());
+    });
+}
+
+/// Failed/dead deliveries for inspection. Admin only.
+#[query]
+fn list_webhook_queue() -> Vec<(String, String)> {
+    if !is_admin() { return vec![]; }
+    WEBHOOK_QUEUE.with(|q| q.borrow().iter().map(|(k, v)| (k.0, v.0)).collect())
+}
+
+/// DEV ONLY: allow plain-http webhook URLs for local testing. Controller only.
+/// Must NEVER be enabled on mainnet — plain-http webhooks leak KYC data.
+#[update]
+fn configure_insecure_webhooks(enabled: bool) -> Result<(), String> {
+    if !ic_cdk::api::is_controller(&caller()) {
+        return Err("Unauthorized: only the canister controller can set this.".to_string());
+    }
+    APP_CONFIG.with(|c| {
+        let mut m = c.borrow_mut();
+        let key = BoundedString("allow_insecure_webhooks".into());
+        if enabled { m.insert(key, BoundedString("1".into())); } else { m.remove(&key); }
+    });
+    audit("configure_insecure_webhooks", if enabled { "on" } else { "off" });
+    Ok(())
+}
+
 /// Set the public frontend base URL used in API verification links. Admin only.
 /// e.g. "https://kyc.mercaturaforum.com"
 #[update]
@@ -1241,6 +1458,79 @@ fn bearer_key(headers: &[(String, String)]) -> Option<String> {
         .and_then(|(_, v)| v.strip_prefix("Bearer ").map(|s| s.trim().to_string()))
 }
 
+/// kyc.v1 — the versioned result schema partners consume (webhook bodies and
+/// GET /api/v1/sessions/{id} both emit it). Additive changes only; anything
+/// breaking becomes kyc.v2 alongside.
+fn kyc_v1_result(session: &VerificationSession, review_status: Option<String>) -> serde_json::Value {
+    let data = session.data.as_deref()
+        .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+        .unwrap_or(serde_json::json!({}));
+    let kyc = data.get("kycData").cloned().unwrap_or(serde_json::json!({}));
+    let ocr = kyc.get("ocrData").or(data.get("ocrData")).cloned().unwrap_or(serde_json::json!({}));
+    let s = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let doc_type = if s(&ocr, "document_type") == "passport" { "passport" } else { "national_id" };
+
+    let mut document = serde_json::json!({
+        "type": doc_type,
+        "full_name": s(&ocr, "full_name"),
+        "national_id": s(&ocr, "national_id"),
+        "birth_date": s(&ocr, "birth_date"),
+        "gender": s(&ocr, "gender"),
+        "address": s(&ocr, "address"),
+        "expiry_date": s(&ocr, "expiry_date"),
+    });
+    if doc_type == "passport" {
+        document["passport_number"] = serde_json::json!(s(&ocr, "passport_number"));
+        document["nationality"] = serde_json::json!(s(&ocr, "nationality"));
+        document["mrz_valid_score"] = ocr.get("mrz_valid_score").cloned().unwrap_or(serde_json::Value::Null);
+    }
+
+    let nid = s(&ocr, "national_id");
+    let nid_back = s(&ocr, "national_id_back");
+    let strip_nid = s(&kyc, "strip_nid");
+    let checks = serde_json::json!([
+        { "name": "ocr_verdict", "result": s(&ocr, "ocr_verdict") },
+        { "name": "front_back_match",
+          "result": if nid.is_empty() || nid_back.is_empty() { "not_available".into() }
+                    else if nid == nid_back { "pass".to_string() } else { "fail".into() } },
+        { "name": "barcode_strip",
+          "result": if !kyc.get("strip_decoded").and_then(|v| v.as_bool()).unwrap_or(false) { "not_available".into() }
+                    else if !strip_nid.is_empty() && strip_nid == nid { "pass".to_string() } else { "decoded".into() } },
+        { "name": "document_liveness",
+          "result": kyc.get("document_liveness").and_then(|v| v.as_str()).unwrap_or("not_available") },
+    ]);
+
+    serde_json::json!({
+        "schema": "kyc.v1",
+        "session_id": session.session_id,
+        "status": review_status.unwrap_or_else(|| "received".into()),
+        "completed_at_ns": session.completed_at,
+        "metadata": session.metadata,
+        "document": document,
+        "checks": checks,
+        "face": {
+            "similarity": kyc.get("face_similarity").cloned().unwrap_or(serde_json::Value::Null),
+            "liveness_mode": kyc.get("liveness_mode").cloned().unwrap_or(serde_json::Value::Null),
+        },
+        "phone": {
+            "number": s(&kyc, "phone"),
+            "verified": kyc.get("phone_verified").and_then(|v| v.as_bool()).unwrap_or(false),
+        },
+        "user_edited": kyc.get("user_edited").cloned().unwrap_or(serde_json::json!([])),
+    })
+}
+
+fn review_status_for(session: &VerificationSession) -> Option<String> {
+    let data = session.data.as_deref()
+        .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())?;
+    let sub_id = data.get("kycData").and_then(|k| k.get("submissionId"))
+        .and_then(|s| s.as_str()).unwrap_or(&session.session_id).to_string();
+    KYC_SUBMISSIONS.with(|s| s.borrow().get(&BoundedString(sub_id)))
+        .and_then(|v| serde_json::from_str::<serde_json::Value>(&v.0).ok())
+        .and_then(|j| j.get("kycData").and_then(|k| k.get("status"))
+            .and_then(|s| s.as_str()).map(String::from))
+}
+
 /// GET /api/v1/sessions/{id} — partner polls the verification result.
 fn api_get_session(session_id: &str, client_id: &str) -> HttpResponse {
     let raw = VERIFICATION_SESSIONS.with(|s| s.borrow().get(&BoundedString(session_id.to_string())).map(|v| v.0));
@@ -1265,24 +1555,9 @@ fn api_get_session(session_id: &str, client_id: &str) -> HttpResponse {
         "completed_at_ns": session.completed_at,
     });
 
-    // On completion, surface a minimal result + the live admin-review status
+    // On completion, surface the full kyc.v1 result (same shape webhooks carry)
     if session.status == "completed" {
-        if let Some(data) = session.data.as_deref().and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok()) {
-            let nid = data.get("ocrData").and_then(|o| o.get("national_id")).and_then(|n| n.as_str()).unwrap_or("");
-            let nid_last4 = if nid.len() >= 4 { &nid[nid.len() - 4..] } else { "" };
-            let submission_id = data.get("submissionId").and_then(|s| s.as_str()).unwrap_or("");
-            let review_status = if submission_id.is_empty() { None } else {
-                KYC_SUBMISSIONS.with(|s| s.borrow().get(&BoundedString(submission_id.to_string())))
-                    .and_then(|v| serde_json::from_str::<serde_json::Value>(&v.0).ok())
-                    .and_then(|j| j.get("kycData").and_then(|k| k.get("status")).and_then(|s| s.as_str()).map(String::from))
-            };
-            out["result"] = serde_json::json!({
-                "face_verified": data.get("faceVerified").and_then(|f| f.as_bool()).unwrap_or(false),
-                "full_name": data.get("ocrData").and_then(|o| o.get("full_name")).and_then(|n| n.as_str()).unwrap_or(""),
-                "national_id_last4": nid_last4,
-                "review_status": review_status.unwrap_or_else(|| "pending_review".into()),
-            });
-        }
+        out["result"] = kyc_v1_result(&session, review_status_for(&session));
     }
     api_json(200, out)
 }
@@ -1298,21 +1573,12 @@ fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
             return HttpResponse { status_code: 204, headers: api_headers(), body: vec![], upgrade: None };
         }
 
-        // State-changing endpoints are re-issued as update calls
-        if method == "POST" {
+        // ALL API traffic is re-issued as update calls: POSTs because they
+        // change state, GETs because plain query responses are uncertified
+        // and the default gateway refuses them — partners shouldn't need to
+        // know about raw domains to poll a result.
+        if method == "POST" || method == "GET" {
             return HttpResponse { status_code: 200, headers: api_headers(), body: vec![], upgrade: Some(true) };
-        }
-
-        if method == "GET" {
-            if let Some(session_id) = path.strip_prefix("/api/v1/sessions/") {
-                let Some(key) = bearer_key(&request.headers) else {
-                    return api_json(401, serde_json::json!({"error": "Missing Authorization: Bearer <api_key>"}));
-                };
-                let Some(client_id) = find_client_by_key(&key) else {
-                    return api_json(403, serde_json::json!({"error": "Invalid or inactive API key"}));
-                };
-                return api_get_session(session_id, &client_id);
-            }
         }
         return api_json(404, serde_json::json!({"error": "Not Found"}));
     }
@@ -1325,6 +1591,19 @@ async fn http_request_update(request: CanisterHttpRequestArgument) -> HttpRespon
     let path = request.url.split('?').next().unwrap_or(&request.url).to_string();
     let method = request.method.to_uppercase();
 
+    if method == "GET" {
+        if let Some(session_id) = path.strip_prefix("/api/v1/sessions/") {
+            let Some(key) = bearer_key(&request.headers) else {
+                return api_json(401, serde_json::json!({"error": "Missing Authorization: Bearer <api_key>"}));
+            };
+            let Some(client_id) = find_client_by_key(&key) else {
+                return api_json(403, serde_json::json!({"error": "Invalid or inactive API key"}));
+            };
+            return api_get_session(session_id, &client_id);
+        }
+        return api_json(404, serde_json::json!({"error": "Not Found"}));
+    }
+
     if method == "POST" && path == "/api/v1/sessions" {
         let Some(key) = bearer_key(&request.headers) else {
             return api_json(401, serde_json::json!({"error": "Missing Authorization: Bearer <api_key>"}));
@@ -1335,6 +1614,26 @@ async fn http_request_update(request: CanisterHttpRequestArgument) -> HttpRespon
         // 100 sessions per client per hour
         if let Err(e) = check_rate_limit(&format!("api_sessions_{}", client_id), 100, 3_600_000_000_000) {
             return api_json(429, serde_json::json!({"error": e}));
+        }
+
+        // optional JSON body: {redirect_url?, metadata?}
+        let body: serde_json::Value = if request.body.is_empty() {
+            serde_json::json!({})
+        } else {
+            match serde_json::from_slice(&request.body) {
+                Ok(v) => v,
+                Err(_) => return api_json(400, serde_json::json!({"error": "Body must be JSON"})),
+            }
+        };
+        let redirect_url = body.get("redirect_url").and_then(|v| v.as_str()).unwrap_or("");
+        if !redirect_url.is_empty()
+            && (redirect_url.len() > 300
+                || !(redirect_url.starts_with("https://") || redirect_url.starts_with("http://"))) {
+            return api_json(400, serde_json::json!({"error": "redirect_url must be an http(s) URL (max 300 chars)"}));
+        }
+        let metadata = body.get("metadata").and_then(|v| v.as_str()).unwrap_or("");
+        if metadata.len() > 500 {
+            return api_json(400, serde_json::json!({"error": "metadata too long (max 500 chars)"}));
         }
 
         let Ok((rand,)) = ic_cdk::api::management_canister::main::raw_rand().await else {
@@ -1353,6 +1652,8 @@ async fn http_request_update(request: CanisterHttpRequestArgument) -> HttpRespon
             data: None,
             client_id: Some(client_id.clone()),
             last_active: ic_cdk::api::time(),
+            redirect_url: if redirect_url.is_empty() { None } else { Some(redirect_url.to_string()) },
+            metadata: if metadata.is_empty() { None } else { Some(metadata.to_string()) },
         };
         let json = match serde_json::to_string(&session) {
             Ok(j) => j,
@@ -1373,6 +1674,76 @@ async fn http_request_update(request: CanisterHttpRequestArgument) -> HttpRespon
             "session_id": session_id,
             "verification_url": verification_url,
             "expires_in_seconds": SESSION_TTL_NS / 1_000_000_000,
+        }));
+    }
+
+    // Self-service webhook config: POST /api/v1/webhook {"url": "https://..."}
+    // Returns the signing secret ONCE per call — calling again rotates it
+    // (retries in flight sign with the CURRENT secret at delivery time).
+    if method == "POST" && path == "/api/v1/webhook" {
+        let Some(key) = bearer_key(&request.headers) else {
+            return api_json(401, serde_json::json!({"error": "Missing Authorization: Bearer <api_key>"}));
+        };
+        let Some(client_id) = authorize_api_key_and_count(&key) else {
+            return api_json(403, serde_json::json!({"error": "Invalid or inactive API key"}));
+        };
+        let body: serde_json::Value = match serde_json::from_slice(&request.body) {
+            Ok(v) => v,
+            Err(_) => return api_json(400, serde_json::json!({"error": "Body must be JSON"})),
+        };
+        let url = body.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        if url.len() > 300 || !url.starts_with("https://") {
+            // http:// allowed only when an admin set the dev override — never
+            // ship that flag to mainnet (plain-http webhooks leak KYC data).
+            let insecure_ok = APP_CONFIG.with(|c|
+                c.borrow().get(&BoundedString("allow_insecure_webhooks".into())).is_some());
+            let dev_ok = url.starts_with("http://") && insecure_ok;
+            if !dev_ok && !url.is_empty() {
+                return api_json(400, serde_json::json!({"error": "url must be https:// (max 300 chars)"}));
+            }
+            if url.is_empty() {
+                // empty url = unsubscribe
+                API_CLIENTS.with(|c| {
+                    let mut store = c.borrow_mut();
+                    let k = BoundedString(client_id.clone());
+                    if let Some(v) = store.get(&k) {
+                        if let Ok(mut j) = serde_json::from_str::<serde_json::Value>(&v.0) {
+                            if let Some(o) = j.as_object_mut() {
+                                o.remove("webhook_url");
+                                o.remove("webhook_secret");
+                            }
+                            store.insert(k, BoundedString(j.to_string()));
+                        }
+                    }
+                });
+                audit("webhook_unsubscribed", &client_id);
+                return api_json(200, serde_json::json!({"webhook": null}));
+            }
+        }
+        let Ok((rand,)) = ic_cdk::api::management_canister::main::raw_rand().await else {
+            return api_json(500, serde_json::json!({"error": "Random generation failed"}));
+        };
+        if rand.len() < 32 {
+            return api_json(500, serde_json::json!({"error": "Random generation failed"}));
+        }
+        let secret = format!("whsec_{}", hex::encode(&rand[..32]));
+        API_CLIENTS.with(|c| {
+            let mut store = c.borrow_mut();
+            let k = BoundedString(client_id.clone());
+            if let Some(v) = store.get(&k) {
+                if let Ok(mut j) = serde_json::from_str::<serde_json::Value>(&v.0) {
+                    j["webhook_url"] = serde_json::json!(url);
+                    j["webhook_secret"] = serde_json::json!(secret);
+                    store.insert(k, BoundedString(j.to_string()));
+                }
+            }
+        });
+        audit("webhook_configured", &format!("{} -> {}", client_id, url));
+        return api_json(200, serde_json::json!({
+            "webhook_url": url,
+            "webhook_secret": secret,
+            "signature_header": "X-KYC-Signature: sha256=<hex hmac-sha256 of raw body>",
+            "events": ["kyc.session.completed", "kyc.review.completed", "kyc.session.expired"],
         }));
     }
 
@@ -1420,6 +1791,12 @@ struct VerificationSession {
     /// Last heartbeat/update (ns). 0 on legacy records -> created_at is used.
     #[serde(default)]
     last_active: u64,
+    /// Partner-supplied http(s) URL the flow offers to return the user to.
+    #[serde(default)]
+    redirect_url: Option<String>,
+    /// Opaque partner correlation string, echoed in webhooks (≤500 chars).
+    #[serde(default)]
+    metadata: Option<String>,
 }
 
 const SESSION_TTL_NS: u64 = 24 * 60 * 60 * 1_000_000_000; // 24 hours (absolute cap)
@@ -1445,6 +1822,8 @@ fn create_verification_session(session_id: String) -> Result<(), String> {
         data: None,
         client_id: None,
         last_active: ic_cdk::api::time(),
+        redirect_url: None,
+        metadata: None,
     };
     let json = serde_json::to_string(&session).map_err(|e| format!("Serialize error: {}", e))?;
     VERIFICATION_SESSIONS.with(|s| {
@@ -1501,7 +1880,7 @@ fn complete_verification(session_id: String, kyc_data: String) -> Result<(), Str
     // (validated above) is the integrity anchor for handoff payloads.
 
     let now = ic_cdk::api::time();
-    VERIFICATION_SESSIONS.with(|sessions| {
+    let session = VERIFICATION_SESSIONS.with(|sessions| {
         let mut store = sessions.borrow_mut();
         let key = BoundedString(session_id.clone());
         let current = store.get(&key).ok_or("Session not found.")?;
@@ -1515,11 +1894,31 @@ fn complete_verification(session_id: String, kyc_data: String) -> Result<(), Str
         }
         session.status = "completed".to_string();
         session.completed_at = Some(now);
-        session.data = Some(kyc_data);
+        session.data = Some(kyc_data.clone());
         let json = serde_json::to_string(&session).map_err(|e| format!("Serialize error: {}", e))?;
         store.insert(key, BoundedString(json));
-        Ok(())
-    })
+        Ok(session)
+    })?;
+
+    // Mirror into the submissions store so session completions reach the SAME
+    // admin review queue as direct submissions (they previously lived only
+    // inside the session record — invisible to reviewers and to the partner
+    // review_status lookup).
+    let sub_id = parsed.get("kycData").and_then(|k| k.get("submissionId"))
+        .and_then(|s| s.as_str()).unwrap_or(&session_id).to_string();
+    KYC_SUBMISSIONS.with(|s| {
+        let mut store = s.borrow_mut();
+        let key = BoundedString(sub_id);
+        if store.get(&key).is_none() {
+            store.insert(key, BoundedString(kyc_data));
+        }
+    });
+
+    // Partner-created sessions notify the partner's webhook
+    if let Some(client_id) = session.client_id.as_deref() {
+        enqueue_webhook(client_id, "kyc.session.completed", kyc_v1_result(&session, None));
+    }
+    Ok(())
 }
 
 fn update_session_status(session_id: String, status: &str, completed_at: Option<u64>) -> Result<(), String> {
@@ -1606,21 +2005,31 @@ fn cleanup_expired_sessions() -> Result<u64, String> {
 /// finger. Armed hourly from init/post_upgrade.
 fn sweep_sessions() -> u64 {
     let now = ic_cdk::api::time();
-    let expired_keys: Vec<BoundedString> = VERIFICATION_SESSIONS.with(|s| {
+    let expired: Vec<(BoundedString, Option<String>)> = VERIFICATION_SESSIONS.with(|s| {
         s.borrow().iter()
             .filter_map(|(k, v)| {
                 serde_json::from_str::<VerificationSession>(&v.0).ok()
                     .filter(|sess| session_expired(sess, now)
                         || now.saturating_sub(sess.created_at) >= SESSION_TTL_NS)
-                    .map(|_| k)
+                    .map(|sess| (k, sess.client_id.clone().filter(|_| sess.status != "completed")))
             })
             .collect()
     });
-    let count = expired_keys.len() as u64;
+    let count = expired.len() as u64;
     VERIFICATION_SESSIONS.with(|s| {
         let mut store = s.borrow_mut();
-        for k in expired_keys { store.remove(&k); }
+        for (k, _) in &expired { store.remove(k); }
     });
+    // Partners learn their un-completed sessions died (completed ones already
+    // got kyc.session.completed — a session removed after completion is normal
+    // retention, not an event).
+    for (k, client) in expired {
+        if let Some(client_id) = client {
+            enqueue_webhook(&client_id, "kyc.session.expired",
+                serde_json::json!({"schema": "kyc.v1", "session_id": k.0, "status": "expired"}));
+        }
+    }
+    purge_dead_webhooks(now);
     count
 }
 
@@ -1633,11 +2042,13 @@ fn arm_session_sweeper() {
 #[ic_cdk::init]
 fn init() {
     arm_session_sweeper();
+    arm_webhook_pump();
 }
 
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
     arm_session_sweeper();
+    arm_webhook_pump();
 }
 
 /// Export all audit log entries between two nanosecond timestamps (inclusive). Admin only.
